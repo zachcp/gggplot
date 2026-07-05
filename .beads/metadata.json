@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "gggplot",
+  "project_id": "62bf4197-3412-479d-b7ac-2d2bd780b838"
+}
