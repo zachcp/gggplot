@@ -1,0 +1,11 @@
+{
+  "workspace": ["packages/core", "apps/site"],
+  "nodeModulesDir": "auto",
+  "tasks": {
+    "dev": "deno task --cwd apps/site dev",
+    "build": "deno task --cwd apps/site build",
+    "preview": "deno task --cwd apps/site preview",
+    "check": "deno check packages/core/src/mod.ts",
+    "demo": "deno run packages/core/examples/emit-demo.ts"
+  }
+}

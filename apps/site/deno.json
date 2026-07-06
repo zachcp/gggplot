@@ -1,0 +1,31 @@
+{
+  "tasks": {
+    "dev": "deno run -A npm:vite",
+    "build": "deno run -A npm:vite build",
+    "preview": "deno run -A npm:vite preview"
+  },
+  "imports": {
+    "react": "npm:react@^18.3.1",
+    "react-dom": "npm:react-dom@^18.3.1",
+    "react-dom/client": "npm:react-dom@^18.3.1",
+    "@gggplot/core": "../../packages/core/src/mod.ts",
+    "@use-gpu/core": "npm:@use-gpu/core@^0.19.0",
+    "@use-gpu/react": "npm:@use-gpu/react@^0.19.0",
+    "@use-gpu/live": "npm:@use-gpu/live@^0.19.0",
+    "@use-gpu/webgpu": "npm:@use-gpu/webgpu@^0.19.0",
+    "@use-gpu/workbench": "npm:@use-gpu/workbench@^0.19.0",
+    "@use-gpu/plot": "npm:@use-gpu/plot@^0.19.0",
+    "@use-gpu/scene": "npm:@use-gpu/scene@^0.19.0",
+    "@use-gpu/shader": "npm:@use-gpu/shader@^0.19.0",
+    "@use-gpu/wgsl-loader": "npm:@use-gpu/wgsl-loader@^0.19.0",
+    "vite": "npm:vite@^8.0.0",
+    "rollup": "npm:rollup@^4.24.0",
+    "@vitejs/plugin-react": "npm:@vitejs/plugin-react@^6.0.0",
+    "vite-plugin-wasm": "npm:vite-plugin-wasm@^3.3.0"
+  },
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "lib": ["dom", "dom.iterable", "esnext", "deno.ns"]
+  }
+}
