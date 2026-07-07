@@ -21,7 +21,12 @@ export type AesName =
   | "xmin"
   | "xmax"
   | "ymin"
-  | "ymax";
+  | "ymax"
+  | "xend"
+  | "yend"
+  | "lower"
+  | "middle"
+  | "upper";
 
 /**
  * Aesthetic mapping: aesthetic -> column name.
@@ -36,9 +41,18 @@ export type GeomKind =
   | "bar"
   | "col"
   | "area"
+  | "ribbon"
   | "polygon"
   | "tile"
-  | "text";
+  | "text"
+  | "boxplot"
+  | "errorbar"
+  | "smooth"
+  | "segment"
+  | "rect"
+  | "hline"
+  | "vline"
+  | "abline";
 
 export type StatKind = "identity" | "count" | "bin" | "smooth" | "summary";
 
@@ -53,6 +67,12 @@ export interface Layer {
   mapping?: Aes;
   /** Layer-level data override; defaults to the plot data. */
   data?: DataFrame;
+  /**
+   * Whether this layer inherits the plot's top-level aes() mapping at all
+   * (ggplot2's inherit.aes). Default true; false uses only this layer's own
+   * `mapping`, ignoring the plot's — for layers plotting unrelated data.
+   */
+  inheritAes?: boolean;
   /** Fixed aesthetics and stat/geom parameters (e.g. { size: 3, method: "lm" }). */
   params: Record<string, unknown>;
 }
@@ -74,11 +94,32 @@ export interface Scale {
   /** Visual-space extent (pixels, unit interval, palette, ...). */
   range?: [number, number] | string[];
   name?: string;
+  /**
+   * Padding around the trained domain, as [multiplicative, additive] — e.g.
+   * [0.05, 0] pads by 5% of the domain's span on each side. Mirrors ggplot2's
+   * expansion(mult, add). Off (no padding) unless set.
+   */
+  expand?: [number, number];
 }
 
-export type CoordKind = "cartesian" | "polar" | "flip" | "fixed";
+export type CoordKind = "cartesian" | "polar";
+
+/** A position aesthetic — the only kind a coord projection can assign to a physical axis. */
+export type PositionAxis = "x" | "y";
+
 export interface Coord {
   kind: CoordKind;
+  /**
+   * Which position aesthetic renders along which physical axis:
+   * [first, second] = [horizontal axis for cartesian, or angle/theta for
+   * polar; vertical axis for cartesian, or radius for polar]. Defaults to
+   * ["x", "y"]. `coordFlip()` is sugar for a cartesian coord with
+   * `project: ["y", "x"]`; the same swap on a polar coord reassigns theta to
+   * y instead of x (ggplot2's `coord_polar(theta = "y")`), generalizing what
+   * used to be a cartesian-only "flip" coord kind into one projection model
+   * shared by every coord kind.
+   */
+  project?: [PositionAxis, PositionAxis];
   params?: Record<string, unknown>;
 }
 
@@ -91,9 +132,42 @@ export interface Facet {
   ncol?: number;
 }
 
+/**
+ * Theming knobs the compiler maps onto UseGPU props. All fields are optional
+ * and additive over the default (no-op) rendering — e.g. an unset `grid`
+ * still draws grid lines, an unset `background` still renders no panel fill.
+ * `[key: string]: unknown` keeps the type open for forward-compatible fields
+ * a future theme_*() might add before the compiler understands them.
+ */
 export interface Theme {
   name?: string;
+  /** Panel fill color drawn behind the grid/marks; unset/null means no fill (the default, matching ggplot2's theme_minimal). */
+  background?: string | null;
+  /** Set false to omit grid lines entirely (ggplot2's theme_classic/theme_void). Default true. */
+  grid?: boolean;
+  gridColor?: string;
+  gridWidth?: number;
+  axisColor?: string;
+  axisWidth?: number;
+  /** Defaults for geom_text/geom_label's Label nodes, used unless a layer sets its own size/color param. */
+  fontFamily?: string;
+  fontSize?: number;
+  textColor?: string;
   [key: string]: unknown;
+}
+
+/** Human-facing plot and guide labels. Aesthetic keys name axes/legends. */
+export interface PlotLabels {
+  title?: string;
+  subtitle?: string;
+  caption?: string;
+  x?: string;
+  y?: string;
+  color?: string;
+  fill?: string;
+  size?: string;
+  shape?: string;
+  [key: string]: string | undefined;
 }
 
 /** The complete plot specification — input to compile(). */
@@ -104,5 +178,6 @@ export interface GGSpec {
   scales: Scale[];
   coord: Coord;
   facet: Facet;
+  labels: PlotLabels;
   theme: Theme;
 }

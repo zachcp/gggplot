@@ -34,6 +34,23 @@ deno task dev
 deno task build    # production build -> apps/site/dist/
 ```
 
+## Deploying The Doc Site
+
+The site is a static Vite build:
+
+```bash
+deno task build
+```
+
+Deploy `apps/site/dist/` to any static host that serves `index.html`, JS assets,
+font files, and `.wasm` files. Live rendering requires a WebGPU-capable browser
+in a secure context, so use HTTPS in production. For a local production smoke
+test, run:
+
+```bash
+deno task preview
+```
+
 ## Pipeline
 
 ```
@@ -52,6 +69,7 @@ a ggplot spec onto those primitives. See `docs/ARCHITECTURE.md`.
 
 ## Status
 
-Early stub. Working end-to-end for cartesian point/line plots; stats, scales
-(color/size), facets, and non-cartesian coords are stubbed. Task tracking lives
-in [beads](https://github.com/gastownhall/beads) — run `bd ready`.
+Working end-to-end for the core DSL, stats, scales, positions, common geoms,
+facets, cartesian/flip/polar coords, theming, legends, emitted source, and the
+live WebGPU backend. Task tracking lives in
+[beads](https://github.com/gastownhall/beads) — run `bd ready`.

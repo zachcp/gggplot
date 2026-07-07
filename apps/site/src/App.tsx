@@ -1,30 +1,7 @@
 import React from "react";
-import {
-  compile,
-  emitSource,
-  geomLine,
-  geomPoint,
-  ggplot,
-} from "@gggplot/core";
+import { compile, emitSource } from "@gggplot/core";
 import { ChartCanvas } from "./ChartCanvas.tsx";
-
-// The DSL source shown to the reader — kept in sync with `spec` below by hand.
-const DSL_SOURCE = `ggplot(data, { x: "wt", y: "mpg" })
-  .add(geomPoint({ size: 6, color: "#3b82f6" }))
-  .add(geomLine({ color: "#ef4444" }))
-  .build();`;
-
-const data = {
-  wt: [2.6, 3.2, 3.4, 1.9, 4.1, 2.2, 3.8, 2.9],
-  mpg: [21, 19, 18, 27, 15, 24, 16, 22],
-};
-
-const spec = ggplot(data, { x: "wt", y: "mpg" })
-  .add(geomPoint({ size: 6, color: "#3b82f6" }))
-  .add(geomLine({ color: "#ef4444" }))
-  .build();
-
-const emitted = emitSource(compile(spec), "ScatterChart");
+import { examples } from "./examples.tsx";
 
 export function App() {
   return (
@@ -39,25 +16,51 @@ export function App() {
         </p>
       </header>
 
+      {examples.map((example, i) => (
+        <ExampleSection key={example.id} index={i + 1} example={example} />
+      ))}
+    </div>
+  );
+}
+
+function ExampleSection({
+  index,
+  example,
+}: {
+  index: number;
+  example: (typeof examples)[number];
+}) {
+  const emitted = emitSource(compile(example.spec), example.id);
+
+  return (
+    <section style={styles.example}>
+      <div style={styles.exampleHeader}>
+        <h2 style={styles.exampleTitle}>
+          {index} · {example.title}
+        </h2>
+        <p style={styles.exampleDescription}>{example.description}</p>
+      </div>
+
       <section style={styles.grid}>
-        <Panel title="1 · ggplot DSL">
-          <pre style={styles.pre}>{DSL_SOURCE}</pre>
+        <Panel title="ggplot DSL">
+          <pre style={styles.pre}>{example.dslSource}</pre>
         </Panel>
-        <Panel title="2 · emitted UseGPU Live source">
+        <Panel title="emitted UseGPU Live source">
           <pre style={styles.pre}>{emitted}</pre>
         </Panel>
       </section>
 
       <section style={styles.canvasSection}>
-        <Panel title="3 · live WebGPU render">
-          <ChartCanvas spec={spec} />
+        <Panel title="live WebGPU render">
+          <ChartCanvas spec={example.spec} />
           <p style={styles.note}>
-            Requires a WebGPU browser (Chrome/Edge 113+, Safari 18+). 2D camera
-            wiring is still being tuned — see the project's beads issues.
+            Requires a WebGPU browser (Chrome/Edge 113+, Safari 18+). Font/glyph
+            WASM loading under Vite's Rolldown bundler is still being fixed — see
+            the project's beads issues — so this may render blank for now.
           </p>
         </Panel>
       </section>
-    </div>
+    </section>
   );
 }
 
@@ -81,6 +84,15 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "1px 5px",
     borderRadius: 3,
   },
+  example: { marginBottom: 40 },
+  exampleHeader: { marginBottom: 12 },
+  exampleTitle: {
+    fontSize: 18,
+    fontWeight: 600,
+    color: "#e8e8f0",
+    marginBottom: 4,
+  },
+  exampleDescription: { fontSize: 13, color: "#9090b0", lineHeight: 1.5 },
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))",

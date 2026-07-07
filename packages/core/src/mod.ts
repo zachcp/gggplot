@@ -15,8 +15,25 @@ export { node, type ComponentName, type RenderNode } from "./compile/rendertree.
 
 // Backends
 export { emitSource } from "./emit/mod.ts";
-export { GGPlot, renderTree, type GGPlotProps } from "./render/GGPlot.tsx";
+export { FacetGrid, type FacetGridProps, GGPlot, renderTree, type GGPlotProps } from "./render/GGPlot.tsx";
 
 // Pipeline stages (exposed for testing/extension)
 export { applyStat, type StatFn, type StatResult } from "./stat/mod.ts";
-export { trainScales, type TrainedScale } from "./scale/mod.ts";
+export {
+  expandRange,
+  scaleAlphaValue,
+  scaleColorValue,
+  scalePosition,
+  scaleShapeValue,
+  scaleSizeValue,
+  trainScales,
+  type TrainedScale,
+} from "./scale/mod.ts";
+export { categoricalColor, categoricalRange, sequentialColor } from "./scale/palette.ts";
+export {
+  dodgeBars,
+  jitter,
+  type PlacedBar,
+  type PositionedBar,
+  stackBars,
+} from "./position/mod.ts";

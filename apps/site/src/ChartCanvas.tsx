@@ -16,6 +16,7 @@ export function ChartCanvas({ spec }: { spec: GGSpec }) {
 
 const styles: Record<string, React.CSSProperties> = {
   frame: {
+    position: "relative",
     width: "100%",
     height: 360,
     borderRadius: 8,

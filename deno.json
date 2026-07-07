@@ -6,6 +6,7 @@
     "build": "deno task --cwd apps/site build",
     "preview": "deno task --cwd apps/site preview",
     "check": "deno check packages/core/src/mod.ts",
-    "demo": "deno run packages/core/examples/emit-demo.ts"
+    "demo": "deno run packages/core/examples/emit-demo.ts",
+    "gggplot": "deno run -A packages/core/src/cli.ts"
   }
 }

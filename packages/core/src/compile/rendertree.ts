@@ -6,6 +6,7 @@
 /** Names correspond to exports of @use-gpu/plot (Plot, Cartesian, Point, ...). */
 export type ComponentName =
   | "Plot"
+  | "Embedded"
   | "Cartesian"
   | "Polar"
   | "Axis"
@@ -14,7 +15,15 @@ export type ComponentName =
   | "Line"
   | "Face"
   | "Polygon"
-  | "Label";
+  | "Label"
+  /**
+   * Not a real @use-gpu/plot export — a small custom Live component (defined
+   * in render/GGPlot.tsx, inlined by emit/mod.ts) that divides the ambient
+   * LayoutContext pixel rect into an nrow x ncol grid and provides each
+   * sub-rectangle as the LayoutContext for one Embedded child, giving
+   * facet_wrap/facet_grid their multi-panel layout.
+   */
+  | "FacetGrid";
 
 export interface RenderNode {
   component: ComponentName;
