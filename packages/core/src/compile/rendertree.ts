@@ -18,6 +18,10 @@ export type ComponentName =
   | "Label"
   | "ResidentHistogram"
   | "ResidentHistogramView"
+  /** One facet cell with a concrete viewport supplied by FacetGrid. */
+  | "FacetPanel"
+  /** Centers a square viewport inside the host before a Polar view. */
+  | "RadialViewport"
   /**
    * Not a real @use-gpu/plot export — a small custom Live component (defined
    * in render/GGPlot.tsx, inlined by emit/mod.ts) that divides the ambient

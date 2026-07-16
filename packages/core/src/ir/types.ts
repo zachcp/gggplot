@@ -169,6 +169,8 @@ export interface PlotLabels {
   title?: string;
   subtitle?: string;
   caption?: string;
+  /** Short plot-corner label, kept opt-in like ggplot2's plot.tag. */
+  tag?: string;
   x?: string;
   y?: string;
   color?: string;

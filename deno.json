@@ -9,6 +9,8 @@
     "check:core": "deno check packages/core/src/mod.ts",
     "check:site": "deno task --cwd apps/site check",
     "demo": "deno run packages/core/examples/emit-demo.ts",
-    "gggplot": "deno run -A packages/core/src/cli.ts"
+    "gggplot": "deno run -A packages/core/src/cli.ts",
+    "parity:matrix": "deno run -A scripts/generate_gribouille_parity_matrix.ts",
+    "parity:check": "deno run -A scripts/generate_gribouille_parity_matrix.ts --check"
   }
 }

@@ -10,6 +10,7 @@
     "npm:@use-gpu/live@0.19": "0.19.0",
     "npm:@use-gpu/plot@*": "0.19.0",
     "npm:@use-gpu/plot@0.19": "0.19.0",
+    "npm:@use-gpu/plot@0.19.0": "0.19.0",
     "npm:@use-gpu/react@0.19": "0.19.0_react@18.3.1_react-dom@18.3.1__react@18.3.1",
     "npm:@use-gpu/scene@0.19": "0.19.0",
     "npm:@use-gpu/shader@0.19": "0.19.0",
@@ -17,6 +18,10 @@
     "npm:@use-gpu/wgsl-loader@0.19": "0.19.0_rollup@4.62.2",
     "npm:@use-gpu/workbench@0.19": "0.19.0",
     "npm:@vitejs/plugin-react@^5.2.0": "5.2.0_vite@7.3.6",
+    "npm:gl-matrix@*": "3.4.4",
+    "npm:gl-matrix@^3.4.4": "3.4.4",
+    "npm:playwright@*": "1.61.1",
+    "npm:playwright@^1.61.1": "1.61.1",
     "npm:react-dom@^18.3.1": "18.3.1_react@18.3.1",
     "npm:react@^18.3.1": "18.3.1",
     "npm:rollup@^4.24.0": "4.62.2",
@@ -781,6 +786,11 @@
     "find-replace@5.0.2": {
       "integrity": "sha512-Y45BAiE3mz2QsrN2fb5QEtO4qb44NcS7en/0y9PEVsg351HsLeVclP8QPMH79Le9sH3rs5RSwJu99W0WPZO43Q=="
     },
+    "fsevents@2.3.2": {
+      "integrity": "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==",
+      "os": ["darwin"],
+      "scripts": true
+    },
     "fsevents@2.3.3": {
       "integrity": "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==",
       "os": ["darwin"],
@@ -853,6 +863,20 @@
     "picomatch@4.0.4": {
       "integrity": "sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A=="
     },
+    "playwright-core@1.61.1": {
+      "integrity": "sha512-h7Qlt6m4REp25qvIdvbDtVmD4LqVXfpRxhORv9L0jzETM05p4fuPJ3dKyuSXQxDSbXnmS79HAgi9589lGSpLkg==",
+      "bin": true
+    },
+    "playwright@1.61.1": {
+      "integrity": "sha512-DWnY5o3YbLWK4GovuAVwpqL+1VwGNdUGrRr++8j8PtQQzvAVZUIMjKQ90fY689sEJZJBbZVw1rXaOKSTitkzPQ==",
+      "dependencies": [
+        "playwright-core"
+      ],
+      "optionalDependencies": [
+        "fsevents@2.3.2"
+      ],
+      "bin": true
+    },
     "postcss@8.5.15": {
       "integrity": "sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==",
       "dependencies": [
@@ -912,7 +936,7 @@
         "@rollup/rollup-win32-ia32-msvc",
         "@rollup/rollup-win32-x64-gnu",
         "@rollup/rollup-win32-x64-msvc",
-        "fsevents"
+        "fsevents@2.3.3"
       ],
       "bin": true
     },
@@ -979,7 +1003,7 @@
         "tinyglobby"
       ],
       "optionalDependencies": [
-        "fsevents"
+        "fsevents@2.3.3"
       ],
       "bin": true
     },
@@ -1020,7 +1044,8 @@
           "npm:@use-gpu/plot@0.19",
           "npm:@use-gpu/scene@0.19",
           "npm:@use-gpu/webgpu@0.19",
-          "npm:@use-gpu/workbench@0.19"
+          "npm:@use-gpu/workbench@0.19",
+          "npm:gl-matrix@^3.4.4"
         ]
       },
       "packages/reductions": {

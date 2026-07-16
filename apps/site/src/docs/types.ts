@@ -20,6 +20,8 @@ export interface DocExample {
   id: string;
   title: string;
   description: string;
+  /** Accessible summary of the intended visual result; falls back to description. */
+  visualSummary?: string;
   whatChanged: string;
   dataPreview?: Record<string, unknown[]>;
   computedDataPreview?: DataFrame;

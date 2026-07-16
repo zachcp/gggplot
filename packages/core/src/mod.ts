@@ -36,6 +36,8 @@ export { emitSource } from "./emit/mod.ts";
 export {
   FacetGrid,
   type FacetGridProps,
+  FacetPanel,
+  type FacetPanelProps,
   GGPlot,
   type GGPlotProps,
   renderTree,

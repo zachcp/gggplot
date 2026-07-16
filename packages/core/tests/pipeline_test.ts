@@ -28,6 +28,7 @@ import {
   scaleColor,
   scaleColorGradient2,
   scaleColorViridis,
+  scaleAlpha,
   scaleFill,
   scaleLinetype,
   scaleLinewidth,
@@ -602,11 +603,16 @@ Deno.test("coord_polar selects the Polar view and passes through bend/on params"
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const radial = tree.children[0];
+  assertEquals(radial.component, "RadialViewport");
+  const panel = radial.children[0];
   assertEquals(panel.component, "Polar");
   assertEquals(panel.props.bend, 0.5);
   assertEquals(panel.props.on, "y");
   assertEquals(panel.props.range, [[0, 2], [10, 30]]);
+  const src = emitSource(tree, "CircularPolar");
+  assertStringIncludes(src, "const RadialViewport");
+  assertStringIncludes(src, "useCombinedMatrixTransform");
 });
 
 Deno.test("coord_polar theta:'y' reassigns the angle to y, same projection swap as coord_flip", () => {
@@ -615,7 +621,7 @@ Deno.test("coord_polar theta:'y' reassigns the angle to y, same projection swap 
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = tree.children[0].children[0];
   assertEquals(panel.component, "Polar");
   assertEquals(panel.props.axes, "yx");
   assertEquals(panel.props.bend, 0.5);
@@ -630,7 +636,7 @@ Deno.test("coord_polar munches Polygon edges for curved bar wedges", () => {
     .add(geomCol(), coordPolar())
     .build();
   const tree = compile(spec);
-  const panel = tree.children[0];
+  const panel = tree.children[0].children[0];
   const polygon = panel.children.find((c) => c.component === "Polygon");
 
   const positions = polygon?.props.positions as [number, number][][];
@@ -647,7 +653,7 @@ Deno.test("coord_polar uses explicit Line rings/spokes instead of Cartesian Grid
     .add(geomCol(), coordPolar())
     .build();
   const tree = compile(spec);
-  const panel = tree.children[0];
+  const panel = tree.children[0].children[0];
 
   assertEquals(panel.children.find((c) => c.component === "Grid"), undefined);
   const grid = panel.children.find((c) => c.component === "Line");
@@ -1171,6 +1177,46 @@ Deno.test("geomPoint alpha param passes through as a flat opacity", () => {
   assertEquals(point?.props.opacity, 0.4);
 });
 
+Deno.test("axis labels default from mappings and honor labels() overrides", () => {
+  const defaultTree = compile(ggplot(data, { x: "x", y: "y" }).add(geomPoint()).build());
+  const defaultOverlay = defaultTree.children.find((child) =>
+    child.component === "Embedded" && child.children.every((node) => node.component === "Label")
+  )!;
+  assertEquals(defaultOverlay.children.map((node) => node.props.labels), [["x"], ["y"]]);
+
+  const namedTree = compile(
+    ggplot(data, { x: "x", y: "y" }).add(geomPoint())
+      .add(labels({ x: "Weight", y: "Mileage", tag: "A" })).build(),
+  );
+  const namedOverlay = namedTree.children.find((child) =>
+    child.component === "Embedded" && child.children.every((node) => node.component === "Label")
+  )!;
+  assertEquals(namedOverlay.children.map((node) => node.props.labels), [["Weight"], ["Mileage"]]);
+  assertEquals(
+    findNodes(namedTree, "Label").some((node) =>
+      (node.props.labels as string[] | undefined)?.[0] === "A"
+    ),
+    true,
+  );
+});
+
+Deno.test("mapped alpha lowers per-point RGBA colors and emits an alpha guide", () => {
+  const alphaData = { x: [0, 1, 2], y: [1, 2, 3], strength: [0, 5, 10] };
+  const tree = compile(
+    ggplot(alphaData, { x: "x", y: "y", alpha: "strength" })
+      .add(geomPoint())
+      .add(scaleAlpha({ name: "Strength" }))
+      .build(),
+  );
+  const panel = tree.children[0];
+  const mark = panel.children.find((child) => child.component === "Point");
+  assertEquals(mark?.props.colors, ["#3b82f61a", "#3b82f68c", "#3b82f6ff"]);
+  const guideTitles = tree.children
+    .filter((child) => child.component === "Label")
+    .flatMap((child) => child.props.labels as string[]);
+  assertEquals(guideTitles.includes("Strength"), true);
+});
+
 Deno.test("stat_bin buckets continuous x into fixed-width bins with counts and density", () => {
   const binLayer: Layer = {
     geom: "bar",
@@ -1292,6 +1338,41 @@ Deno.test("geomHistogram forces stat_bin even if stat is supplied", () => {
   assertEquals(spec.layers[0].params.bins, 3);
 });
 
+Deno.test("grouped histogram retains zero bins, stacks shared centers, and keeps fill correspondence", () => {
+  const spec = ggplot(
+    { x: [0, 1, 2, 3, 4, 5], cohort: ["a", "a", "a", "b", "b", "b"] },
+    { x: "x", fill: "cohort" },
+  ).add(geomHistogram({ binwidth: 2 })).build();
+  const tree = compile(spec);
+  const polygon = findNodes(tree, "Polygon").at(-1)!;
+  const loops = polygon.props.positions as [number, number][][];
+  const roundedLoops = loops.map((loop) =>
+    loop.map(([x, y]) => [Number(x.toFixed(6)), y])
+  );
+
+  // stat_bin emits three centers for both cohorts, including each cohort's
+  // empty bin. Stacking starts b at a's accumulated top for each center.
+  assertEquals(roundedLoops, [
+    [[0.1, 0], [0.1, 2], [1.9, 2], [1.9, 0]],
+    [[2.1, 0], [2.1, 1], [3.9, 1], [3.9, 0]],
+    [[4.1, 0], [4.1, 0], [5.9, 0], [5.9, 0]],
+    [[0.1, 2], [0.1, 2], [1.9, 2], [1.9, 2]],
+    [[2.1, 1], [2.1, 2], [3.9, 2], [3.9, 1]],
+    [[4.1, 0], [4.1, 2], [5.9, 2], [5.9, 0]],
+  ]);
+  assertEquals(polygon.props.fills, [
+    CATEGORICAL_PALETTE[0],
+    CATEGORICAL_PALETTE[0],
+    CATEGORICAL_PALETTE[0],
+    CATEGORICAL_PALETTE[1],
+    CATEGORICAL_PALETTE[1],
+    CATEGORICAL_PALETTE[1],
+  ]);
+  assertEquals(findNodes(tree, "Point").some((n) =>
+    n.props.colors && n.props.size === 7
+  ), true);
+});
+
 Deno.test("resident compile lowers an eligible histogram without stat rows", () => {
   const spec = ggplot({ x: [0, 1, 2, 3] }, { x: "x" })
     .add(geomHistogram({ binwidth: 2, fill: "#ff0000" }))
@@ -1353,6 +1434,17 @@ Deno.test("resident compile preserves CPU fallback outside the standalone cartes
 
   assertEquals(findNodes(tree, "ResidentHistogram").length, 0);
   assertEquals(findNodes(tree, "ResidentHistogramView").length, 0);
+  assertEquals(findNodes(tree, "Polygon").length > 0, true);
+});
+
+Deno.test("mapped histogram fills stay on the documented CPU-reference path", () => {
+  const spec = ggplot(
+    { x: [0, 1, 2, 3], cohort: ["a", "a", "b", "b"] },
+    { x: "x", fill: "cohort" },
+  ).add(geomHistogram({ binwidth: 2 })).build();
+  const tree = compile(spec, { resident: true });
+
+  assertEquals(findNodes(tree, "ResidentHistogram").length, 0);
   assertEquals(findNodes(tree, "Polygon").length > 0, true);
 });
 
@@ -1934,6 +2026,12 @@ Deno.test("facet_wrap honors an explicit ncol", () => {
   assertEquals(facet.props.ncol, 4);
   assertEquals(facet.props.nrow, 1);
   assertEquals(facet.children.length, 4);
+  assertEquals(facet.children.map((panel) => panel.component), [
+    "FacetPanel",
+    "FacetPanel",
+    "FacetPanel",
+    "FacetPanel",
+  ]);
 });
 
 Deno.test("faceted plots keep plot-level color legends outside FacetGrid", () => {
@@ -2003,6 +2101,26 @@ Deno.test("facet_grid crosses row and column variables into a full panel grid, i
   assertEquals(points[3]?.props.positions, [[2, 20]]); // r: lo, c: R -> row 1
 });
 
+Deno.test("empty facet_grid bar combinations retain a panel but emit no empty Polygon", () => {
+  const facetData = {
+    r: ["lo", "hi"],
+    c: ["L", "R"],
+    x: ["a", "b"],
+  };
+  const tree = compile(
+    ggplot(facetData, { x: "x" }).add(
+      geomBar({ fill: "#3b82f6" }),
+      facetGrid(["r"], ["c"]),
+    ).build(),
+  );
+  const facet = facetGridNode(tree);
+  const polygons = facet.children.map((embed) =>
+    embed.children.find((node) => node.component === "Cartesian")?.children
+      .filter((node) => node.component === "Polygon") ?? []
+  );
+  assertEquals(polygons.map((nodes) => nodes.length), [0, 1, 1, 0]);
+});
+
 Deno.test("facet partitions before stats, so stat_count aggregates within each panel", () => {
   const facetData = {
     grp: ["a", "a", "a", "b", "b"],
@@ -2033,10 +2151,12 @@ Deno.test("emitSource inlines a standalone FacetGrid definition for faceted spec
   const src = emitSource(compile(spec), "FacetedChart");
 
   assertStringIncludes(src, "<FacetGrid");
+  assertStringIncludes(src, "<FacetPanel>");
+  assertStringIncludes(src, "const FacetPanel = ({ children })");
   assertStringIncludes(src, "const FacetGrid = (");
   assertStringIncludes(
     src,
     'import { LayoutContext } from "@use-gpu/workbench"',
   );
-  assertStringIncludes(src, "provide, useContext");
+  assertStringIncludes(src, "createElement, Fragment, useContext");
 });

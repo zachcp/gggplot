@@ -41,7 +41,10 @@ fn orderedBits(value: f32) -> u32 {
 }
 
 fn isFiniteValue(value: f32) -> bool {
-  return value == value && abs(value) <= 3.4028235e38;
+  // 3.4028235e38 rounds beyond the largest representable f32 in WGSL and
+  // invalidates the complete compute pipeline in Dawn. Keep this literal
+  // strictly inside the f32 range so the finite-domain reduction can compile.
+  return value == value && abs(value) <= 3.4e38;
 }
 
 @compute @workgroup_size(64)
@@ -77,7 +80,7 @@ struct HistogramParams {
 @group(0) @binding(3) var<uniform> params: HistogramParams;
 
 fn isFiniteValue(value: f32) -> bool {
-  return value == value && abs(value) <= 3.4028235e38;
+  return value == value && abs(value) <= 3.4e38;
 }
 
 @compute @workgroup_size(64)

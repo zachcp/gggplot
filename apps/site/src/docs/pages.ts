@@ -146,6 +146,13 @@ export const docPages: DocPage[] = [
     title: "Coordinates",
     summary:
       "Coordinate systems project already-computed marks into flipped cartesian or polar views.",
+    narrative: [
+      {
+        heading: "Polar viewport and scope",
+        body:
+          "Polar charts are centered in a square viewport inside the available canvas, so pie, rose, and radar-style polygon fixtures remain circular on rectangular surfaces. coord_polar supports theta reassignment and polygon-edge munching; coord_radial features such as donut holes, partial arcs, rotated labels, and a full line/path muncher remain explicitly deferred.",
+      },
+    ],
     examples: [flippedBars, polarBars, polarThetaY],
   },
   {

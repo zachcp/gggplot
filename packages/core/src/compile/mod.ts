@@ -21,6 +21,7 @@ import { columnValues, numericColumnValues } from "../data/mod.ts";
 import {
   expandRange,
   namedLinetypeValue,
+  scaleAlphaValue,
   scaleColorValue,
   scaleLinetypeValue,
   scaleLinewidthValue,
@@ -54,7 +55,7 @@ function positionsOf(
 ): [number, number][] {
   const xs = valuesOf(data, mapping.x);
   const ys = valuesOf(data, mapping.y);
-  if (!xs || !ys) return [];
+  if (!xs || !ys || xs.length === 0 || ys.length === 0) return [];
   const n = Math.min(xs.length, ys.length);
   const out: [number, number][] = [];
   for (let i = 0; i < n; i++) {
@@ -114,6 +115,31 @@ function sizesOf(
   const col = mapping.size;
   if (!col || !(col in data)) return undefined;
   return columnValues(data, col).map((v) => scaleSizeValue(sizeScale, v));
+}
+
+/** Per-row opacity from a mapped alpha column; literals remain layer params. */
+function alphasOf(
+  mapping: Aes,
+  data: GGSpec["data"],
+  alphaScale: TrainedScale | undefined,
+): number[] | undefined {
+  const col = mapping.alpha;
+  if (!col || !(col in data)) return undefined;
+  return columnValues(data, col).map((v) => scaleAlphaValue(alphaScale, v));
+}
+
+/** Encode a mapped opacity into a CSS color the Point adapter can bind per row. */
+function colorWithAlpha(color: string, alpha: number): string {
+  const hex = color.startsWith("#") ? color.slice(1) : color;
+  if (/^[0-9a-f]{3}$/i.test(hex)) {
+    const expanded = [...hex].map((part) => part + part).join("");
+    return `#${expanded}${Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(2, "0")}`;
+  }
+  if (/^[0-9a-f]{6}$/i.test(hex)) {
+    return `#${hex}${Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(2, "0")}`;
+  }
+  // CSS rgba() is accepted by UseGPU's color parser for named/non-hex colors.
+  return color;
 }
 
 /** Per-row point shapes from a mapped shape column, or undefined if unmapped. */
@@ -232,7 +258,7 @@ function lowerBarLayer(
 ): RenderNode[] {
   const xs = valuesOf(data, mapping.x);
   const ys = valuesOf(data, mapping.y);
-  if (!xs || !ys) return [];
+  if (!xs || !ys || xs.length === 0 || ys.length === 0) return [];
 
   const n = Math.min(xs.length, ys.length);
   const groupCol = mapping.fill ?? mapping.color ?? mapping.group;
@@ -667,6 +693,7 @@ function lowerLayer(
   colorScale: TrainedScale | undefined,
   fillScale: TrainedScale | undefined,
   sizeScale: TrainedScale | undefined,
+  alphaScale: TrainedScale | undefined,
   shapeScale: TrainedScale | undefined,
   linetypeScale: TrainedScale | undefined,
   linewidthScale: TrainedScale | undefined,
@@ -803,6 +830,10 @@ function lowerLayer(
     );
     const color = (layer.params.color as string) ?? "#3b82f6";
     const sizes = sizesOf(mapping, data, sizeScale);
+    const alphas = alphasOf(mapping, data, alphaScale);
+    const rgbaColors = alphas
+      ? positions.map((_, i) => colorWithAlpha(colors?.[i] ?? color, alphas[i]))
+      : undefined;
     const shapes = shapesOf(mapping, data, shapeScale);
 
     if (shapes) {
@@ -814,7 +845,9 @@ function lowerLayer(
       return [...byShape.entries()].map(([shape, indices]) =>
         node("Point", {
           positions: indices.map((i) => positions[i]),
-          ...(colors ? { colors: indices.map((i) => colors[i]) } : { color }),
+          ...(rgbaColors
+            ? { colors: indices.map((i) => rgbaColors[i]) }
+            : colors ? { colors: indices.map((i) => colors[i]) } : { color }),
           ...(sizes
             ? { sizes: indices.map((i) => sizes[i]) }
             : { size: (layer.params.size as number) ?? 5 }),
@@ -826,7 +859,7 @@ function lowerLayer(
 
     return [node("Point", {
       positions,
-      ...(colors ? { colors } : { color }),
+      ...(rgbaColors ? { colors: rgbaColors } : colors ? { colors } : { color }),
       ...(sizes ? { sizes } : { size: (layer.params.size as number) ?? 5 }),
       ...(opacity != null ? { opacity } : {}),
     })];
@@ -1048,6 +1081,7 @@ function legendNodes(
   colorScale: TrainedScale | undefined,
   fillScale: TrainedScale | undefined,
   sizeScale: TrainedScale | undefined,
+  alphaScale: TrainedScale | undefined,
   shapeScale: TrainedScale | undefined,
   linetypeScale: TrainedScale | undefined,
   linewidthScale: TrainedScale | undefined,
@@ -1136,6 +1170,29 @@ function legendNodes(
     y -= values.length * 0.07 + 0.08;
   }
 
+  // Alpha is a mapped continuous aesthetic, so it receives the same compact
+  // representative-value guide as size/linewidth. Literal layer opacity is
+  // intentionally absent because it does not train a scale.
+  if (alphaScale && !Array.isArray(alphaScale.domain[0])) {
+    const [lo, hi] = alphaScale.domain as [number, number];
+    const values = hi > lo ? [lo, (lo + hi) / 2, hi] : [lo];
+    nodes.push(
+      labelNode(titleX, y, [legendTitle(alphaScale, labels, "alpha")], theme, 14),
+    );
+    y -= 0.08;
+    nodes.push(node("Point", {
+      positions: values.map((_, i): [number, number] => [swatchX, y - i * 0.07]),
+      size: 7,
+      colors: values.map((value) => {
+        const [rangeLo, rangeHi] = alphaScale.range as [number, number];
+        const alpha = hi === lo ? rangeHi : rangeLo + (rangeHi - rangeLo) * ((value - lo) / (hi - lo));
+        return colorWithAlpha("#3b82f6", alpha);
+      }),
+    }));
+    nodes.push(labelNode(labelX, y, values.map((v) => String(Number(v.toFixed(2)))), theme));
+    y -= values.length * 0.07 + 0.08;
+  }
+
   if (
     shapeScale && Array.isArray(shapeScale.domain) &&
     typeof shapeScale.domain[0] === "string"
@@ -1160,6 +1217,7 @@ function legendNodes(
       }));
     });
     nodes.push(labelNode(labelX, y, levels, theme));
+    y -= levels.length * 0.07 + 0.08;
   }
 
   if (
@@ -1231,6 +1289,7 @@ function legendNodes(
   return nodes;
 }
 
+/** Root-overlay title-family text; axis labels stage with their view guides. */
 function plotLabelNodes(labels: PlotLabels, theme: Theme): RenderNode[] {
   const nodes: RenderNode[] = [];
   if (labels.title) {
@@ -1254,7 +1313,23 @@ function plotLabelNodes(labels: PlotLabels, theme: Theme): RenderNode[] {
       ),
     );
   }
+  if (labels.tag) {
+    nodes.push(labelNode(0.92, 0.92, [labels.tag], theme, theme.fontSize ?? 14));
+  }
   return nodes;
+}
+
+/** Panel-local axis titles. A nested Embedded keeps them in normalized layout
+ * space without mixing them into the plot-level legend/title overlay. */
+function axisLabelOverlay(
+  labels: PlotLabels,
+  mapping: Aes,
+  theme: Theme,
+): RenderNode {
+  return node("Embedded", { normalize: true }, [
+    labelNode(0, -0.96, [labelFor(labels, "x", mapping.x ?? "x")], theme),
+    labelNode(-0.96, 0, [labelFor(labels, "y", mapping.y ?? "y")], theme),
+  ]);
 }
 
 /** One faceting variable combination (e.g. { cyl: "6" }), row/col-major order. */
@@ -1415,6 +1490,7 @@ export function compile(
   const colorScale = scales.get("color");
   const fillScale = scales.get("fill");
   const sizeScale = scales.get("size");
+  const alphaScale = scales.get("alpha");
   const shapeScale = scales.get("shape");
   const linetypeScale = scales.get("linetype");
   const linewidthScale = scales.get("linewidth");
@@ -1479,6 +1555,7 @@ export function compile(
         colorScale,
         fillScale,
         sizeScale,
+        alphaScale,
         shapeScale,
         linetypeScale,
         linewidthScale,
@@ -1566,16 +1643,21 @@ export function compile(
     if (standaloneResident?.autoYDomain) {
       return node("Embedded", { normalize: true }, [
         node("ResidentHistogramView", { ...standaloneResident, axes, theme }),
+        axisLabelOverlay(labels, spec.mapping, theme),
         ...plotLabelNodes(labels, theme),
       ]);
     }
     return node("Embedded", { normalize: true }, [
-      buildPanel(panelLayers[0]),
+      ...(view === "Polar"
+        ? [node("RadialViewport", {}, [buildPanel(panelLayers[0])])]
+        : [buildPanel(panelLayers[0])]),
+      axisLabelOverlay(labels, spec.mapping, theme),
       ...plotLabelNodes(labels, theme),
       ...legendNodes(
         colorScale,
         fillScale,
         sizeScale,
+        alphaScale,
         shapeScale,
         linetypeScale,
         linewidthScale,
@@ -1589,14 +1671,22 @@ export function compile(
   // layout and giving plot-level labels/legends a normalized overlay space.
   // FacetGrid (a custom Live component, not a real @use-gpu/plot export — see
   // rendertree.ts) subdivides that ambient pixel-space layout into an nrow x
-  // ncol grid at render time and provides each cell as the LayoutContext for
-  // one panel Embedded child. Each panel Embedded gets its own normalized
-  // [-1,1] coordinate space plus a strip Label at y=0.92, sibling to — not
+  // ncol grid at render time and supplies each panel an explicit viewport.
+  // FacetPanel then mounts its normalized Embedded space plus a strip Label
+  // at y=0.92, sibling to — not
   // inside — the Cartesian/Polar view, so strip positions are not relative to
   // the trained data domain.
-  const embeds = panels.map((panel, i) =>
-    node("Embedded", { normalize: true }, [
-      buildPanel(panelLayers[i]),
+  const embeds = panels.map((panel, i) => {
+    // Keep the crossed panel and strip for an empty combination, but do not
+    // mount a Cartesian helper subtree whose adapter receives no geometry.
+    // The cell remains part of FacetGrid's layout, so subsequent panels keep
+    // their row/column positions.
+    const hasRows = Object.keys(panel.data).some((column) =>
+      columnValues(panel.data, column).length > 0
+    );
+    return (
+    node("FacetPanel", {}, [
+      ...(hasRows ? [buildPanel(panelLayers[i])] : []),
       ...(panel.label
         ? [
           node("Label", {
@@ -1608,14 +1698,20 @@ export function compile(
         ]
         : []),
     ])
-  );
+    );
+  });
   return node("Embedded", { normalize: true }, [
     node("FacetGrid", { nrow, ncol, gap: 16 }, embeds),
+    // Axis titles are plot-level for fixed-scale facets. Mounting a second
+    // normalized Embedded inside every cell can create zero-sized glyph
+    // bindings on UseGPU's nested layout path.
+    axisLabelOverlay(labels, spec.mapping, theme),
     ...plotLabelNodes(labels, theme),
     ...legendNodes(
       colorScale,
       fillScale,
       sizeScale,
+      alphaScale,
       shapeScale,
       linetypeScale,
       linewidthScale,

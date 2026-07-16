@@ -99,7 +99,7 @@ export const histogramStatBin: DocExample = {
   description:
     "A bar layer can request stat_bin to reduce raw continuous values into count bins.",
   whatChanged:
-    "stat_bin replaces raw x values with bin centers and emits computed count and density columns.",
+    "stat_bin replaces raw x values with bin centers and emits computed count and density columns. This literal-fill chart is eligible for the resident histogram path at runtime; the table is a CPU inspection preview.",
   dataPreview: histogramData,
   dslSource: `ggplot(data, { x: "value" })
   .add(geomHistogram({ binwidth: 1, fill: "#3b82f6" }))
@@ -121,7 +121,7 @@ export const groupedHistogram: DocExample = {
   description:
     "Mapped fill becomes an effective group before stat_bin, so counts are reduced per cohort.",
   whatChanged:
-    "The fill factor is encoded as group ids before groupedHistogram1d counts each cohort per bin.",
+    "The fill factor is encoded as group ids before groupedHistogram1d counts each cohort per bin. Mapped fills deliberately use the CPU-reference lowering today, because the resident histogram consumer does not yet carry per-group palette bindings.",
   dataPreview: groupedHistogramData,
   dslSource: `ggplot(data, { x: "value", fill: "cohort" })
   .add(geomHistogram({ binwidth: 1 }))

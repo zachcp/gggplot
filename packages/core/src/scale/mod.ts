@@ -171,10 +171,14 @@ const DEFAULT_LINEWIDTH_RANGE: [number, number] = [1, 6];
 const DEFAULT_SHAPE_PALETTE: readonly string[] = [
   "circle",
   "square",
-  "triangle",
+  // UseGPU's Point marker enum is circle/square/diamond plus cardinal wedges;
+  // ggplot's triangle/cross/asterisk aliases otherwise downgrade silently to
+  // a circle and emit browser warnings.
+  "up",
   "diamond",
-  "cross",
-  "asterisk",
+  "down",
+  "left",
+  "right",
 ];
 /** Dash/gap lengths in device pixels, accepted directly by use.gpu's Line. */
 const DEFAULT_LINETYPE_PALETTE: readonly (readonly number[])[] = [

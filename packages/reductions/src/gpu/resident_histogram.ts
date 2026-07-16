@@ -260,7 +260,10 @@ export function createResidentHistogram1DFromSources(
   const tilesBind = device.createBindGroup({
     layout: tiles.getBindGroupLayout(0),
     entries: [
-      { binding: 0, resource: { buffer: counts } },
+      // HISTOGRAM_TILE_VERTICES_WGSL derives a dense geometric grid and does
+      // not consume counts. Dawn consequently omits its declared-but-unused
+      // binding(0) from the auto layout; binding it here invalidates the whole
+      // command buffer on browser adapters.
       { binding: 1, resource: { buffer: tileVertices } },
       { binding: 2, resource: { buffer: params } },
     ],

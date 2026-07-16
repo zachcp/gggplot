@@ -7,7 +7,13 @@
 // resolves component names to real @use-gpu/plot components and builds the Live
 // tree in-memory, so a spec can be rendered directly in the browser.
 
-import { createElement, Fragment, provide, useContext } from "@use-gpu/live";
+import {
+  createElement,
+  Fragment,
+  provide,
+  useContext,
+  useMemo,
+} from "@use-gpu/live";
 import {
   Axis,
   Cartesian,
@@ -20,7 +26,15 @@ import {
   Polar,
   Polygon,
 } from "@use-gpu/plot";
-import { FontLoader, LayoutContext } from "@use-gpu/workbench";
+import {
+  FontLoader,
+  LayoutContext,
+  MatrixContext,
+  TransformContext,
+  useCombinedMatrixTransform,
+} from "@use-gpu/workbench";
+import { RangeContext } from "@use-gpu/plot/mjs/providers/range-provider.mjs";
+import { mat4 } from "gl-matrix";
 import {
   ResidentHistogramMark,
   ResidentHistogramView,
@@ -39,15 +53,75 @@ export interface FacetGridProps {
   children?: unknown[] | unknown;
 }
 
+export interface FacetPanelProps {
+  layout: [number, number, number, number];
+  children?: unknown[] | unknown;
+}
+
+/**
+ * Mount a facet against its concrete rectangle without nesting another Plot.
+ * Embedded always starts a VirtualLayers reconciler; facets need their panel
+ * transform, but must submit all marks to the one reconciler owned by the
+ * outer chart Embedded.
+ */
+export const FacetPanel = ({ layout, children }: FacetPanelProps) => {
+  const [range, matrix] = useMemo(() => {
+    const [left, top, right, bottom] = layout;
+    const width = right - left;
+    const height = bottom - top;
+    return [
+      [[-1, 1], [-1, 1], [-1, 1], [-1, 1]],
+      mat4.fromValues(
+        width / 2, 0, 0, 0,
+        0, height / 2, 0, 0,
+        0, 0, 1, 0,
+        left + width / 2, top + height / 2, 0, 1,
+      ),
+    ];
+  }, [layout]);
+  const [context, combined] = useCombinedMatrixTransform(matrix);
+  return provide(
+    MatrixContext,
+    combined,
+    provide(
+      TransformContext,
+      context,
+      provide(RangeContext, range, children as never),
+    ),
+  );
+};
+
+/** Keep a polar chart circular within a rectangular host canvas. */
+export const RadialViewport = ({ children }: { children?: unknown[] | unknown }) => {
+  const [left, top, right, bottom] = useContext(LayoutContext) as [
+    number,
+    number,
+    number,
+    number,
+  ];
+  const aspect = (bottom - top) / (right - left);
+  const matrix = useMemo(
+    () => new Float32Array([
+      aspect, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1,
+    ]),
+    [aspect],
+  );
+  const [context, combined] = useCombinedMatrixTransform(matrix);
+  return provide(
+    MatrixContext,
+    combined,
+    provide(TransformContext, context, children as never),
+  );
+};
+
 /**
  * Not a real @use-gpu/plot export (see rendertree.ts) — divides the ambient
  * ancestor LayoutContext pixel rect ([left, top, right, bottom]) into an
- * nrow x ncol grid with `gap` px between cells, and provides each cell as the
- * LayoutContext for one child in row-major order. Each child is expected to
- * be an <Embedded> (with no explicit `layout` prop of its own), which reads
- * this per-cell LayoutContext to build its own normalized coordinate space —
- * giving facet_wrap/facet_grid their multi-panel layout without Embedded
- * itself needing to know about faceting.
+ * nrow x ncol grid with `gap` px between cells and passes each concrete cell
+ * rectangle to a FacetPanel child in row-major order.
  */
 export const FacetGrid = (props: FacetGridProps) => {
   const { nrow, ncol, gap = 0, children } = props;
@@ -77,7 +151,7 @@ export const FacetGrid = (props: FacetGridProps) => {
         left + (col + 1) * cellW - gap / 2,
         top + (row + 1) * cellH - gap / 2,
       ];
-      return provide(LayoutContext, cell, child as never);
+      return createElement(FacetPanel, { layout: cell }, child as never);
     }),
   );
 };
@@ -97,6 +171,10 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
   ResidentHistogram: ResidentHistogramMark,
   ResidentHistogramView,
   FacetGrid,
+  // FacetGrid consumes this transparent tree grouping and mounts its own
+  // layout-bearing FacetPanel around each group.
+  FacetPanel: Fragment,
+  RadialViewport,
 };
 
 /** Recursively turn a RenderNode into a Live element. */

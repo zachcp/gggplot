@@ -21,6 +21,11 @@ const architectureReference = new URL(
 export function App() {
   const viewportWidth = useViewportWidth();
   const compact = viewportWidth < 820;
+  // Kept as an explicit visual-gate probe: it verifies a chart failure stays
+  // local while its surrounding docs/DSL/computed-data context remains usable.
+  const forceChartFailure = new URLSearchParams(location.search).has(
+    "forceChartFailure",
+  );
   const [activeSlug, setActiveSlug] = React.useState(() =>
     docPages.some((page) => page.slug === location.hash.slice(1))
       ? location.hash.slice(1)
@@ -44,7 +49,10 @@ export function App() {
   };
 
   return (
-    <div style={{ ...styles.page, ...(compact ? styles.pageCompact : {}) }}>
+    <div
+      data-doc-route={activePage.slug}
+      style={{ ...styles.page, ...(compact ? styles.pageCompact : {}) }}
+    >
       <header style={styles.header}>
         <div>
           <h1 style={styles.title}>gggplot</h1>
@@ -75,6 +83,7 @@ export function App() {
             <button
               key={page.slug}
               type="button"
+              data-doc-route-link={page.slug}
               style={{
                 ...styles.navButton,
                 ...(compact ? styles.navButtonCompact : {}),
@@ -120,6 +129,7 @@ export function App() {
               index={i + 1}
               example={example}
               compact={compact}
+              forceChartFailure={forceChartFailure}
             />
           ))}
         </main>
@@ -132,10 +142,12 @@ function ExampleSection({
   index,
   example,
   compact,
+  forceChartFailure,
 }: {
   index: number;
   example: DocExample;
   compact: boolean;
+  forceChartFailure: boolean;
 }) {
   const resolved = useResolvedExample(example);
   const tree = resolved.spec ? compile(resolved.spec) : undefined;
@@ -146,7 +158,7 @@ function ExampleSection({
     : undefined;
 
   return (
-    <section style={styles.example}>
+    <section data-doc-example={example.id} style={styles.example}>
       <div style={styles.exampleHeader}>
         <div style={styles.exampleIndex}>{String(index).padStart(2, "0")}</div>
         <div>
@@ -195,7 +207,13 @@ function ExampleSection({
         </Panel>
         <Panel title="live WebGPU render">
           {resolved.spec
-            ? <ChartCanvas spec={resolved.spec} />
+            ? (
+              <ChartCanvas
+                spec={resolved.spec}
+                label={example.visualSummary ?? example.description}
+                forceFailure={forceChartFailure}
+              />
+            )
             : (
               <p style={styles.metaCopy}>
                 {resolved.error ?? "Loading chart data…"}

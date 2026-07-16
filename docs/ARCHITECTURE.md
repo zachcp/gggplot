@@ -227,7 +227,8 @@ Known design debt worth discussing before the next implementation pass:
    reducers today. WebGPU reducers exist for grouped histograms, but choosing
    them requires an async stat path and a threshold policy that accounts for
    upload, dispatch, and readback cost.
-3. **Polar munching scope**: polygon marks are munched for polar coords, but
+3. **Polar munching scope**: polar views first enter a centered square viewport
+   inside any rectangular host, so circular geometry is not stretched. Polygon marks are munched for polar coords, but
    line/path marks are still passed through as authored; this is fine for sparse
    radial segments but not a complete ggplot2-style `coord_munch()`.
 4. **Label layout**: text labels and legends render, but there is no text
