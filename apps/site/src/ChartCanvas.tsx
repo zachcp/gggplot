@@ -18,7 +18,7 @@ const styles: Record<string, React.CSSProperties> = {
   frame: {
     position: "relative",
     width: "100%",
-    height: 360,
+    height: "clamp(240px, 48vw, 360px)",
     borderRadius: 8,
     overflow: "hidden",
     border: "1px solid #1e1e30",

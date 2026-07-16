@@ -3,6 +3,9 @@
   "specifiers": {
     "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/internal@^1.0.12": "1.0.12",
+    "npm:@types/react-dom@^18.3.0": "18.3.7_@types+react@18.3.12",
+    "npm:@types/react@18.3.12": "18.3.12",
+    "npm:@types/react@^18.3.12": "18.3.12",
     "npm:@use-gpu/core@0.19": "0.19.0",
     "npm:@use-gpu/live@0.19": "0.19.0",
     "npm:@use-gpu/plot@*": "0.19.0",
@@ -522,6 +525,22 @@
     "@types/json-schema@7.0.15": {
       "integrity": "sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA=="
     },
+    "@types/prop-types@15.7.15": {
+      "integrity": "sha512-F6bEyamV9jKGAFBEmlQnesRPGOQqS2+Uwi0Em15xenOxHaf2hv6L8YCVn3rPdPJOiJfPiCnLIRyvwVaqMY3MIw=="
+    },
+    "@types/react-dom@18.3.7_@types+react@18.3.12": {
+      "integrity": "sha512-MEe3UeoENYVFXzoXEWsvcpg6ZvlrFNlOQ7EOsvhI3CfAXwzPfO8Qwuxd40nepsYKqyyVQnTdEfv68q91yLcKrQ==",
+      "dependencies": [
+        "@types/react"
+      ]
+    },
+    "@types/react@18.3.12": {
+      "integrity": "sha512-D2wOSq/d6Agt28q7rSI3jhU7G6aiuzljDGZ2hTZHIkrTLUI+AF3WMeKkEZ9nN2fkBAlcktT6vcZjDFiIhMYEQw==",
+      "dependencies": [
+        "@types/prop-types",
+        "csstype"
+      ]
+    },
     "@use-gpu/core@0.19.0": {
       "integrity": "sha512-VnjIwb9XI5bf6szsDYYvcUWDkoP0USM8OJbRUEcyJVmuML4GXZ/DelyWKQD4DaEOERShiBDAjBfondVRUkcmUA==",
       "dependencies": [
@@ -689,6 +708,9 @@
     },
     "convert-source-map@2.0.0": {
       "integrity": "sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg=="
+    },
+    "csstype@3.2.3": {
+      "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="
     },
     "debug@4.4.3": {
       "integrity": "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==",
@@ -972,6 +994,8 @@
     "members": {
       "apps/site": {
         "dependencies": [
+          "npm:@types/react-dom@^18.3.0",
+          "npm:@types/react@^18.3.12",
           "npm:@use-gpu/core@0.19",
           "npm:@use-gpu/live@0.19",
           "npm:@use-gpu/plot@0.19",
@@ -997,6 +1021,11 @@
           "npm:@use-gpu/scene@0.19",
           "npm:@use-gpu/webgpu@0.19",
           "npm:@use-gpu/workbench@0.19"
+        ]
+      },
+      "packages/reductions": {
+        "dependencies": [
+          "jsr:@std/assert@1"
         ]
       }
     }

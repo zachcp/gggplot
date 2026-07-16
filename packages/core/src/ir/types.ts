@@ -4,8 +4,14 @@
 // a RenderTree of UseGPU/plot components. Everything here is plain, serializable
 // data with no UseGPU or DOM dependencies.
 
-/** Column-oriented data frame: named columns of equal length. */
-export type DataFrame = Record<string, unknown[]>;
+import type { TypedDataFrame } from "../data/mod.ts";
+
+/**
+ * Column-oriented data frame carried through the semantic pipeline. Numeric
+ * and factor types are structural, so every stage can preserve factor levels
+ * and lower numeric data to typed GPU buffers without metadata sidecars.
+ */
+export type DataFrame = TypedDataFrame;
 
 /** Aesthetics we understand. Extend as geoms/scales grow. */
 export type AesName =
@@ -16,6 +22,8 @@ export type AesName =
   | "size"
   | "alpha"
   | "shape"
+  | "linetype"
+  | "linewidth"
   | "group"
   | "label"
   | "xmin"
@@ -92,7 +100,7 @@ export interface Scale {
   /** Data-space extent. [min,max] for continuous, level list for discrete. */
   domain?: [number, number] | string[];
   /** Visual-space extent (pixels, unit interval, palette, ...). */
-  range?: [number, number] | string[];
+  range?: [number, number] | string[] | number[][];
   name?: string;
   /**
    * Padding around the trained domain, as [multiplicative, additive] — e.g.
@@ -167,6 +175,8 @@ export interface PlotLabels {
   fill?: string;
   size?: string;
   shape?: string;
+  linetype?: string;
+  linewidth?: string;
   [key: string]: string | undefined;
 }
 

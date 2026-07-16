@@ -21,6 +21,10 @@ import {
   Polygon,
 } from "@use-gpu/plot";
 import { FontLoader, LayoutContext } from "@use-gpu/workbench";
+import {
+  ResidentHistogramMark,
+  ResidentHistogramView,
+} from "../runtime/mod.ts";
 import type { ComponentName, RenderNode } from "../compile/rendertree.ts";
 import type { GGSpec } from "../ir/types.ts";
 import { compile } from "../compile/mod.ts";
@@ -47,8 +51,17 @@ export interface FacetGridProps {
  */
 export const FacetGrid = (props: FacetGridProps) => {
   const { nrow, ncol, gap = 0, children } = props;
-  const kids = Array.isArray(children) ? children : children != null ? [children] : [];
-  const [left, top, right, bottom] = useContext(LayoutContext) as [number, number, number, number];
+  const kids = Array.isArray(children)
+    ? children
+    : children != null
+    ? [children]
+    : [];
+  const [left, top, right, bottom] = useContext(LayoutContext) as [
+    number,
+    number,
+    number,
+    number,
+  ];
   const cellW = (right - left) / ncol;
   const cellH = (bottom - top) / nrow;
 
@@ -81,6 +94,8 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
   Line,
   Polygon,
   Label,
+  ResidentHistogram: ResidentHistogramMark,
+  ResidentHistogramView,
   FacetGrid,
 };
 
@@ -97,7 +112,12 @@ export function renderTree(n: RenderNode): unknown {
 
 export interface GGPlotProps {
   spec: GGSpec;
-  fonts?: { family: string; weight: string | number; style: string; src?: string }[];
+  fonts?: {
+    family: string;
+    weight: string | number;
+    style: string;
+    src?: string;
+  }[];
 }
 
 /**
@@ -111,7 +131,7 @@ export interface GGPlotProps {
  * renders visibly when the host supplies real font sources.
  */
 export const GGPlot = ({ spec, fonts }: GGPlotProps) => {
-  const tree = compile(spec);
+  const tree = compile(spec, { resident: true });
   // deno-lint-ignore no-explicit-any
   return createElement(FontLoader, { fonts }, renderTree(tree) as any);
 };

@@ -16,6 +16,8 @@ export type ComponentName =
   | "Face"
   | "Polygon"
   | "Label"
+  | "ResidentHistogram"
+  | "ResidentHistogramView"
   /**
    * Not a real @use-gpu/plot export — a small custom Live component (defined
    * in render/GGPlot.tsx, inlined by emit/mod.ts) that divides the ambient

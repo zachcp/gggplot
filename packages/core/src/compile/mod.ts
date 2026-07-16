@@ -5,19 +5,45 @@
 // panel/facet construction, shared scale domains, guide nodes, coord swizzles,
 // and polar polygon munching before the live/codegen backends consume the tree.
 
-import type { Aes, DataFrame, Facet, GGSpec, Layer, PlotLabels, Theme } from "../ir/types.ts";
+import type {
+  Aes,
+  DataFrame,
+  Facet,
+  GGSpec,
+  Layer,
+  PlotLabels,
+  Theme,
+} from "../ir/types.ts";
 import { node, type RenderNode } from "./rendertree.ts";
 import { applyStat } from "../stat/mod.ts";
+import { sliceRows, splitByEffectiveGroup } from "../group/mod.ts";
+import { columnValues, numericColumnValues } from "../data/mod.ts";
 import {
   expandRange,
+  namedLinetypeValue,
   scaleColorValue,
+  scaleLinetypeValue,
+  scaleLinewidthValue,
   scalePosition,
   scaleShapeValue,
   scaleSizeValue,
-  trainScales,
   type TrainedScale,
+  trainScales,
 } from "../scale/mod.ts";
-import { dodgeBars, jitter, type PositionedBar, stackBars } from "../position/mod.ts";
+import {
+  dodgeBars,
+  jitter,
+  type PositionedBar,
+  stackBars,
+} from "../position/mod.ts";
+import { residentHistogramProps } from "./resident.ts";
+
+function valuesOf(
+  data: DataFrame,
+  column: string | undefined,
+): unknown[] | undefined {
+  return column && column in data ? columnValues(data, column) : undefined;
+}
 
 /** Pull an [x,y] position array for a layer from its mapped columns. */
 function positionsOf(
@@ -26,8 +52,8 @@ function positionsOf(
   xScale: TrainedScale | undefined,
   yScale: TrainedScale | undefined,
 ): [number, number][] {
-  const xs = mapping.x ? data[mapping.x] : undefined;
-  const ys = mapping.y ? data[mapping.y] : undefined;
+  const xs = valuesOf(data, mapping.x);
+  const ys = valuesOf(data, mapping.y);
   if (!xs || !ys) return [];
   const n = Math.min(xs.length, ys.length);
   const out: [number, number][] = [];
@@ -45,39 +71,11 @@ function positionsOf(
 function sortByX(mapping: Aes, data: GGSpec["data"]): GGSpec["data"] {
   const col = mapping.x;
   if (!col || !(col in data)) return data;
-  const xs = data[col];
-  const order = [...Array(xs.length).keys()].sort((a, b) => Number(xs[a]) - Number(xs[b]));
-  return Object.fromEntries(
-    Object.entries(data).map(([c, values]) => [c, order.map((i) => values[i])]),
+  const xs = numericColumnValues(data, col);
+  const order = [...Array(xs.length).keys()].sort((a, b) =>
+    (xs[a] ?? Number.POSITIVE_INFINITY) - (xs[b] ?? Number.POSITIVE_INFINITY)
   );
-}
-
-/**
- * Split a layer's rows into groups by its `group` aesthetic, preserving each
- * group's first-seen order. Connected geoms (line/path/area/ribbon) render
- * one connected shape per group instead of zigzagging across all of them.
- * Layers without a mapped group column are returned as a single group.
- */
-function splitByGroup(
-  mapping: Aes,
-  data: GGSpec["data"],
-): { mapping: Aes; data: GGSpec["data"] }[] {
-  const col = mapping.group;
-  if (!col || !(col in data)) return [{ mapping, data }];
-
-  const groups = new Map<string, number[]>();
-  data[col].forEach((v, i) => {
-    const key = String(v);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(i);
-  });
-
-  return [...groups.values()].map((indices) => ({
-    mapping,
-    data: Object.fromEntries(
-      Object.entries(data).map(([col, values]) => [col, indices.map((i) => values[i])]),
-    ),
-  }));
+  return sliceRows(data, order);
 }
 
 type ColorPreference = "color" | "fill" | "colorOrFill" | "fillOrColor";
@@ -104,7 +102,7 @@ function colorsOf(
   const col = aesName ? mapping[aesName] : undefined;
   if (!col || !(col in data)) return undefined;
   const scale = aesName === "fill" ? fillScale : colorScale;
-  return data[col].map((v) => scaleColorValue(scale, v));
+  return columnValues(data, col).map((v) => scaleColorValue(scale, v));
 }
 
 /** Per-row point radii from a mapped size column, or undefined if unmapped. */
@@ -115,7 +113,7 @@ function sizesOf(
 ): number[] | undefined {
   const col = mapping.size;
   if (!col || !(col in data)) return undefined;
-  return data[col].map((v) => scaleSizeValue(sizeScale, v));
+  return columnValues(data, col).map((v) => scaleSizeValue(sizeScale, v));
 }
 
 /** Per-row point shapes from a mapped shape column, or undefined if unmapped. */
@@ -126,7 +124,50 @@ function shapesOf(
 ): string[] | undefined {
   const col = mapping.shape;
   if (!col || !(col in data)) return undefined;
-  return data[col].map((v) => scaleShapeValue(shapeScale, v));
+  return columnValues(data, col).map((v) => scaleShapeValue(shapeScale, v));
+}
+
+/** Per-vertex line widths from a mapped continuous linewidth column. */
+function linewidthsOf(
+  mapping: Aes,
+  data: GGSpec["data"],
+  linewidthScale: TrainedScale | undefined,
+): number[] | undefined {
+  const col = mapping.linewidth;
+  if (!col || !(col in data)) return undefined;
+  return columnValues(data, col).map((v) =>
+    scaleLinewidthValue(linewidthScale, v)
+  );
+}
+
+/** A connected Line has one dash style; grouping has already isolated its level. */
+function dashOf(
+  layer: Layer,
+  mapping: Aes,
+  data: GGSpec["data"],
+  linetypeScale: TrainedScale | undefined,
+): readonly number[] | undefined {
+  const literal = layer.params.linetype;
+  if (typeof literal === "string") return namedLinetypeValue(literal);
+  const col = mapping.linetype;
+  if (!col || !(col in data)) return undefined;
+  return scaleLinetypeValue(linetypeScale, columnValues(data, col)[0]);
+}
+
+function literalLineProps(
+  layer: Layer,
+  defaultWidth: number,
+): Record<string, unknown> {
+  const linetype = layer.params.linetype;
+  const dash = typeof linetype === "string"
+    ? namedLinetypeValue(linetype)
+    : undefined;
+  return {
+    width: (layer.params.linewidth as number) ??
+      (layer.params.width as number) ??
+      (layer.params.strokeWidth as number) ?? defaultWidth,
+    ...(dash ? { dash } : {}),
+  };
 }
 
 /**
@@ -140,14 +181,16 @@ function bandPositions(
   xScale: TrainedScale | undefined,
   yScale: TrainedScale | undefined,
 ): [number, number][] {
-  const xs = mapping.x ? data[mapping.x] : undefined;
+  const xs = valuesOf(data, mapping.x);
   const ymaxCol = mapping.ymax ?? mapping.y;
-  const ymaxs = ymaxCol ? data[ymaxCol] : undefined;
-  const ymins = mapping.ymin ? data[mapping.ymin] : undefined;
+  const ymaxs = valuesOf(data, ymaxCol);
+  const ymins = valuesOf(data, mapping.ymin);
   if (!xs || !ymaxs) return [];
 
   const n = Math.min(xs.length, ymaxs.length, ymins ? ymins.length : xs.length);
-  const order = [...Array(n).keys()].sort((a, b) => Number(xs[a]) - Number(xs[b]));
+  const order = [...Array(n).keys()].sort((a, b) =>
+    scalePosition(xScale, xs[a]) - scalePosition(xScale, xs[b])
+  );
 
   const top: [number, number][] = order.map((i) => [
     scalePosition(xScale, xs[i]),
@@ -164,11 +207,16 @@ function bandPositions(
 }
 
 /** Full band width at a shared position: 1 level-index unit for discrete scales, else the smallest gap between distinct values. */
-function resolutionOf(scale: TrainedScale | undefined, values: number[]): number {
+function resolutionOf(
+  scale: TrainedScale | undefined,
+  values: number[],
+): number {
   if (scale?.kind === "discrete") return 1;
   const sorted = [...new Set(values)].sort((a, b) => a - b);
   let minGap = Infinity;
-  for (let i = 1; i < sorted.length; i++) minGap = Math.min(minGap, sorted[i] - sorted[i - 1]);
+  for (let i = 1; i < sorted.length; i++) {
+    minGap = Math.min(minGap, sorted[i] - sorted[i - 1]);
+  }
   return Number.isFinite(minGap) ? minGap : 1;
 }
 
@@ -182,13 +230,13 @@ function lowerBarLayer(
   colorScale: TrainedScale | undefined,
   fillScale: TrainedScale | undefined,
 ): RenderNode[] {
-  const xs = mapping.x ? data[mapping.x] : undefined;
-  const ys = mapping.y ? data[mapping.y] : undefined;
+  const xs = valuesOf(data, mapping.x);
+  const ys = valuesOf(data, mapping.y);
   if (!xs || !ys) return [];
 
   const n = Math.min(xs.length, ys.length);
   const groupCol = mapping.fill ?? mapping.color ?? mapping.group;
-  const groupValues = groupCol ? data[groupCol] : undefined;
+  const groupValues = valuesOf(data, groupCol);
 
   const scaledX = xs.map((v) => scalePosition(xScale, v));
   const bars: PositionedBar[] = [];
@@ -203,13 +251,26 @@ function lowerBarLayer(
   const width = resolutionOf(xScale, scaledX) * 0.9;
   const placed = layer.position === "dodge"
     ? dodgeBars(bars, width)
-    : stackBars(bars, width, layer.position === "fill" ? "fill" : layer.position === "identity" ? "identity" : "stack");
+    : stackBars(
+      bars,
+      width,
+      layer.position === "fill"
+        ? "fill"
+        : layer.position === "identity"
+        ? "identity"
+        : "stack",
+    );
 
-  const isFillMapped = groupCol && (mapping.fill === groupCol || mapping.color === groupCol);
+  const isFillMapped = groupCol &&
+    (mapping.fill === groupCol || mapping.color === groupCol);
   const fillOf = (groupKey: string) =>
     isFillMapped
-      ? scaleColorValue(mapping.fill === groupCol ? fillScale : colorScale, groupKey)
-      : (layer.params.fill as string) ?? (layer.params.color as string) ?? "#3b82f6";
+      ? scaleColorValue(
+        mapping.fill === groupCol ? fillScale : colorScale,
+        groupKey,
+      )
+      : (layer.params.fill as string) ?? (layer.params.color as string) ??
+        "#3b82f6";
 
   const positions = placed.map((bar): [number, number][] => {
     const x0 = bar.x + bar.xOffset - bar.width / 2;
@@ -219,7 +280,12 @@ function lowerBarLayer(
   const fills = placed.map((bar) => fillOf(bar.groupKey));
   const uniform = fills.every((f) => f === fills[0]);
 
-  return [node("Polygon", { positions, ...(uniform ? { fill: fills[0] } : { fills }) })];
+  return [
+    node("Polygon", {
+      positions,
+      ...(uniform ? { fill: fills[0] } : { fills }),
+    }),
+  ];
 }
 
 /**
@@ -239,15 +305,16 @@ function lowerTileLayer(
   colorScale: TrainedScale | undefined,
   fillScale: TrainedScale | undefined,
 ): RenderNode[] {
-  const xs = mapping.x ? data[mapping.x] : undefined;
-  const ys = mapping.y ? data[mapping.y] : undefined;
+  const xs = valuesOf(data, mapping.x);
+  const ys = valuesOf(data, mapping.y);
   if (!xs || !ys) return [];
 
   const n = Math.min(xs.length, ys.length);
   const scaledX = xs.map((v) => scalePosition(xScale, v));
   const scaledY = ys.map((v) => scalePosition(yScale, v));
   const width = (layer.params.width as number) ?? resolutionOf(xScale, scaledX);
-  const height = (layer.params.height as number) ?? resolutionOf(yScale, scaledY);
+  const height = (layer.params.height as number) ??
+    resolutionOf(yScale, scaledY);
 
   const positions: [number, number][][] = [];
   for (let i = 0; i < n; i++) {
@@ -262,9 +329,12 @@ function lowerTileLayer(
   }
 
   const colors = colorsOf(mapping, data, colorScale, fillScale, "fillOrColor");
-  const fill = (layer.params.fill as string) ?? (layer.params.color as string) ?? "#3b82f6";
+  const fill = (layer.params.fill as string) ??
+    (layer.params.color as string) ?? "#3b82f6";
 
-  return [node("Polygon", { positions, ...(colors ? { fills: colors } : { fill }) })];
+  return [
+    node("Polygon", { positions, ...(colors ? { fills: colors } : { fill }) }),
+  ];
 }
 
 function lowerPolygonLayer(
@@ -276,7 +346,7 @@ function lowerPolygonLayer(
   colorScale: TrainedScale | undefined,
   fillScale: TrainedScale | undefined,
 ): RenderNode[] {
-  const groups = splitByGroup(mapping, data);
+  const groups = splitByEffectiveGroup(mapping, data);
   const loops: [number, number][][] = [];
   const fills: string[] = [];
 
@@ -285,7 +355,10 @@ function lowerPolygonLayer(
     if (positions.length < 3) continue;
     loops.push(positions);
     const colors = colorsOf(m, d, colorScale, fillScale, "fillOrColor");
-    fills.push(colors?.[0] ?? (layer.params.fill as string) ?? (layer.params.color as string) ?? "#3b82f6");
+    fills.push(
+      colors?.[0] ?? (layer.params.fill as string) ??
+        (layer.params.color as string) ?? "#3b82f6",
+    );
   }
 
   if (loops.length === 0) return [];
@@ -308,14 +381,15 @@ function lowerErrorbarLayer(
   xScale: TrainedScale | undefined,
   yScale: TrainedScale | undefined,
 ): RenderNode[] {
-  const xs = mapping.x ? data[mapping.x] : undefined;
-  const ymins = mapping.ymin ? data[mapping.ymin] : undefined;
-  const ymaxs = mapping.ymax ? data[mapping.ymax] : undefined;
+  const xs = valuesOf(data, mapping.x);
+  const ymins = valuesOf(data, mapping.ymin);
+  const ymaxs = valuesOf(data, mapping.ymax);
   if (!xs || !ymins || !ymaxs) return [];
 
   const n = Math.min(xs.length, ymins.length, ymaxs.length);
   const scaledX = xs.map((v) => scalePosition(xScale, v));
-  const width = (layer.params.width as number) ?? resolutionOf(xScale, scaledX) * 0.9;
+  const width = (layer.params.width as number) ??
+    resolutionOf(xScale, scaledX) * 0.9;
   const half = width / 2;
 
   const segments: [number, number][][] = [];
@@ -329,7 +403,13 @@ function lowerErrorbarLayer(
   }
 
   const color = (layer.params.color as string) ?? "#3b82f6";
-  return [node("Line", { positions: segments, color, width: (layer.params.strokeWidth as number) ?? 2 })];
+  return [
+    node("Line", {
+      positions: segments,
+      color,
+      ...literalLineProps(layer, 2),
+    }),
+  ];
 }
 
 /**
@@ -347,17 +427,25 @@ function lowerBoxplotLayer(
   colorScale: TrainedScale | undefined,
   fillScale: TrainedScale | undefined,
 ): RenderNode[] {
-  const xs = mapping.x ? data[mapping.x] : undefined;
-  const lowers = mapping.lower ? data[mapping.lower] : undefined;
-  const middles = mapping.middle ? data[mapping.middle] : undefined;
-  const uppers = mapping.upper ? data[mapping.upper] : undefined;
-  const ymins = mapping.ymin ? data[mapping.ymin] : undefined;
-  const ymaxs = mapping.ymax ? data[mapping.ymax] : undefined;
+  const xs = valuesOf(data, mapping.x);
+  const lowers = valuesOf(data, mapping.lower);
+  const middles = valuesOf(data, mapping.middle);
+  const uppers = valuesOf(data, mapping.upper);
+  const ymins = valuesOf(data, mapping.ymin);
+  const ymaxs = valuesOf(data, mapping.ymax);
   if (!xs || !lowers || !middles || !uppers || !ymins || !ymaxs) return [];
 
-  const n = Math.min(xs.length, lowers.length, middles.length, uppers.length, ymins.length, ymaxs.length);
+  const n = Math.min(
+    xs.length,
+    lowers.length,
+    middles.length,
+    uppers.length,
+    ymins.length,
+    ymaxs.length,
+  );
   const scaledX = xs.map((v) => scalePosition(xScale, v));
-  const width = (layer.params.width as number) ?? resolutionOf(xScale, scaledX) * 0.75;
+  const width = (layer.params.width as number) ??
+    resolutionOf(xScale, scaledX) * 0.75;
   const half = width / 2;
   const capHalf = half / 2;
 
@@ -371,7 +459,10 @@ function lowerBoxplotLayer(
     const yMin = scalePosition(yScale, ymins[i]);
     const yMax = scalePosition(yScale, ymaxs[i]);
 
-    boxes.push([[x - half, lo], [x - half, up], [x + half, up], [x + half, lo]]);
+    boxes.push([[x - half, lo], [x - half, up], [x + half, up], [
+      x + half,
+      lo,
+    ]]);
     segments.push([[x - half, mid], [x + half, mid]]);
     segments.push([[x, up], [x, yMax]]);
     segments.push([[x - capHalf, yMax], [x + capHalf, yMax]]);
@@ -385,8 +476,15 @@ function lowerBoxplotLayer(
   const strokeWidth = (layer.params.strokeWidth as number) ?? 2;
 
   return [
-    node("Polygon", { positions: boxes, ...(colors ? { fills: colors } : { fill }) }),
-    node("Line", { positions: segments, color: strokeColor, width: strokeWidth }),
+    node("Polygon", {
+      positions: boxes,
+      ...(colors ? { fills: colors } : { fill }),
+    }),
+    node("Line", {
+      positions: segments,
+      color: strokeColor,
+      width: strokeWidth,
+    }),
   ];
 }
 
@@ -412,7 +510,7 @@ function lowerTextLayer(
 
   const labelCol = mapping.label;
   if (!labelCol || !(labelCol in data)) return [];
-  const labels = data[labelCol].map((v) => String(v));
+  const labels = columnValues(data, labelCol).map((v) => String(v));
 
   const colors = colorsOf(mapping, data, colorScale, fillScale, "colorOrFill");
   const color = (layer.params.color as string) ?? theme.textColor ?? "#0b0b0b";
@@ -439,10 +537,10 @@ function lowerSegmentLayer(
   xScale: TrainedScale | undefined,
   yScale: TrainedScale | undefined,
 ): RenderNode[] {
-  const xs = mapping.x ? data[mapping.x] : undefined;
-  const ys = mapping.y ? data[mapping.y] : undefined;
-  const xends = mapping.xend ? data[mapping.xend] : undefined;
-  const yends = mapping.yend ? data[mapping.yend] : undefined;
+  const xs = valuesOf(data, mapping.x);
+  const ys = valuesOf(data, mapping.y);
+  const xends = valuesOf(data, mapping.xend);
+  const yends = valuesOf(data, mapping.yend);
   if (!xs || !ys || !xends || !yends) return [];
 
   const n = Math.min(xs.length, ys.length, xends.length, yends.length);
@@ -455,7 +553,13 @@ function lowerSegmentLayer(
   }
 
   const color = (layer.params.color as string) ?? "#3b82f6";
-  return [node("Line", { positions: segments, color, width: (layer.params.strokeWidth as number) ?? 2 })];
+  return [
+    node("Line", {
+      positions: segments,
+      color,
+      width: (layer.params.strokeWidth as number) ?? 2,
+    }),
+  ];
 }
 
 /**
@@ -471,10 +575,10 @@ function lowerRectLayer(
   colorScale: TrainedScale | undefined,
   fillScale: TrainedScale | undefined,
 ): RenderNode[] {
-  const xmins = mapping.xmin ? data[mapping.xmin] : undefined;
-  const xmaxs = mapping.xmax ? data[mapping.xmax] : undefined;
-  const ymins = mapping.ymin ? data[mapping.ymin] : undefined;
-  const ymaxs = mapping.ymax ? data[mapping.ymax] : undefined;
+  const xmins = valuesOf(data, mapping.xmin);
+  const xmaxs = valuesOf(data, mapping.xmax);
+  const ymins = valuesOf(data, mapping.ymin);
+  const ymaxs = valuesOf(data, mapping.ymax);
   if (!xmins || !xmaxs || !ymins || !ymaxs) return [];
 
   const n = Math.min(xmins.length, xmaxs.length, ymins.length, ymaxs.length);
@@ -488,8 +592,11 @@ function lowerRectLayer(
   }
 
   const colors = colorsOf(mapping, data, colorScale, fillScale, "fillOrColor");
-  const fill = (layer.params.fill as string) ?? (layer.params.color as string) ?? "#3b82f6";
-  return [node("Polygon", { positions, ...(colors ? { fills: colors } : { fill }) })];
+  const fill = (layer.params.fill as string) ??
+    (layer.params.color as string) ?? "#3b82f6";
+  return [
+    node("Polygon", { positions, ...(colors ? { fills: colors } : { fill }) }),
+  ];
 }
 
 /** Lower a geom_hline layer (one or more literal yintercepts) to full-width Line segments spanning the panel's x domain. */
@@ -500,7 +607,7 @@ function lowerHlineLayer(
   yScale: TrainedScale | undefined,
   xDomain: [number, number],
 ): RenderNode[] {
-  const ys = mapping.y ? data[mapping.y] : undefined;
+  const ys = valuesOf(data, mapping.y);
   if (!ys) return [];
 
   const segments = ys.map((v): [number, number][] => {
@@ -508,8 +615,9 @@ function lowerHlineLayer(
     return [[xDomain[0], y], [xDomain[1], y]];
   });
   const color = (layer.params.color as string) ?? "#000000";
-  const width = (layer.params.strokeWidth as number) ?? 1;
-  return [node("Line", { positions: segments, color, width })];
+  return [
+    node("Line", { positions: segments, color, ...literalLineProps(layer, 1) }),
+  ];
 }
 
 /** Lower a geom_vline layer (one or more literal xintercepts) to full-height Line segments spanning the panel's y domain. */
@@ -520,7 +628,7 @@ function lowerVlineLayer(
   xScale: TrainedScale | undefined,
   yDomain: [number, number],
 ): RenderNode[] {
-  const xs = mapping.x ? data[mapping.x] : undefined;
+  const xs = valuesOf(data, mapping.x);
   if (!xs) return [];
 
   const segments = xs.map((v): [number, number][] => {
@@ -528,19 +636,25 @@ function lowerVlineLayer(
     return [[x, yDomain[0]], [x, yDomain[1]]];
   });
   const color = (layer.params.color as string) ?? "#000000";
-  const width = (layer.params.strokeWidth as number) ?? 1;
-  return [node("Line", { positions: segments, color, width })];
+  return [
+    node("Line", { positions: segments, color, ...literalLineProps(layer, 1) }),
+  ];
 }
 
 /** Lower a geom_abline layer (literal slope/intercept, default 1/0) to a single Line spanning the panel's x domain. */
-function lowerAblineLayer(layer: Layer, xDomain: [number, number]): RenderNode[] {
+function lowerAblineLayer(
+  layer: Layer,
+  xDomain: [number, number],
+): RenderNode[] {
   const slope = (layer.params.slope as number) ?? 1;
   const intercept = (layer.params.intercept as number) ?? 0;
   const [x0, x1] = xDomain;
-  const positions: [number, number][] = [[x0, slope * x0 + intercept], [x1, slope * x1 + intercept]];
+  const positions: [number, number][] = [[x0, slope * x0 + intercept], [
+    x1,
+    slope * x1 + intercept,
+  ]];
   const color = (layer.params.color as string) ?? "#000000";
-  const width = (layer.params.strokeWidth as number) ?? 1;
-  return [node("Line", { positions, color, width })];
+  return [node("Line", { positions, color, ...literalLineProps(layer, 1) })];
 }
 
 /** Map one geom layer to its RenderNode(s) — one per group for connected geoms. */
@@ -554,6 +668,8 @@ function lowerLayer(
   fillScale: TrainedScale | undefined,
   sizeScale: TrainedScale | undefined,
   shapeScale: TrainedScale | undefined,
+  linetypeScale: TrainedScale | undefined,
+  linewidthScale: TrainedScale | undefined,
   theme: Theme,
   xDomain: [number, number],
   yDomain: [number, number],
@@ -565,7 +681,15 @@ function lowerLayer(
   }
 
   if (layer.geom === "rect") {
-    return lowerRectLayer(layer, mapping, data, xScale, yScale, colorScale, fillScale);
+    return lowerRectLayer(
+      layer,
+      mapping,
+      data,
+      xScale,
+      yScale,
+      colorScale,
+      fillScale,
+    );
   }
 
   if (layer.geom === "hline") {
@@ -581,25 +705,53 @@ function lowerLayer(
   }
 
   if (layer.geom === "area" || layer.geom === "ribbon") {
-    const fill = (layer.params.fill as string) ?? (layer.params.color as string) ?? "#3b82f6";
-    return splitByGroup(mapping, data)
+    const fill = (layer.params.fill as string) ??
+      (layer.params.color as string) ?? "#3b82f6";
+    return splitByEffectiveGroup(mapping, data)
       .map(({ mapping: m, data: d }) => {
         const positions = bandPositions(m, d, xScale, yScale);
-        return positions.length ? node("Polygon", { positions, fill }) : null;
+        const colors = colorsOf(m, d, colorScale, fillScale, "fillOrColor");
+        return positions.length
+          ? node("Polygon", { positions, fill: colors?.[0] ?? fill })
+          : null;
       })
       .filter((n): n is RenderNode => n !== null);
   }
 
   if (layer.geom === "bar" || layer.geom === "col") {
-    return lowerBarLayer(layer, mapping, data, xScale, yScale, colorScale, fillScale);
+    return lowerBarLayer(
+      layer,
+      mapping,
+      data,
+      xScale,
+      yScale,
+      colorScale,
+      fillScale,
+    );
   }
 
   if (layer.geom === "tile") {
-    return lowerTileLayer(layer, mapping, data, xScale, yScale, colorScale, fillScale);
+    return lowerTileLayer(
+      layer,
+      mapping,
+      data,
+      xScale,
+      yScale,
+      colorScale,
+      fillScale,
+    );
   }
 
   if (layer.geom === "polygon") {
-    return lowerPolygonLayer(layer, mapping, data, xScale, yScale, colorScale, fillScale);
+    return lowerPolygonLayer(
+      layer,
+      mapping,
+      data,
+      xScale,
+      yScale,
+      colorScale,
+      fillScale,
+    );
   }
 
   if (layer.geom === "errorbar") {
@@ -607,22 +759,48 @@ function lowerLayer(
   }
 
   if (layer.geom === "boxplot") {
-    return lowerBoxplotLayer(layer, mapping, data, xScale, yScale, colorScale, fillScale);
+    return lowerBoxplotLayer(
+      layer,
+      mapping,
+      data,
+      xScale,
+      yScale,
+      colorScale,
+      fillScale,
+    );
   }
 
   if (layer.geom === "text") {
-    return lowerTextLayer(layer, mapping, data, xScale, yScale, colorScale, fillScale, theme);
+    return lowerTextLayer(
+      layer,
+      mapping,
+      data,
+      xScale,
+      yScale,
+      colorScale,
+      fillScale,
+      theme,
+    );
   }
 
   if (layer.geom === "point") {
     let positions = positionsOf(mapping, data, xScale, yScale);
     if (positions.length === 0) return [];
     if (layer.position === "jitter") {
-      const xAmount = (layer.params.width as number) ?? resolutionOf(xScale, positions.map((p) => p[0])) * 0.4;
+      const xAmount = (layer.params.width as number) ??
+        resolutionOf(xScale, positions.map((p) => p[0])) * 0.4;
       const yAmount = (layer.params.height as number) ?? 0.4;
-      positions = positions.map(([x, y]) => [jitter(x, xAmount), jitter(y, yAmount)]);
+      positions = positions.map((
+        [x, y],
+      ) => [jitter(x, xAmount), jitter(y, yAmount)]);
     }
-    const colors = colorsOf(mapping, data, colorScale, fillScale, "colorOrFill");
+    const colors = colorsOf(
+      mapping,
+      data,
+      colorScale,
+      fillScale,
+      "colorOrFill",
+    );
     const color = (layer.params.color as string) ?? "#3b82f6";
     const sizes = sizesOf(mapping, data, sizeScale);
     const shapes = shapesOf(mapping, data, shapeScale);
@@ -637,7 +815,9 @@ function lowerLayer(
         node("Point", {
           positions: indices.map((i) => positions[i]),
           ...(colors ? { colors: indices.map((i) => colors[i]) } : { color }),
-          ...(sizes ? { sizes: indices.map((i) => sizes[i]) } : { size: (layer.params.size as number) ?? 5 }),
+          ...(sizes
+            ? { sizes: indices.map((i) => sizes[i]) }
+            : { size: (layer.params.size as number) ?? 5 }),
           shape,
           ...(opacity != null ? { opacity } : {}),
         })
@@ -654,33 +834,54 @@ function lowerLayer(
 
   if (layer.geom === "smooth") {
     const nodes: RenderNode[] = [];
-    if (mapping.ymin && mapping.ymax) {
-      const bandPos = bandPositions(mapping, data, xScale, yScale);
-      if (bandPos.length) {
-        const ribbonFill = (layer.params.fill as string) ?? "#c7d2fe";
-        nodes.push(node("Polygon", { positions: bandPos, fill: ribbonFill }));
+    for (
+      const { mapping: m, data: d } of splitByEffectiveGroup(mapping, data)
+    ) {
+      const colors = colorsOf(m, d, colorScale, fillScale, "colorOrFill");
+      if (m.ymin && m.ymax) {
+        const bandPos = bandPositions(m, d, xScale, yScale);
+        if (bandPos.length) {
+          const ribbonFill = (layer.params.fill as string) ?? "#c7d2fe";
+          nodes.push(node("Polygon", { positions: bandPos, fill: ribbonFill }));
+        }
       }
-    }
-    const positions = positionsOf(mapping, data, xScale, yScale);
-    if (positions.length) {
-      const color = (layer.params.color as string) ?? "#3b82f6";
-      nodes.push(node("Line", { positions, color, width: (layer.params.width as number) ?? 2 }));
+      const positions = positionsOf(m, d, xScale, yScale);
+      if (positions.length) {
+        const color = (layer.params.color as string) ?? colors?.[0] ??
+          "#3b82f6";
+        nodes.push(
+          node("Line", {
+            positions,
+            color,
+            ...literalLineProps(layer, 2),
+          }),
+        );
+      }
     }
     return nodes;
   }
 
   if (layer.geom === "line" || layer.geom === "path") {
     const color = (layer.params.color as string) ?? "#3b82f6";
-    return splitByGroup(mapping, data)
+    return splitByEffectiveGroup(mapping, data)
       .map(({ mapping: m, data: d }) => {
         const ordered = layer.geom === "line" ? sortByX(m, d) : d;
         const positions = positionsOf(m, ordered, xScale, yScale);
         if (positions.length === 0) return null;
-        const colors = colorsOf(m, ordered, colorScale, fillScale, "colorOrFill");
+        const colors = colorsOf(
+          m,
+          ordered,
+          colorScale,
+          fillScale,
+          "colorOrFill",
+        );
+        const widths = linewidthsOf(m, ordered, linewidthScale);
+        const dash = dashOf(layer, m, ordered, linetypeScale);
         return node("Line", {
           positions,
           ...(colors ? { colors } : { color }),
-          width: (layer.params.width as number) ?? 2,
+          ...(widths ? { widths } : literalLineProps(layer, 2)),
+          ...(dash ? { dash } : {}),
           ...(opacity != null ? { opacity } : {}),
         });
       })
@@ -705,10 +906,12 @@ function widenForStackedBars(
   yScale: TrainedScale | undefined,
 ): [number, number] {
   if (layer.geom !== "bar" && layer.geom !== "col") return [lo, hi];
-  if (layer.position === "dodge" || layer.position === "identity") return [lo, hi];
+  if (layer.position === "dodge" || layer.position === "identity") {
+    return [lo, hi];
+  }
 
-  const xs = mapping.x ? data[mapping.x] : undefined;
-  const ys = mapping.y ? data[mapping.y] : undefined;
+  const xs = valuesOf(data, mapping.x);
+  const ys = valuesOf(data, mapping.y);
   if (!xs || !ys) return [lo, hi];
 
   // Filled bars are always normalized to [0,1]; the raw (pre-normalization)
@@ -737,11 +940,16 @@ function widenForTileAxis(
 ): [number, number] {
   if (centers.length === 0) return [lo, hi];
   const half = cellSize / 2;
-  return [Math.min(lo, Math.min(...centers) - half), Math.max(hi, Math.max(...centers) + half)];
+  return [
+    Math.min(lo, Math.min(...centers) - half),
+    Math.max(hi, Math.max(...centers) + half),
+  ];
 }
 
 /** Numeric view range for a trained scale: level-index span for discrete, domain as-is otherwise. */
-function numericRange(scale: TrainedScale | undefined): [number, number] | undefined {
+function numericRange(
+  scale: TrainedScale | undefined,
+): [number, number] | undefined {
   if (!scale) return undefined;
   if (scale.kind === "discrete") {
     const levels = scale.domain as string[];
@@ -752,7 +960,8 @@ function numericRange(scale: TrainedScale | undefined): [number, number] | undef
 }
 
 function isPoint(v: unknown): v is [number, number] {
-  return Array.isArray(v) && v.length >= 2 && typeof v[0] === "number" && typeof v[1] === "number";
+  return Array.isArray(v) && v.length >= 2 && typeof v[0] === "number" &&
+    typeof v[1] === "number";
 }
 
 function munchLoop(loop: [number, number][], detail = 16): [number, number][] {
@@ -811,11 +1020,21 @@ function labelFor(labels: PlotLabels, key: string, fallback: string): string {
   return labels[key] ?? fallback;
 }
 
-function legendTitle(scale: TrainedScale, labels: PlotLabels, fallback: string): string {
+function legendTitle(
+  scale: TrainedScale,
+  labels: PlotLabels,
+  fallback: string,
+): string {
   return labels[scale.aes] ?? scale.name ?? fallback;
 }
 
-function labelNode(x: number, y: number, labels: string[], theme: Theme, size?: number): RenderNode {
+function labelNode(
+  x: number,
+  y: number,
+  labels: string[],
+  theme: Theme,
+  size?: number,
+): RenderNode {
   return node("Label", {
     positions: labels.map((_, i): [number, number] => [x, y - i * 0.07]),
     labels,
@@ -830,6 +1049,8 @@ function legendNodes(
   fillScale: TrainedScale | undefined,
   sizeScale: TrainedScale | undefined,
   shapeScale: TrainedScale | undefined,
+  linetypeScale: TrainedScale | undefined,
+  linewidthScale: TrainedScale | undefined,
   labels: PlotLabels,
   theme: Theme,
 ): RenderNode[] {
@@ -839,12 +1060,26 @@ function legendNodes(
   const swatchX = 0.74;
   const labelX = 0.80;
 
-  if (colorScale && Array.isArray(colorScale.domain) && typeof colorScale.domain[0] === "string") {
+  if (
+    colorScale && Array.isArray(colorScale.domain) &&
+    typeof colorScale.domain[0] === "string"
+  ) {
     const levels = colorScale.domain as string[];
-    nodes.push(labelNode(titleX, y, [legendTitle(colorScale, labels, "color")], theme, 14));
+    nodes.push(
+      labelNode(
+        titleX,
+        y,
+        [legendTitle(colorScale, labels, "color")],
+        theme,
+        14,
+      ),
+    );
     y -= 0.08;
     nodes.push(node("Point", {
-      positions: levels.map((_, i): [number, number] => [swatchX, y - i * 0.07]),
+      positions: levels.map((
+        _,
+        i,
+      ): [number, number] => [swatchX, y - i * 0.07]),
       colors: levels.map((level) => scaleColorValue(colorScale, level)),
       size: 7,
     }));
@@ -852,12 +1087,20 @@ function legendNodes(
     y -= levels.length * 0.07 + 0.08;
   }
 
-  if (fillScale && Array.isArray(fillScale.domain) && typeof fillScale.domain[0] === "string") {
+  if (
+    fillScale && Array.isArray(fillScale.domain) &&
+    typeof fillScale.domain[0] === "string"
+  ) {
     const levels = fillScale.domain as string[];
-    nodes.push(labelNode(titleX, y, [legendTitle(fillScale, labels, "fill")], theme, 14));
+    nodes.push(
+      labelNode(titleX, y, [legendTitle(fillScale, labels, "fill")], theme, 14),
+    );
     y -= 0.08;
     nodes.push(node("Point", {
-      positions: levels.map((_, i): [number, number] => [swatchX, y - i * 0.07]),
+      positions: levels.map((
+        _,
+        i,
+      ): [number, number] => [swatchX, y - i * 0.07]),
       colors: levels.map((level) => scaleColorValue(fillScale, level)),
       size: 7,
     }));
@@ -868,20 +1111,45 @@ function legendNodes(
   if (sizeScale && !Array.isArray(sizeScale.domain[0])) {
     const [lo, hi] = sizeScale.domain as [number, number];
     const values = hi > lo ? [lo, (lo + hi) / 2, hi] : [lo];
-    nodes.push(labelNode(titleX, y, [legendTitle(sizeScale, labels, "size")], theme, 14));
+    nodes.push(
+      labelNode(titleX, y, [legendTitle(sizeScale, labels, "size")], theme, 14),
+    );
     y -= 0.08;
     nodes.push(node("Point", {
-      positions: values.map((_, i): [number, number] => [swatchX, y - i * 0.07]),
+      positions: values.map((
+        _,
+        i,
+      ): [number, number] => [swatchX, y - i * 0.07]),
       sizes: values.map((v) => scaleSizeValue(sizeScale, v)),
       color: "#3b82f6",
     }));
-    nodes.push(labelNode(labelX, y, values.map((v) => String(Number.isInteger(v) ? v : Number(v.toFixed(2)))), theme));
+    nodes.push(
+      labelNode(
+        labelX,
+        y,
+        values.map((v) =>
+          String(Number.isInteger(v) ? v : Number(v.toFixed(2)))
+        ),
+        theme,
+      ),
+    );
     y -= values.length * 0.07 + 0.08;
   }
 
-  if (shapeScale && Array.isArray(shapeScale.domain) && typeof shapeScale.domain[0] === "string") {
+  if (
+    shapeScale && Array.isArray(shapeScale.domain) &&
+    typeof shapeScale.domain[0] === "string"
+  ) {
     const levels = shapeScale.domain as string[];
-    nodes.push(labelNode(titleX, y, [legendTitle(shapeScale, labels, "shape")], theme, 14));
+    nodes.push(
+      labelNode(
+        titleX,
+        y,
+        [legendTitle(shapeScale, labels, "shape")],
+        theme,
+        14,
+      ),
+    );
     y -= 0.08;
     levels.forEach((level, i) => {
       nodes.push(node("Point", {
@@ -894,14 +1162,98 @@ function legendNodes(
     nodes.push(labelNode(labelX, y, levels, theme));
   }
 
+  if (
+    linetypeScale && Array.isArray(linetypeScale.domain) &&
+    typeof linetypeScale.domain[0] === "string"
+  ) {
+    const levels = linetypeScale.domain as string[];
+    nodes.push(
+      labelNode(
+        titleX,
+        y,
+        [legendTitle(linetypeScale, labels, "linetype")],
+        theme,
+        14,
+      ),
+    );
+    y -= 0.08;
+    levels.forEach((level, i) => {
+      const dash = scaleLinetypeValue(linetypeScale, level);
+      nodes.push(node("Line", {
+        positions: [[swatchX - 0.025, y - i * 0.07], [
+          swatchX + 0.025,
+          y - i * 0.07,
+        ]],
+        color: "#3b82f6",
+        width: 2,
+        ...(dash ? { dash } : {}),
+      }));
+    });
+    nodes.push(labelNode(labelX, y, levels, theme));
+    y -= levels.length * 0.07 + 0.08;
+  }
+
+  if (linewidthScale && !Array.isArray(linewidthScale.domain[0])) {
+    const [lo, hi] = linewidthScale.domain as [number, number];
+    const values = hi > lo ? [lo, (lo + hi) / 2, hi] : [lo];
+    nodes.push(
+      labelNode(
+        titleX,
+        y,
+        [legendTitle(linewidthScale, labels, "linewidth")],
+        theme,
+        14,
+      ),
+    );
+    y -= 0.08;
+    values.forEach((value, i) => {
+      nodes.push(node("Line", {
+        positions: [[swatchX - 0.025, y - i * 0.07], [
+          swatchX + 0.025,
+          y - i * 0.07,
+        ]],
+        color: "#3b82f6",
+        width: scaleLinewidthValue(linewidthScale, value),
+      }));
+    });
+    nodes.push(
+      labelNode(
+        labelX,
+        y,
+        values.map((v) =>
+          String(Number.isInteger(v) ? v : Number(v.toFixed(2)))
+        ),
+        theme,
+      ),
+    );
+  }
+
   return nodes;
 }
 
 function plotLabelNodes(labels: PlotLabels, theme: Theme): RenderNode[] {
   const nodes: RenderNode[] = [];
-  if (labels.title) nodes.push(labelNode(-0.92, 0.92, [labels.title], theme, (theme.fontSize ?? 14) + 4));
-  if (labels.subtitle) nodes.push(labelNode(-0.92, 0.84, [labels.subtitle], theme, theme.fontSize ?? 14));
-  if (labels.caption) nodes.push(labelNode(-0.92, -0.92, [labels.caption], theme, Math.max((theme.fontSize ?? 13) - 1, 8)));
+  if (labels.title) {
+    nodes.push(
+      labelNode(-0.92, 0.92, [labels.title], theme, (theme.fontSize ?? 14) + 4),
+    );
+  }
+  if (labels.subtitle) {
+    nodes.push(
+      labelNode(-0.92, 0.84, [labels.subtitle], theme, theme.fontSize ?? 14),
+    );
+  }
+  if (labels.caption) {
+    nodes.push(
+      labelNode(
+        -0.92,
+        -0.92,
+        [labels.caption],
+        theme,
+        Math.max((theme.fontSize ?? 13) - 1, 8),
+      ),
+    );
+  }
   return nodes;
 }
 
@@ -914,34 +1266,52 @@ interface FacetPanel {
 }
 
 /** Distinct value-combinations for a set of columns, first-seen order deduped, then label-sorted. */
-function uniqueCombos(data: DataFrame, cols: string[]): Record<string, unknown>[] {
+function uniqueCombos(
+  data: DataFrame,
+  cols: string[],
+): Record<string, unknown>[] {
   if (cols.length === 0) return [{}];
-  const n = data[cols[0]]?.length ?? 0;
+  const first = valuesOf(data, cols[0]);
+  const n = first?.length ?? 0;
   const seen = new Map<string, Record<string, unknown>>();
   for (let i = 0; i < n; i++) {
     const combo: Record<string, unknown> = {};
-    for (const c of cols) combo[c] = data[c]?.[i];
+    for (const c of cols) combo[c] = valuesOf(data, c)?.[i];
     const key = cols.map((c) => String(combo[c])).join(" ");
     if (!seen.has(key)) seen.set(key, combo);
   }
-  return [...seen.values()].sort((a, b) => comboLabel(a).localeCompare(comboLabel(b)));
+  return [...seen.values()].sort((a, b) =>
+    comboLabel(a).localeCompare(comboLabel(b))
+  );
 }
 
 /** Row indices matching every column=value pair in `combo`. */
-function filterRows(data: DataFrame, combo: Record<string, unknown>): DataFrame {
+function filterRows(
+  data: DataFrame,
+  combo: Record<string, unknown>,
+): DataFrame {
   const cols = Object.keys(combo);
   const anyCol = Object.keys(data)[0];
-  const n = anyCol ? data[anyCol].length : 0;
+  const n = valuesOf(data, anyCol)?.length ?? 0;
   const indices: number[] = [];
   for (let i = 0; i < n; i++) {
-    if (cols.every((c) => String(data[c]?.[i]) === String(combo[c]))) indices.push(i);
+    if (
+      cols.every((c) => String(valuesOf(data, c)?.[i]) === String(combo[c]))
+    ) {
+      indices.push(i);
+    }
   }
-  return Object.fromEntries(Object.entries(data).map(([c, vs]) => [c, indices.map((i) => vs[i])]));
+  return sliceRows(data, indices);
 }
 
 /** Human-readable strip label for a facet panel, e.g. "cyl: 6" or "cyl: 6, gear: 4". */
-function comboLabel(combo: Record<string, unknown>, labels: PlotLabels = {}): string {
-  return Object.entries(combo).map(([k, v]) => `${labelFor(labels, k, k)}: ${v}`).join(", ");
+function comboLabel(
+  combo: Record<string, unknown>,
+  labels: PlotLabels = {},
+): string {
+  return Object.entries(combo).map(([k, v]) =>
+    `${labelFor(labels, k, k)}: ${v}`
+  ).join(", ");
 }
 
 /**
@@ -951,7 +1321,11 @@ function comboLabel(combo: Record<string, unknown>, labels: PlotLabels = {}): st
  * panel per combination even if some are empty. facet.kind "none" returns a
  * single unfiltered panel with no strip label.
  */
-function buildFacetPanels(facet: Facet, data: DataFrame, labels: PlotLabels = {}): { panels: FacetPanel[]; nrow: number; ncol: number } {
+function buildFacetPanels(
+  facet: Facet,
+  data: DataFrame,
+  labels: PlotLabels = {},
+): { panels: FacetPanel[]; nrow: number; ncol: number } {
   if (facet.kind === "wrap") {
     const combos = uniqueCombos(data, facet.rows ?? []);
     const n = Math.max(combos.length, 1);
@@ -973,7 +1347,12 @@ function buildFacetPanels(facet: Facet, data: DataFrame, labels: PlotLabels = {}
     rowCombos.forEach((rc, r) => {
       colCombos.forEach((cc, c) => {
         const combo = { ...rc, ...cc };
-        panels.push({ data: filterRows(data, combo), label: comboLabel(combo, labels), row: r, col: c });
+        panels.push({
+          data: filterRows(data, combo),
+          label: comboLabel(combo, labels),
+          row: r,
+          col: c,
+        });
       });
     });
     return { panels, nrow: rowCombos.length || 1, ncol: colCombos.length || 1 };
@@ -982,21 +1361,45 @@ function buildFacetPanels(facet: Facet, data: DataFrame, labels: PlotLabels = {}
   return { panels: [{ data, label: "", row: 0, col: 0 }], nrow: 1, ncol: 1 };
 }
 
-export function compile(spec: GGSpec): RenderNode {
+export interface CompileOptions {
+  /** Enable runtime-only GPU products; source emission keeps portable CPU nodes. */
+  resident?: boolean;
+}
+
+export function compile(
+  spec: GGSpec,
+  options: CompileOptions = {},
+): RenderNode {
   const labels = spec.labels ?? {};
 
   // ③ facet → panels, partitioned before stats so stat_count/stat_bin/etc.
   // aggregate within each panel independently (ggplot2's default). A layer
   // with its own data override bypasses faceting — it renders unfiltered
   // into every panel.
-  const { panels, nrow, ncol } = buildFacetPanels(spec.facet, spec.data, labels);
+  const { panels, nrow, ncol } = buildFacetPanels(
+    spec.facet,
+    spec.data,
+    labels,
+  );
   const faceted = spec.facet.kind !== "none";
 
   // ① stat transform per layer, per panel (resolving each layer's effective mapping/data)
   const panelLayers = panels.map((panel) =>
     spec.layers.map((layer) => {
-      const mapping = layer.inheritAes === false ? (layer.mapping ?? {}) : { ...spec.mapping, ...layer.mapping };
+      const mapping = layer.inheritAes === false
+        ? (layer.mapping ?? {})
+        : { ...spec.mapping, ...layer.mapping };
       const data = layer.data ?? panel.data;
+      const resident = options.resident
+        ? residentHistogramProps(
+          spec,
+          layer,
+          mapping,
+          data,
+          !faceted && spec.layers.length === 1,
+        )
+        : undefined;
+      if (resident) return { layer, data, mapping, resident };
       const res = applyStat(layer, mapping, data);
       return { layer, data: res.data, mapping: res.mapping };
     })
@@ -1013,22 +1416,39 @@ export function compile(spec: GGSpec): RenderNode {
   const fillScale = scales.get("fill");
   const sizeScale = scales.get("size");
   const shapeScale = scales.get("shape");
+  const linetypeScale = scales.get("linetype");
+  const linewidthScale = scales.get("linewidth");
   let xDomain = numericRange(xScale) ?? [0, 1];
   let yDomain = numericRange(yScale) ?? [0, 1];
   for (const { layer, data, mapping } of allPerLayer) {
-    yDomain = widenForStackedBars(yDomain, layer, mapping, data, xScale, yScale);
+    yDomain = widenForStackedBars(
+      yDomain,
+      layer,
+      mapping,
+      data,
+      xScale,
+      yScale,
+    );
 
     if ((layer.geom === "bar" || layer.geom === "col") && mapping.x) {
-      const scaledX = data[mapping.x].map((v) => scalePosition(xScale, v));
+      const scaledX = (valuesOf(data, mapping.x) ?? []).map((v) =>
+        scalePosition(xScale, v)
+      );
       const width = resolutionOf(xScale, scaledX) * 0.9;
       xDomain = widenForTileAxis(xDomain, scaledX, width);
     }
 
     if (layer.geom === "tile" && mapping.x && mapping.y) {
-      const scaledX = data[mapping.x].map((v) => scalePosition(xScale, v));
-      const scaledY = data[mapping.y].map((v) => scalePosition(yScale, v));
-      const width = (layer.params.width as number) ?? resolutionOf(xScale, scaledX);
-      const height = (layer.params.height as number) ?? resolutionOf(yScale, scaledY);
+      const scaledX = (valuesOf(data, mapping.x) ?? []).map((v) =>
+        scalePosition(xScale, v)
+      );
+      const scaledY = (valuesOf(data, mapping.y) ?? []).map((v) =>
+        scalePosition(yScale, v)
+      );
+      const width = (layer.params.width as number) ??
+        resolutionOf(xScale, scaledX);
+      const height = (layer.params.height as number) ??
+        resolutionOf(yScale, scaledY);
       xDomain = widenForTileAxis(xDomain, scaledX, width);
       yDomain = widenForTileAxis(yDomain, scaledY, height);
     }
@@ -1049,8 +1469,23 @@ export function compile(spec: GGSpec): RenderNode {
   /** Build one panel's Cartesian/Polar view node (guides + this panel's marks). */
   function buildPanel(perLayer: typeof allPerLayer): RenderNode {
     // ⑤ geoms → marks
-    const marks = perLayer.flatMap(({ layer, data, mapping }) =>
-      lowerLayer(layer, mapping, data, xScale, yScale, colorScale, fillScale, sizeScale, shapeScale, theme, xDomain, yDomain)
+    const marks = perLayer.flatMap(({ layer, data, mapping, resident }) =>
+      resident ? [node("ResidentHistogram", { ...resident })] : lowerLayer(
+        layer,
+        mapping,
+        data,
+        xScale,
+        yScale,
+        colorScale,
+        fillScale,
+        sizeScale,
+        shapeScale,
+        linetypeScale,
+        linewidthScale,
+        theme,
+        xDomain,
+        yDomain,
+      )
     );
     const viewMarks = view === "Polar" ? marks.map(munchPolygonNode) : marks;
 
@@ -1071,25 +1506,40 @@ export function compile(spec: GGSpec): RenderNode {
     const guides: RenderNode[] = [];
     if (theme.background) {
       guides.push(node("Polygon", {
-        positions: [[xDomain[0], yDomain[0]], [xDomain[0], yDomain[1]], [xDomain[1], yDomain[1]], [xDomain[1], yDomain[0]]],
+        positions: [[xDomain[0], yDomain[0]], [xDomain[0], yDomain[1]], [
+          xDomain[1],
+          yDomain[1],
+        ], [xDomain[1], yDomain[0]]],
         fill: theme.background,
         depth: 1,
         depthWrite: false,
       }));
     }
     if (theme.grid !== false) {
-      guides.push(view === "Polar"
-        ? polarGridLines(xDomain, yDomain, theme)
-        : node("Grid", {
-          axes,
-          width: theme.gridWidth ?? 1,
-          zBias: 1,
-          ...(theme.gridColor ? { color: theme.gridColor } : {}),
-        }));
+      guides.push(
+        view === "Polar"
+          ? polarGridLines(xDomain, yDomain, theme)
+          : node("Grid", {
+            axes,
+            width: theme.gridWidth ?? 1,
+            zBias: 1,
+            ...(theme.gridColor ? { color: theme.gridColor } : {}),
+          }),
+      );
     }
     guides.push(
-      node("Axis", { axis: "x", width: theme.axisWidth ?? 2, zBias: 1, ...(theme.axisColor ? { color: theme.axisColor } : {}) }),
-      node("Axis", { axis: "y", width: theme.axisWidth ?? 2, zBias: 1, ...(theme.axisColor ? { color: theme.axisColor } : {}) }),
+      node("Axis", {
+        axis: "x",
+        width: theme.axisWidth ?? 2,
+        zBias: 1,
+        ...(theme.axisColor ? { color: theme.axisColor } : {}),
+      }),
+      node("Axis", {
+        axis: "y",
+        width: theme.axisWidth ?? 2,
+        zBias: 1,
+        ...(theme.axisColor ? { color: theme.axisColor } : {}),
+      }),
     );
 
     return node(
@@ -1110,10 +1560,28 @@ export function compile(spec: GGSpec): RenderNode {
   // Embedded also establishes the Plot wrapper (font/virtual-layers) itself,
   // so it replaces our own explicit root Plot node rather than nesting inside it.
   if (!faceted) {
+    const standaloneResident = panelLayers[0].length === 1
+      ? panelLayers[0][0].resident
+      : undefined;
+    if (standaloneResident?.autoYDomain) {
+      return node("Embedded", { normalize: true }, [
+        node("ResidentHistogramView", { ...standaloneResident, axes, theme }),
+        ...plotLabelNodes(labels, theme),
+      ]);
+    }
     return node("Embedded", { normalize: true }, [
       buildPanel(panelLayers[0]),
       ...plotLabelNodes(labels, theme),
-      ...legendNodes(colorScale, fillScale, sizeScale, shapeScale, labels, theme),
+      ...legendNodes(
+        colorScale,
+        fillScale,
+        sizeScale,
+        shapeScale,
+        linetypeScale,
+        linewidthScale,
+        labels,
+        theme,
+      ),
     ]);
   }
 
@@ -1130,13 +1598,29 @@ export function compile(spec: GGSpec): RenderNode {
     node("Embedded", { normalize: true }, [
       buildPanel(panelLayers[i]),
       ...(panel.label
-        ? [node("Label", { positions: [[0, 0.92]], labels: [panel.label], color: theme.textColor ?? "#0b0b0b", size: theme.fontSize ?? 13 })]
+        ? [
+          node("Label", {
+            positions: [[0, 0.92]],
+            labels: [panel.label],
+            color: theme.textColor ?? "#0b0b0b",
+            size: theme.fontSize ?? 13,
+          }),
+        ]
         : []),
     ])
   );
   return node("Embedded", { normalize: true }, [
     node("FacetGrid", { nrow, ncol, gap: 16 }, embeds),
     ...plotLabelNodes(labels, theme),
-    ...legendNodes(colorScale, fillScale, sizeScale, shapeScale, labels, theme),
+    ...legendNodes(
+      colorScale,
+      fillScale,
+      sizeScale,
+      shapeScale,
+      linetypeScale,
+      linewidthScale,
+      labels,
+      theme,
+    ),
   ]);
 }

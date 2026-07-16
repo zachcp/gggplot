@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "exports": "./src/mod.ts",
   "imports": {
+    "@gggplot/reductions": "../reductions/src/mod.ts",
     "@std/assert": "jsr:@std/assert@1",
     "@use-gpu/live": "npm:@use-gpu/live@^0.19.0",
     "@use-gpu/plot": "npm:@use-gpu/plot@^0.19.0",

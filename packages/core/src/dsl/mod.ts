@@ -18,6 +18,8 @@ import type {
   StatKind,
   Theme,
 } from "../ir/types.ts";
+import { ingest, type IngestOptions, type InputData } from "../data/mod.ts";
+import { GRADIENT2_RAMP, VIRIDIS_RAMP } from "../scale/palette.ts";
 
 /** Identity helper — `aes({ x: "wt", y: "mpg" })` reads like ggplot. */
 export const aes = (mapping: Aes): Aes => mapping;
@@ -31,9 +33,20 @@ export type SpecPart =
   | { tag: "labels"; value: PlotLabels }
   | { tag: "theme"; value: Theme };
 
-function defaultSpec(data: DataFrame, mapping: Aes): GGSpec {
+function materializeInputData(
+  data: InputData,
+  options?: IngestOptions,
+): DataFrame {
+  return ingest(data, options);
+}
+
+function defaultSpec(
+  data: InputData,
+  mapping: Aes,
+  options?: IngestOptions,
+): GGSpec {
   return {
-    data,
+    data: materializeInputData(data, options),
     mapping,
     layers: [],
     scales: [],
@@ -48,8 +61,8 @@ function defaultSpec(data: DataFrame, mapping: Aes): GGSpec {
 export class GG {
   readonly spec: GGSpec;
 
-  constructor(data: DataFrame, mapping: Aes = {}) {
-    this.spec = defaultSpec(data, mapping);
+  constructor(data: InputData, mapping: Aes = {}, options?: IngestOptions) {
+    this.spec = defaultSpec(data, mapping, options);
   }
 
   /** Apply a spec part (ggplot's `+`). Accepts multiple for convenience. */
@@ -87,14 +100,18 @@ export class GG {
   }
 }
 
-export const ggplot = (data: DataFrame, mapping: Aes = {}): GG =>
-  new GG(data, mapping);
+export const ggplot = (
+  data: InputData,
+  mapping: Aes = {},
+  options?: IngestOptions,
+): GG => new GG(data, mapping, options);
 
 // --- geoms ---------------------------------------------------------------
 
 interface GeomOpts {
   mapping?: Aes;
-  data?: DataFrame;
+  data?: InputData;
+  dataOptions?: IngestOptions;
   stat?: StatKind;
   position?: PositionKind;
   /** ggplot2's inherit.aes — set false to ignore the plot's top-level aes() mapping. */
@@ -108,7 +125,8 @@ function geom(
   opts: GeomOpts = {},
   defaultPosition: PositionKind = "identity",
 ): SpecPart {
-  const { mapping, data, stat, position, inheritAes, ...params } = opts;
+  const { mapping, data, dataOptions, stat, position, inheritAes, ...params } =
+    opts;
   return {
     tag: "layer",
     value: {
@@ -116,7 +134,7 @@ function geom(
       stat: stat ?? defaultStat,
       position: position ?? defaultPosition,
       mapping,
-      data,
+      data: data ? materializeInputData(data, dataOptions) : undefined,
       inheritAes,
       params,
     },
@@ -131,6 +149,8 @@ export const geomPath = (opts: GeomOpts = {}): SpecPart =>
   geom("path", "identity", opts);
 export const geomBar = (opts: GeomOpts = {}): SpecPart =>
   geom("bar", "count", opts, "stack");
+export const geomHistogram = (opts: GeomOpts = {}): SpecPart =>
+  geom("bar", "bin", { ...opts, stat: "bin" }, "stack");
 export const geomCol = (opts: GeomOpts = {}): SpecPart =>
   geom("col", "identity", opts, "stack");
 export const geomArea = (opts: GeomOpts = {}): SpecPart =>
@@ -181,7 +201,17 @@ export interface AnnotateOpts {
   [param: string]: unknown;
 }
 
-const ANNOTATE_AES: AesName[] = ["x", "y", "xend", "yend", "xmin", "xmax", "ymin", "ymax", "label"];
+const ANNOTATE_AES: AesName[] = [
+  "x",
+  "y",
+  "xend",
+  "yend",
+  "xmin",
+  "xmax",
+  "ymin",
+  "ymax",
+  "label",
+];
 
 /**
  * A literal, non-data-bound layer: reference lines, segments, labels, points,
@@ -189,13 +219,16 @@ const ANNOTATE_AES: AesName[] = ["x", "y", "xend", "yend", "xmin", "xmax", "ymin
  * other option (e.g. `color`, `fill`, `size`) is a literal visual setting,
  * exactly like a geom's fixed params.
  */
-export const annotate = (geomKind: AnnotateGeom, opts: AnnotateOpts = {}): SpecPart => {
-  const data: DataFrame = {};
+export const annotate = (
+  geomKind: AnnotateGeom,
+  opts: AnnotateOpts = {},
+): SpecPart => {
+  const values: Record<string, unknown[]> = {};
   const mapping: Aes = {};
   const params: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(opts)) {
     if ((ANNOTATE_AES as string[]).includes(key) && value !== undefined) {
-      data[key] = [value];
+      values[key] = [value];
       mapping[key as AesName] = key;
     } else if (value !== undefined) {
       params[key] = value;
@@ -203,12 +236,22 @@ export const annotate = (geomKind: AnnotateGeom, opts: AnnotateOpts = {}): SpecP
   }
   return {
     tag: "layer",
-    value: { geom: geomKind, stat: "identity", position: "identity", mapping, data, inheritAes: false, params },
+    value: {
+      geom: geomKind,
+      stat: "identity",
+      position: "identity",
+      mapping,
+      data: ingest(values),
+      inheritAes: false,
+      params,
+    },
   };
 };
 
 /** One or more full-width horizontal reference lines at yintercept(s) (ggplot2's geom_hline). */
-export const geomHline = (opts: { yintercept: number | number[] } & Record<string, unknown>): SpecPart => {
+export const geomHline = (
+  opts: { yintercept: number | number[] } & Record<string, unknown>,
+): SpecPart => {
   const { yintercept, ...params } = opts;
   const values = Array.isArray(yintercept) ? yintercept : [yintercept];
   return {
@@ -218,7 +261,7 @@ export const geomHline = (opts: { yintercept: number | number[] } & Record<strin
       stat: "identity",
       position: "identity",
       mapping: { y: "y" },
-      data: { y: values },
+      data: ingest({ y: values }),
       inheritAes: false,
       params,
     },
@@ -226,7 +269,9 @@ export const geomHline = (opts: { yintercept: number | number[] } & Record<strin
 };
 
 /** One or more full-height vertical reference lines at xintercept(s) (ggplot2's geom_vline). */
-export const geomVline = (opts: { xintercept: number | number[] } & Record<string, unknown>): SpecPart => {
+export const geomVline = (
+  opts: { xintercept: number | number[] } & Record<string, unknown>,
+): SpecPart => {
   const { xintercept, ...params } = opts;
   const values = Array.isArray(xintercept) ? xintercept : [xintercept];
   return {
@@ -236,7 +281,7 @@ export const geomVline = (opts: { xintercept: number | number[] } & Record<strin
       stat: "identity",
       position: "identity",
       mapping: { x: "x" },
-      data: { x: values },
+      data: ingest({ x: values }),
       inheritAes: false,
       params,
     },
@@ -244,14 +289,16 @@ export const geomVline = (opts: { xintercept: number | number[] } & Record<strin
 };
 
 /** A diagonal reference line y = slope*x + intercept, spanning the panel's full x range (ggplot2's geom_abline). */
-export const geomAbline = (opts: { slope?: number; intercept?: number } & Record<string, unknown> = {}): SpecPart => ({
+export const geomAbline = (
+  opts: { slope?: number; intercept?: number } & Record<string, unknown> = {},
+): SpecPart => ({
   tag: "layer",
   value: {
     geom: "abline",
     stat: "identity",
     position: "identity",
     mapping: {},
-    data: {},
+    data: ingest({}),
     inheritAes: false,
     params: opts,
   },
@@ -299,6 +346,26 @@ export const scaleFill = (opts: Partial<Scale> = {}): SpecPart => ({
   tag: "scale",
   value: { aes: "fill", kind: "color", ...opts },
 });
+/** Continuous viridis ramp for a mapped color aesthetic. */
+export const scaleColorViridis = (opts: Partial<Scale> = {}): SpecPart => ({
+  tag: "scale",
+  value: { aes: "color", kind: "color", range: [...VIRIDIS_RAMP], ...opts },
+});
+/** Continuous viridis ramp for a mapped fill aesthetic. */
+export const scaleFillViridis = (opts: Partial<Scale> = {}): SpecPart => ({
+  tag: "scale",
+  value: { aes: "fill", kind: "color", range: [...VIRIDIS_RAMP], ...opts },
+});
+/** Blue-white-red diverging ramp for a mapped color aesthetic. */
+export const scaleColorGradient2 = (opts: Partial<Scale> = {}): SpecPart => ({
+  tag: "scale",
+  value: { aes: "color", kind: "color", range: [...GRADIENT2_RAMP], ...opts },
+});
+/** Blue-white-red diverging ramp for a mapped fill aesthetic. */
+export const scaleFillGradient2 = (opts: Partial<Scale> = {}): SpecPart => ({
+  tag: "scale",
+  value: { aes: "fill", kind: "color", range: [...GRADIENT2_RAMP], ...opts },
+});
 export const scaleSize = (opts: Partial<Scale> = {}): SpecPart => ({
   tag: "scale",
   value: { aes: "size", kind: "continuous", ...opts },
@@ -311,6 +378,16 @@ export const scaleShape = (opts: Partial<Scale> = {}): SpecPart => ({
   tag: "scale",
   value: { aes: "shape", kind: "discrete", ...opts },
 });
+/** Map discrete levels onto dash patterns for connected line marks. */
+export const scaleLinetype = (opts: Partial<Scale> = {}): SpecPart => ({
+  tag: "scale",
+  value: { aes: "linetype", kind: "discrete", ...opts },
+});
+/** Map a continuous data column onto line width in device pixels. */
+export const scaleLinewidth = (opts: Partial<Scale> = {}): SpecPart => ({
+  tag: "scale",
+  value: { aes: "linewidth", kind: "continuous", ...opts },
+});
 
 // --- coords / facets / themes -------------------------------------------
 
@@ -321,8 +398,13 @@ export const coordCartesian = (params?: Record<string, unknown>): SpecPart => ({
 /** `theta: "y"` reassigns the angle to the y aesthetic instead of x (ggplot2's coord_polar(theta = "y")); any other opts pass through to the Polar view unchanged. */
 export const coordPolar = (opts: Record<string, unknown> = {}): SpecPart => {
   const { theta, ...params } = opts;
-  const project: [PositionAxis, PositionAxis] | undefined = theta === "y" ? ["y", "x"] : undefined;
-  return { tag: "coord", value: { kind: "polar", params, ...(project ? { project } : {}) } };
+  const project: [PositionAxis, PositionAxis] | undefined = theta === "y"
+    ? ["y", "x"]
+    : undefined;
+  return {
+    tag: "coord",
+    value: { kind: "polar", params, ...(project ? { project } : {}) },
+  };
 };
 /** Swaps rendered x/y axes without touching mark positions or trained domains (ggplot2's coord_flip()) — sugar for a cartesian coord with an x/y projection swap. */
 export const coordFlip = (): SpecPart => ({

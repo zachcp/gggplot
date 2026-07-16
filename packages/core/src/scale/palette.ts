@@ -18,7 +18,7 @@ export const CATEGORICAL_PALETTE: readonly string[] = [
 export const OTHER_COLOR = "#898781";
 
 /** Sequential ramp (blue, light -> dark), steps 100..700 from palette.md. */
-const SEQUENTIAL_RAMP: readonly string[] = [
+export const SEQUENTIAL_RAMP: readonly string[] = [
   "#cde2fb",
   "#b7d3f6",
   "#9ec5f4",
@@ -32,6 +32,27 @@ const SEQUENTIAL_RAMP: readonly string[] = [
   "#184f95",
   "#104281",
   "#0d366b",
+];
+
+/** Perceptually ordered viridis anchors for continuous color/fill scales. */
+export const VIRIDIS_RAMP: readonly string[] = [
+  "#440154",
+  "#482878",
+  "#3e4989",
+  "#31688e",
+  "#26828e",
+  "#1f9e89",
+  "#35b779",
+  "#6ece58",
+  "#b5de2b",
+  "#fde725",
+];
+
+/** Blue-white-red diverging anchors, suitable for a midpoint-centered scale. */
+export const GRADIENT2_RAMP: readonly string[] = [
+  "#b2182b",
+  "#f7f7f7",
+  "#2166ac",
 ];
 
 /** A fixed categorical slot by index; indices beyond the palette fold to "Other". */
@@ -57,21 +78,32 @@ function hexToRgb(hex: string): [number, number, number] {
 
 function rgbToHex([r, g, b]: [number, number, number]): string {
   const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
-  return "#" + [r, g, b].map((v) => clamp(v).toString(16).padStart(2, "0")).join("");
+  return "#" +
+    [r, g, b].map((v) => clamp(v).toString(16).padStart(2, "0")).join("");
 }
 
-/** Interpolate the sequential ramp at t in [0,1] (0 = lightest, 1 = darkest). */
-export function sequentialColor(t: number): string {
+/** Interpolate any serializable hex ramp at t in [0,1]. */
+export function interpolateColorRamp(
+  ramp: readonly string[],
+  t: number,
+): string {
+  if (ramp.length === 0) return "#000000";
+  if (ramp.length === 1) return ramp[0];
   const clamped = Math.max(0, Math.min(1, t));
-  const scaled = clamped * (SEQUENTIAL_RAMP.length - 1);
+  const scaled = clamped * (ramp.length - 1);
   const i0 = Math.floor(scaled);
-  const i1 = Math.min(i0 + 1, SEQUENTIAL_RAMP.length - 1);
+  const i1 = Math.min(i0 + 1, ramp.length - 1);
   const frac = scaled - i0;
-  const c0 = hexToRgb(SEQUENTIAL_RAMP[i0]);
-  const c1 = hexToRgb(SEQUENTIAL_RAMP[i1]);
+  const c0 = hexToRgb(ramp[i0]);
+  const c1 = hexToRgb(ramp[i1]);
   return rgbToHex([
     c0[0] + (c1[0] - c0[0]) * frac,
     c0[1] + (c1[1] - c0[1]) * frac,
     c0[2] + (c1[2] - c0[2]) * frac,
   ]);
+}
+
+/** Interpolate the default sequential ramp at t in [0,1]. */
+export function sequentialColor(t: number): string {
+  return interpolateColorRamp(SEQUENTIAL_RAMP, t);
 }

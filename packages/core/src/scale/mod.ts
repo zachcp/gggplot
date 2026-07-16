@@ -5,8 +5,20 @@
 // marks can be mapped into visual space. Continuous/discrete x/y,
 // color/fill palettes, and size/alpha/shape are all implemented.
 
-import type { AesName, Aes, DataFrame, GGSpec, Scale, ScaleKind } from "../ir/types.ts";
-import { categoricalRange, sequentialColor } from "./palette.ts";
+import type {
+  Aes,
+  AesName,
+  DataFrame,
+  GGSpec,
+  Scale,
+  ScaleKind,
+} from "../ir/types.ts";
+import { columnValues, factorLevelsFor, isFactorColumn } from "../data/mod.ts";
+import {
+  categoricalRange,
+  interpolateColorRamp,
+  SEQUENTIAL_RAMP,
+} from "./palette.ts";
 
 export interface TrainedScale extends Scale {
   domain: [number, number] | string[];
@@ -42,7 +54,8 @@ function isDiscreteAes(
   for (const { data, mapping } of perLayer) {
     const col = mapping[aesName];
     if (!col || !(col in data)) continue;
-    for (const v of data[col]) {
+    if (isFactorColumn(data, col)) return true;
+    for (const v of columnValues(data, col)) {
       if (v == null) continue;
       return typeof v === "string";
     }
@@ -62,15 +75,31 @@ function discreteLevels(
 ): string[] {
   if (declaredDomain) return declaredDomain;
 
-  const levels = new Set<string>();
+  const levels: string[] = [];
+  const seen = new Set<string>();
+  const inferred = new Set<string>();
   for (const { data, mapping } of perLayer) {
     const col = mapping[aesName];
     if (!col || !(col in data)) continue;
-    for (const v of data[col]) {
-      if (v != null) levels.add(String(v));
+    const declaredLevels = factorLevelsFor(data, col);
+    if (declaredLevels) {
+      for (const level of declaredLevels) {
+        if (seen.has(level)) continue;
+        seen.add(level);
+        levels.push(level);
+      }
+      continue;
+    }
+    for (const v of columnValues(data, col)) {
+      if (v != null) inferred.add(String(v));
     }
   }
-  return [...levels].sort();
+  for (const level of [...inferred].sort()) {
+    if (seen.has(level)) continue;
+    seen.add(level);
+    levels.push(level);
+  }
+  return levels;
 }
 
 /** log10/sqrt data transforms for "log"/"sqrt" scale kinds; identity otherwise. */
@@ -99,7 +128,10 @@ export function expandRange(
  * index for discrete scales, the log10/sqrt-transformed value for those scale
  * kinds, or the plain numeric value otherwise.
  */
-export function scalePosition(scale: TrainedScale | undefined, raw: unknown): number {
+export function scalePosition(
+  scale: TrainedScale | undefined,
+  raw: unknown,
+): number {
   if (scale?.kind === "discrete") {
     return (scale.domain as string[]).indexOf(String(raw));
   }
@@ -109,25 +141,33 @@ export function scalePosition(scale: TrainedScale | undefined, raw: unknown): nu
 /**
  * Map a raw data value into a hex color: a fixed categorical palette slot for
  * discrete color/fill scales (by factor-level index), or a point on the
- * sequential ramp for continuous ones. See scale/palette.ts.
+ * selected serializable ramp for continuous ones. See scale/palette.ts.
  */
-export function scaleColorValue(scale: TrainedScale | undefined, raw: unknown): string {
+export function scaleColorValue(
+  scale: TrainedScale | undefined,
+  raw: unknown,
+): string {
   if (!scale) return categoricalRange(1)[0];
 
   const domain = scale.domain;
   if (Array.isArray(domain) && typeof domain[0] === "string") {
     const levels = domain as string[];
-    return (scale.range as string[] | undefined)?.[levels.indexOf(String(raw))] ??
+    return (scale.range as string[] | undefined)
+      ?.[levels.indexOf(String(raw))] ??
       categoricalRange(levels.length)[levels.indexOf(String(raw))];
   }
 
   const [lo, hi] = domain as [number, number];
   const t = hi > lo ? (Number(raw) - lo) / (hi - lo) : 0;
-  return sequentialColor(t);
+  return interpolateColorRamp(
+    (scale.range as string[] | undefined) ?? SEQUENTIAL_RAMP,
+    t,
+  );
 }
 
 const DEFAULT_SIZE_RANGE: [number, number] = [1, 6];
 const DEFAULT_ALPHA_RANGE: [number, number] = [0.1, 1];
+const DEFAULT_LINEWIDTH_RANGE: [number, number] = [1, 6];
 const DEFAULT_SHAPE_PALETTE: readonly string[] = [
   "circle",
   "square",
@@ -136,9 +176,28 @@ const DEFAULT_SHAPE_PALETTE: readonly string[] = [
   "cross",
   "asterisk",
 ];
+/** Dash/gap lengths in device pixels, accepted directly by use.gpu's Line. */
+const DEFAULT_LINETYPE_PALETTE: readonly (readonly number[])[] = [
+  [], // solid
+  [8, 5], // dashed
+  [1, 4], // dotted
+  [1, 4, 8, 4], // dotdash
+];
+
+/** Named literal linetypes mirror the first four ggplot2 defaults. */
+const NAMED_LINETYPE: Readonly<Record<string, readonly number[]>> = {
+  solid: DEFAULT_LINETYPE_PALETTE[0],
+  dashed: DEFAULT_LINETYPE_PALETTE[1],
+  dotted: DEFAULT_LINETYPE_PALETTE[2],
+  dotdash: DEFAULT_LINETYPE_PALETTE[3],
+};
 
 /** Linearly interpolate a raw value from a continuous scale's domain into its range. */
-function interpolateRange(scale: TrainedScale | undefined, raw: unknown, fallback: [number, number]): number {
+function interpolateRange(
+  scale: TrainedScale | undefined,
+  raw: unknown,
+  fallback: [number, number],
+): number {
   const [lo, hi] = (scale?.domain as [number, number]) ?? [0, 1];
   const [rLo, rHi] = (scale?.range as [number, number] | undefined) ?? fallback;
   const t = hi > lo ? (Number(raw) - lo) / (hi - lo) : 0;
@@ -146,17 +205,57 @@ function interpolateRange(scale: TrainedScale | undefined, raw: unknown, fallbac
 }
 
 /** Map a raw data value to a point radius, linearly interpolated across the size range (default [1, 6]). */
-export function scaleSizeValue(scale: TrainedScale | undefined, raw: unknown): number {
+export function scaleSizeValue(
+  scale: TrainedScale | undefined,
+  raw: unknown,
+): number {
   return interpolateRange(scale, raw, DEFAULT_SIZE_RANGE);
 }
 
 /** Map a raw data value to an opacity, linearly interpolated across the alpha range (default [0.1, 1]). */
-export function scaleAlphaValue(scale: TrainedScale | undefined, raw: unknown): number {
+export function scaleAlphaValue(
+  scale: TrainedScale | undefined,
+  raw: unknown,
+): number {
   return interpolateRange(scale, raw, DEFAULT_ALPHA_RANGE);
 }
 
+/** Map a raw data value to a device-pixel line width. */
+export function scaleLinewidthValue(
+  scale: TrainedScale | undefined,
+  raw: unknown,
+): number {
+  return interpolateRange(scale, raw, DEFAULT_LINEWIDTH_RANGE);
+}
+
+/** Resolve a literal linetype name to a use.gpu dash pattern. */
+export function namedLinetypeValue(
+  value: string | undefined,
+): readonly number[] | undefined {
+  if (value === undefined || value === "solid") return undefined;
+  return NAMED_LINETYPE[value] ?? undefined;
+}
+
+/** Map a discrete level to its scale's dash pattern; no dash means solid. */
+export function scaleLinetypeValue(
+  scale: TrainedScale | undefined,
+  raw: unknown,
+): readonly number[] | undefined {
+  if (!scale) return undefined;
+  const levels = scale.domain as string[];
+  const index = levels.indexOf(String(raw));
+  if (index < 0) return undefined;
+  const range = scale.range as number[][] | undefined;
+  const dash = range?.[index] ??
+    DEFAULT_LINETYPE_PALETTE[index % DEFAULT_LINETYPE_PALETTE.length];
+  return dash.length ? dash : undefined;
+}
+
 /** Map a raw data value to a glyph name, by factor-level index into a fixed shape palette. */
-export function scaleShapeValue(scale: TrainedScale | undefined, raw: unknown): string {
+export function scaleShapeValue(
+  scale: TrainedScale | undefined,
+  raw: unknown,
+): string {
   if (!scale) return DEFAULT_SHAPE_PALETTE[0];
   const levels = scale.domain as string[];
   const idx = levels.indexOf(String(raw));
@@ -167,7 +266,7 @@ export function scaleShapeValue(scale: TrainedScale | undefined, raw: unknown): 
 /** Train a continuous size/alpha scale: data extent -> a visual [min,max] range. */
 function trainContinuousAuxScale(
   perLayer: { data: DataFrame; mapping: Aes }[],
-  aesName: "size" | "alpha",
+  aesName: "size" | "alpha" | "linewidth",
   declared: Scale | undefined,
   defaultRange: [number, number],
 ): TrainedScale | undefined {
@@ -176,7 +275,7 @@ function trainContinuousAuxScale(
   for (const { data, mapping } of perLayer) {
     const col = mapping[aesName];
     if (!col || !(col in data)) continue;
-    const ext = continuousExtent(data[col]);
+    const ext = continuousExtent(columnValues(data, col));
     if (!ext) continue;
     lo = Math.min(lo, ext[0]);
     hi = Math.max(hi, ext[1]);
@@ -192,12 +291,39 @@ function trainContinuousAuxScale(
   };
 }
 
+/** Train a discrete linetype scale: factor levels -> compact dash patterns. */
+function trainLinetypeScale(
+  perLayer: { data: DataFrame; mapping: Aes }[],
+  declared?: Scale,
+): TrainedScale | undefined {
+  const levels = discreteLevels(
+    perLayer,
+    "linetype",
+    declared?.domain as string[] | undefined,
+  );
+  if (levels.length === 0) return undefined;
+  const range = declared?.range as number[][] | undefined;
+  return {
+    aes: "linetype",
+    kind: "discrete",
+    name: declared?.name,
+    domain: levels,
+    range: range ?? levels.map((_, index) => [
+      ...DEFAULT_LINETYPE_PALETTE[index % DEFAULT_LINETYPE_PALETTE.length],
+    ]),
+  };
+}
+
 /** Train a discrete shape scale: factor levels -> a fixed glyph palette, in level order. */
 function trainShapeScale(
   perLayer: { data: DataFrame; mapping: Aes }[],
   declared?: Scale,
 ): TrainedScale | undefined {
-  const levels = discreteLevels(perLayer, "shape", declared?.domain as string[] | undefined);
+  const levels = discreteLevels(
+    perLayer,
+    "shape",
+    declared?.domain as string[] | undefined,
+  );
   if (levels.length === 0) return undefined;
 
   return {
@@ -206,7 +332,9 @@ function trainShapeScale(
     name: declared?.name,
     domain: levels,
     range: (declared?.range as string[] | undefined) ??
-      levels.map((_, i) => DEFAULT_SHAPE_PALETTE[i % DEFAULT_SHAPE_PALETTE.length]),
+      levels.map((_, i) =>
+        DEFAULT_SHAPE_PALETTE[i % DEFAULT_SHAPE_PALETTE.length]
+      ),
   };
 }
 
@@ -217,14 +345,19 @@ function trainColorScale(
   declared?: Scale,
 ): TrainedScale | undefined {
   if (isDiscreteAes(perLayer, aesName, declared)) {
-    const levels = discreteLevels(perLayer, aesName, declared?.domain as string[] | undefined);
+    const levels = discreteLevels(
+      perLayer,
+      aesName,
+      declared?.domain as string[] | undefined,
+    );
     if (levels.length === 0) return undefined;
     return {
       aes: aesName,
       kind: "color",
       name: declared?.name,
       domain: levels,
-      range: (declared?.range as string[] | undefined) ?? categoricalRange(levels.length),
+      range: (declared?.range as string[] | undefined) ??
+        categoricalRange(levels.length),
     };
   }
 
@@ -233,7 +366,7 @@ function trainColorScale(
   for (const { data, mapping } of perLayer) {
     const col = mapping[aesName];
     if (!col || !(col in data)) continue;
-    const ext = continuousExtent(data[col]);
+    const ext = continuousExtent(columnValues(data, col));
     if (!ext) continue;
     lo = Math.min(lo, ext[0]);
     hi = Math.max(hi, ext[1]);
@@ -245,11 +378,13 @@ function trainColorScale(
     kind: "color",
     name: declared?.name,
     domain: (declared?.domain as [number, number]) ?? [lo, hi],
+    range: declared?.range as string[] | undefined,
   };
 }
 
 /**
- * Train scales for x, y, color, fill, size, alpha and shape by unioning each
+ * Train scales for x, y, color, fill, size, alpha, shape, linetype and
+ * linewidth by unioning each
  * layer's mapped columns. Returns a map keyed by aesthetic name.
  */
 export function trainScales(
@@ -262,7 +397,11 @@ export function trainScales(
     const declared = spec.scales.find((s) => s.aes === aesName);
 
     if (isDiscreteAes(perLayer, aesName, declared)) {
-      const levels = discreteLevels(perLayer, aesName, declared?.domain as string[] | undefined);
+      const levels = discreteLevels(
+        perLayer,
+        aesName,
+        declared?.domain as string[] | undefined,
+      );
       if (levels.length > 0) {
         trained.set(aesName, {
           aes: aesName,
@@ -285,7 +424,7 @@ export function trainScales(
         : [mapping.x, mapping.xmin, mapping.xmax, mapping.xend];
       for (const col of cols) {
         if (!col || !(col in data)) continue;
-        const ext = continuousExtent(data[col]);
+        const ext = continuousExtent(columnValues(data, col));
         if (!ext) continue;
         lo = Math.min(lo, ext[0]);
         hi = Math.max(hi, ext[1]);
@@ -296,10 +435,20 @@ export function trainScales(
       const kind = declared?.kind ?? "continuous";
       const transform = transformFor(kind);
       const limits = (declared?.domain as [number, number]) ?? [lo, hi];
-      const transformed: [number, number] = [transform(limits[0]), transform(limits[1])];
-      const domain = declared?.expand ? expandRange(transformed, declared.expand) : transformed;
+      const transformed: [number, number] = [
+        transform(limits[0]),
+        transform(limits[1]),
+      ];
+      const domain = declared?.expand
+        ? expandRange(transformed, declared.expand)
+        : transformed;
 
-      trained.set(aesName, { aes: aesName, kind, name: declared?.name, domain });
+      trained.set(aesName, {
+        aes: aesName,
+        kind,
+        name: declared?.name,
+        domain,
+      });
     }
   }
 
@@ -309,16 +458,29 @@ export function trainScales(
     if (scale) trained.set(aesName, scale);
   }
 
-  for (const aesName of ["size", "alpha"] as const) {
+  for (const aesName of ["size", "alpha", "linewidth"] as const) {
     const declared = spec.scales.find((s) => s.aes === aesName);
-    const defaultRange = aesName === "size" ? DEFAULT_SIZE_RANGE : DEFAULT_ALPHA_RANGE;
-    const scale = trainContinuousAuxScale(perLayer, aesName, declared, defaultRange);
+    const defaultRange = aesName === "size"
+      ? DEFAULT_SIZE_RANGE
+      : aesName === "alpha"
+      ? DEFAULT_ALPHA_RANGE
+      : DEFAULT_LINEWIDTH_RANGE;
+    const scale = trainContinuousAuxScale(
+      perLayer,
+      aesName,
+      declared,
+      defaultRange,
+    );
     if (scale) trained.set(aesName, scale);
   }
 
   const shapeDeclared = spec.scales.find((s) => s.aes === "shape");
   const shapeScale = trainShapeScale(perLayer, shapeDeclared);
   if (shapeScale) trained.set("shape", shapeScale);
+
+  const linetypeDeclared = spec.scales.find((s) => s.aes === "linetype");
+  const linetypeScale = trainLinetypeScale(perLayer, linetypeDeclared);
+  if (linetypeScale) trained.set("linetype", linetypeScale);
 
   return trained;
 }

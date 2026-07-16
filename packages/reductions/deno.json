@@ -1,0 +1,16 @@
+{
+  "name": "@gggplot/reductions",
+  "version": "0.0.1",
+  "exports": "./src/mod.ts",
+  "imports": {
+    "@std/assert": "jsr:@std/assert@1"
+  },
+  "tasks": {
+    "bench": "deno bench bench/reductions_bench.ts",
+    "bench:gpu": "deno run -A bench/gpu_bench.ts",
+    "test": "deno test tests/"
+  },
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "esnext", "deno.ns"]
+  }
+}
