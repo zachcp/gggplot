@@ -12,6 +12,7 @@ import type {
   GGSpec,
   Layer,
   PlotLabels,
+  PositionAxis,
   Theme,
 } from "../ir/types.ts";
 import { node, type RenderNode } from "./rendertree.ts";
@@ -32,8 +33,10 @@ import {
   trainScales,
 } from "../scale/mod.ts";
 import {
+  dodge2Bars,
   dodgeBars,
   jitter,
+  nudge,
   type PositionedBar,
   stackBars,
 } from "../position/mod.ts";
@@ -133,10 +136,20 @@ function colorWithAlpha(color: string, alpha: number): string {
   const hex = color.startsWith("#") ? color.slice(1) : color;
   if (/^[0-9a-f]{3}$/i.test(hex)) {
     const expanded = [...hex].map((part) => part + part).join("");
-    return `#${expanded}${Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(2, "0")}`;
+    return `#${expanded}${
+      Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(
+        2,
+        "0",
+      )
+    }`;
   }
   if (/^[0-9a-f]{6}$/i.test(hex)) {
-    return `#${hex}${Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(2, "0")}`;
+    return `#${hex}${
+      Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(
+        2,
+        "0",
+      )
+    }`;
   }
   // CSS rgba() is accepted by UseGPU's color parser for named/non-hex colors.
   return color;
@@ -163,6 +176,18 @@ function linewidthsOf(
   if (!col || !(col in data)) return undefined;
   return columnValues(data, col).map((v) =>
     scaleLinewidthValue(linewidthScale, v)
+  );
+}
+
+function strokesOf(
+  mapping: Aes,
+  data: GGSpec["data"],
+  strokeScale: TrainedScale | undefined,
+): number[] | undefined {
+  const column = mapping.stroke;
+  if (!column || !(column in data)) return undefined;
+  return columnValues(data, column).map((value) =>
+    scaleLinewidthValue(strokeScale, value)
   );
 }
 
@@ -275,7 +300,18 @@ function lowerBarLayer(
   }
 
   const width = resolutionOf(xScale, scaledX) * 0.9;
-  const placed = layer.position === "dodge"
+  const placed = layer.position === "dodge2"
+    ? dodge2Bars(
+      bars.map((bar, i) => ({
+        ...bar,
+        width: typeof layer.params.width === "number"
+          ? layer.params.width
+          : undefined,
+      })),
+      width,
+      (layer.params.padding as number) ?? 0.1,
+    )
+    : layer.position === "dodge"
     ? dodgeBars(bars, width)
     : stackBars(
       bars,
@@ -304,14 +340,12 @@ function lowerBarLayer(
     return [[x0, bar.y0], [x0, bar.y1], [x1, bar.y1], [x1, bar.y0]];
   });
   const fills = placed.map((bar) => fillOf(bar.groupKey));
-  const uniform = fills.every((f) => f === fills[0]);
-
-  return [
-    node("Polygon", {
-      positions,
-      ...(uniform ? { fill: fills[0] } : { fills }),
-    }),
-  ];
+  // Plot Polygon treats a nested position array as one multi-loop surface;
+  // independent rectangles must remain independent faces or the triangulator
+  // bridges their top edges and fills the complement between bars.
+  return positions.map((position, i) =>
+    node("Polygon", { positions: position, fill: fills[i] })
+  );
 }
 
 /**
@@ -341,16 +375,20 @@ function lowerTileLayer(
   const width = (layer.params.width as number) ?? resolutionOf(xScale, scaledX);
   const height = (layer.params.height as number) ??
     resolutionOf(yScale, scaledY);
+  const productWidth = valuesOf(data, "binwidthX")?.[0];
+  const productHeight = valuesOf(data, "binwidthY")?.[0];
+  const cellWidth = typeof productWidth === "number" ? productWidth : width;
+  const cellHeight = typeof productHeight === "number" ? productHeight : height;
 
   const positions: [number, number][][] = [];
   for (let i = 0; i < n; i++) {
     const x = scaledX[i];
     const y = scaledY[i];
     positions.push([
-      [x - width / 2, y - height / 2],
-      [x - width / 2, y + height / 2],
-      [x + width / 2, y + height / 2],
-      [x + width / 2, y - height / 2],
+      [x - cellWidth / 2, y - cellHeight / 2],
+      [x - cellWidth / 2, y + cellHeight / 2],
+      [x + cellWidth / 2, y + cellHeight / 2],
+      [x + cellWidth / 2, y - cellHeight / 2],
     ]);
   }
 
@@ -358,9 +396,51 @@ function lowerTileLayer(
   const fill = (layer.params.fill as string) ??
     (layer.params.color as string) ?? "#3b82f6";
 
-  return [
-    node("Polygon", { positions, ...(colors ? { fills: colors } : { fill }) }),
-  ];
+  return colors
+    ? positions.map((position, i) =>
+      node("Polygon", { positions: position, fill: colors[i] })
+    )
+    : [node("Polygon", { positions, fill })];
+}
+
+function lowerHexLayer(
+  layer: Layer,
+  mapping: Aes,
+  data: GGSpec["data"],
+  xScale: TrainedScale | undefined,
+  yScale: TrainedScale | undefined,
+  colorScale: TrainedScale | undefined,
+  fillScale: TrainedScale | undefined,
+): RenderNode[] {
+  const xs = valuesOf(data, mapping.x);
+  const ys = valuesOf(data, mapping.y);
+  if (!xs || !ys) return [];
+  const width = Number(
+    valuesOf(data, "binwidthX")?.[0] ?? layer.params.width ?? 1,
+  );
+  const height = Number(
+    valuesOf(data, "binwidthY")?.[0] ?? layer.params.height ?? 1,
+  );
+  const positions = xs.map((value, i) => {
+    const x = scalePosition(xScale, value);
+    const y = scalePosition(yScale, ys[i]);
+    return Array.from({ length: 6 }, (_, vertex): [number, number] => {
+      const angle = Math.PI / 3 * vertex;
+      return [
+        x + Math.cos(angle) * width / 2,
+        y + Math.sin(angle) * height / 2,
+      ];
+    });
+  });
+  const colors = colorsOf(mapping, data, colorScale, fillScale, "fillOrColor");
+  return colors
+    ? positions.map((position, i) =>
+      node("Polygon", { positions: position, fill: colors[i] })
+    )
+    : [node("Polygon", {
+      positions,
+      fill: (layer.params.fill as string) ?? "#3b82f6",
+    })];
 }
 
 function lowerPolygonLayer(
@@ -514,6 +594,58 @@ function lowerBoxplotLayer(
   ];
 }
 
+/** Lower a dense y-density product to one mirrored polygon per group. */
+function lowerViolinLayer(
+  layer: Layer,
+  mapping: Aes,
+  data: GGSpec["data"],
+  xScale: TrainedScale | undefined,
+  yScale: TrainedScale | undefined,
+  colorScale: TrainedScale | undefined,
+  fillScale: TrainedScale | undefined,
+): RenderNode[] {
+  const polygons: RenderNode[] = [];
+  for (
+    const { mapping: groupedMapping, data: groupedData }
+      of splitByEffectiveGroup(mapping, data)
+  ) {
+    const xs = valuesOf(groupedData, groupedMapping.x);
+    const ys = valuesOf(groupedData, groupedMapping.y);
+    const densities = valuesOf(groupedData, groupedMapping.density);
+    if (!xs?.length || !ys?.length || !densities?.length) continue;
+    const center = scalePosition(xScale, xs[0]);
+    const numericDensity = densities.map(Number);
+    const max = Math.max(...numericDensity, Number.EPSILON);
+    const halfWidth = ((layer.params.width as number) ?? 0.9) / 2;
+    const right = ys.map((
+      value,
+      i,
+    ): [number, number] => [
+      center + numericDensity[i] / max * halfWidth,
+      scalePosition(yScale, value),
+    ]);
+    const left = ys.map((
+      value,
+      i,
+    ): [number, number] => [
+      center - numericDensity[i] / max * halfWidth,
+      scalePosition(yScale, value),
+    ]).reverse();
+    const colors = colorsOf(
+      groupedMapping,
+      groupedData,
+      colorScale,
+      fillScale,
+      "fillOrColor",
+    );
+    polygons.push(node("Polygon", {
+      positions: [...right, ...left],
+      fill: colors?.[0] ?? (layer.params.fill as string) ?? "#3b82f6",
+    }));
+  }
+  return polygons;
+}
+
 /**
  * Lower a geom_text/geom_label layer to a single Label of per-point text.
  * geom_label's background box isn't rendered (sizing it needs real text
@@ -542,12 +674,15 @@ function lowerTextLayer(
   const color = (layer.params.color as string) ?? theme.textColor ?? "#0b0b0b";
   const size = (layer.params.size as number) ?? theme.fontSize ?? 14;
   const family = (layer.params.family as string) ?? theme.fontFamily;
+  const angle = (layer.params.angle as number) ?? 0;
 
   return [node("Label", {
     positions,
     labels,
     ...(colors ? { colors } : { color }),
     size,
+    ...(angle ? { angle } : {}),
+    zBias: 2,
     ...(family ? { family } : {}),
   })];
 }
@@ -697,6 +832,7 @@ function lowerLayer(
   shapeScale: TrainedScale | undefined,
   linetypeScale: TrainedScale | undefined,
   linewidthScale: TrainedScale | undefined,
+  strokeScale: TrainedScale | undefined,
   theme: Theme,
   xDomain: [number, number],
   yDomain: [number, number],
@@ -769,6 +905,18 @@ function lowerLayer(
     );
   }
 
+  if (layer.geom === "hex") {
+    return lowerHexLayer(
+      layer,
+      mapping,
+      data,
+      xScale,
+      yScale,
+      colorScale,
+      fillScale,
+    );
+  }
+
   if (layer.geom === "polygon") {
     return lowerPolygonLayer(
       layer,
@@ -797,6 +945,18 @@ function lowerLayer(
     );
   }
 
+  if (layer.geom === "violin") {
+    return lowerViolinLayer(
+      layer,
+      mapping,
+      data,
+      xScale,
+      yScale,
+      colorScale,
+      fillScale,
+    );
+  }
+
   if (layer.geom === "text") {
     return lowerTextLayer(
       layer,
@@ -810,7 +970,7 @@ function lowerLayer(
     );
   }
 
-  if (layer.geom === "point") {
+  if (layer.geom === "point" || layer.geom === "dotplot") {
     let positions = positionsOf(mapping, data, xScale, yScale);
     if (positions.length === 0) return [];
     if (layer.position === "jitter") {
@@ -820,6 +980,28 @@ function lowerLayer(
       positions = positions.map((
         [x, y],
       ) => [jitter(x, xAmount), jitter(y, yAmount)]);
+    } else if (layer.position === "nudge") {
+      positions = nudge(
+        positions,
+        (layer.params.x as number) ?? (layer.params.nudgeX as number) ?? 0,
+        (layer.params.y as number) ?? (layer.params.nudgeY as number) ?? 0,
+      );
+    } else if (layer.position === "jitterdodge") {
+      const groupValues = valuesOf(
+        data,
+        mapping.group ?? mapping.color ?? mapping.fill ?? mapping.shape,
+      );
+      const groups = [...new Set((groupValues ?? []).map(String))].sort();
+      const dodgeWidth = (layer.params.dodgeWidth as number) ?? 0.75;
+      const jitterWidth = (layer.params.jitterWidth as number) ?? 0.1;
+      const jitterHeight = (layer.params.jitterHeight as number) ?? 0;
+      positions = positions.map(([x, y], i) => {
+        const slot = Math.max(0, groups.indexOf(String(groupValues?.[i])));
+        const offset = groups.length > 1
+          ? (slot - (groups.length - 1) / 2) * dodgeWidth / groups.length
+          : 0;
+        return [jitter(x + offset, jitterWidth), jitter(y, jitterHeight)];
+      });
     }
     const colors = colorsOf(
       mapping,
@@ -830,6 +1012,7 @@ function lowerLayer(
     );
     const color = (layer.params.color as string) ?? "#3b82f6";
     const sizes = sizesOf(mapping, data, sizeScale);
+    const strokes = strokesOf(mapping, data, strokeScale);
     const alphas = alphasOf(mapping, data, alphaScale);
     const rgbaColors = alphas
       ? positions.map((_, i) => colorWithAlpha(colors?.[i] ?? color, alphas[i]))
@@ -847,7 +1030,9 @@ function lowerLayer(
           positions: indices.map((i) => positions[i]),
           ...(rgbaColors
             ? { colors: indices.map((i) => rgbaColors[i]) }
-            : colors ? { colors: indices.map((i) => colors[i]) } : { color }),
+            : colors
+            ? { colors: indices.map((i) => colors[i]) }
+            : { color }),
           ...(sizes
             ? { sizes: indices.map((i) => sizes[i]) }
             : { size: (layer.params.size as number) ?? 5 }),
@@ -857,10 +1042,48 @@ function lowerLayer(
       );
     }
 
+    const literalStroke = typeof layer.params.stroke === "number"
+      ? layer.params.stroke
+      : undefined;
+    if (strokes || literalStroke != null) {
+      const baseSizes = sizes ??
+        positions.map(() => (layer.params.size as number) ?? 5);
+      const widths = strokes ?? positions.map(() => literalStroke ?? 0);
+      const outerColor = (layer.params.strokeColor as string) ??
+        (layer.params.color as string) ?? "#1a1a1a";
+      const innerColor = (layer.params.fill as string) ?? color;
+      return [
+        node("Point", {
+          positions,
+          sizes: baseSizes.map((size, i) => size + 2 * widths[i]),
+          color: outerColor,
+          execution: "cpu-outline-fallback",
+        }),
+        node("Point", {
+          positions,
+          ...(rgbaColors
+            ? { colors: rgbaColors }
+            : colors
+            ? { colors }
+            : { color: innerColor }),
+          sizes: baseSizes,
+          execution: "cpu-outline-fallback",
+          ...(opacity != null ? { opacity } : {}),
+        }),
+      ];
+    }
+
     return [node("Point", {
       positions,
-      ...(rgbaColors ? { colors: rgbaColors } : colors ? { colors } : { color }),
-      ...(sizes ? { sizes } : { size: (layer.params.size as number) ?? 5 }),
+      ...(rgbaColors
+        ? { colors: rgbaColors }
+        : colors
+        ? { colors }
+        : { color }),
+      ...(sizes ? { sizes } : {
+        size: (layer.params.size as number) ??
+          (layer.geom === "dotplot" ? 4 : 5),
+      }),
       ...(opacity != null ? { opacity } : {}),
     })];
   }
@@ -940,7 +1163,7 @@ function widenForStackedBars(
 ): [number, number] {
   if (layer.geom !== "bar" && layer.geom !== "col") return [lo, hi];
   if (layer.position === "dodge" || layer.position === "identity") {
-    return [lo, hi];
+    return [Math.min(lo, 0), hi];
   }
 
   const xs = valuesOf(data, mapping.x);
@@ -1023,6 +1246,44 @@ function munchPolygonNode(n: RenderNode): RenderNode {
   return node(n.component, { ...n.props, positions: munched }, n.children);
 }
 
+function mapPositionValue(
+  value: unknown,
+  axis: 0 | 1,
+  map: (value: number) => number,
+): unknown {
+  if (!Array.isArray(value)) return value;
+  if (
+    value.length >= 2 && typeof value[0] === "number" &&
+    typeof value[1] === "number"
+  ) {
+    const point = [...value] as number[];
+    point[axis] = map(point[axis]);
+    return point;
+  }
+  return value.map((entry) => mapPositionValue(entry, axis, map));
+}
+
+/** Convert the selected theta scale from trained data units into radians. */
+function polarizeNode(
+  n: RenderNode,
+  axis: 0 | 1,
+  domain: [number, number],
+  start: number,
+  end: number,
+): RenderNode {
+  const [lo, hi] = domain;
+  const span = hi - lo || 1;
+  const map = (value: number) => start + (value - lo) / span * (end - start);
+  const props = "positions" in n.props
+    ? { ...n.props, positions: mapPositionValue(n.props.positions, axis, map) }
+    : n.props;
+  return node(
+    n.component,
+    props,
+    n.children.map((child) => polarizeNode(child, axis, domain, start, end)),
+  );
+}
+
 function linspace([lo, hi]: [number, number], n: number): number[] {
   if (n <= 1) return [lo];
   return Array.from({ length: n }, (_, i) => lo + (hi - lo) * (i / (n - 1)));
@@ -1044,7 +1305,7 @@ function polarGridLines(
   return node("Line", {
     positions,
     width: theme.gridWidth ?? 1,
-    zBias: 1,
+    zBias: -1,
     ...(theme.gridColor ? { color: theme.gridColor } : {}),
   });
 }
@@ -1067,12 +1328,15 @@ function labelNode(
   labels: string[],
   theme: Theme,
   size?: number,
+  angle = 0,
 ): RenderNode {
   return node("Label", {
-    positions: labels.map((_, i): [number, number] => [x, y - i * 0.07]),
+    positions: labels.map((_, i): [number, number] => [x, y + i * 0.11]),
     labels,
     color: theme.textColor ?? "#0b0b0b",
     size: size ?? theme.fontSize ?? 13,
+    zBias: 2,
+    ...(angle ? { angle } : {}),
     ...(theme.fontFamily ? { family: theme.fontFamily } : {}),
   });
 }
@@ -1087,12 +1351,15 @@ function legendNodes(
   linewidthScale: TrainedScale | undefined,
   labels: PlotLabels,
   theme: Theme,
+  panelBounds: [number, number, number, number],
 ): RenderNode[] {
   const nodes: RenderNode[] = [];
-  let y = 0.82;
-  const titleX = 0.72;
-  const swatchX = 0.74;
-  const labelX = 0.80;
+  let y = -0.76;
+  const guideLeft = panelBounds[2];
+  const guideWidth = 1 - guideLeft;
+  const titleX = guideLeft + guideWidth * 0.16;
+  const swatchX = guideLeft + guideWidth * 0.22;
+  const labelX = guideLeft + guideWidth * 0.42;
 
   if (
     colorScale && Array.isArray(colorScale.domain) &&
@@ -1108,17 +1375,17 @@ function legendNodes(
         14,
       ),
     );
-    y -= 0.08;
+    y += 0.14;
     nodes.push(node("Point", {
       positions: levels.map((
         _,
         i,
-      ): [number, number] => [swatchX, y - i * 0.07]),
+      ): [number, number] => [swatchX, y + i * 0.11]),
       colors: levels.map((level) => scaleColorValue(colorScale, level)),
       size: 7,
     }));
     nodes.push(labelNode(labelX, y, levels, theme));
-    y -= levels.length * 0.07 + 0.08;
+    y += levels.length * 0.11 + 0.12;
   }
 
   if (
@@ -1129,18 +1396,75 @@ function legendNodes(
     nodes.push(
       labelNode(titleX, y, [legendTitle(fillScale, labels, "fill")], theme, 14),
     );
-    y -= 0.08;
+    y += 0.14;
     nodes.push(node("Point", {
       positions: levels.map((
         _,
         i,
-      ): [number, number] => [swatchX, y - i * 0.07]),
+      ): [number, number] => [swatchX, y + i * 0.11]),
       colors: levels.map((level) => scaleColorValue(fillScale, level)),
       size: 7,
     }));
     nodes.push(labelNode(labelX, y, levels, theme));
-    y -= levels.length * 0.07 + 0.08;
+    y += levels.length * 0.11 + 0.12;
   }
+
+  const continuousColorGuide = (
+    scale: TrainedScale | undefined,
+    fallback: "color" | "fill",
+  ) => {
+    if (
+      !scale || typeof scale.domain[0] !== "number" ||
+      scale.guide?.kind === "none"
+    ) return;
+    const guideKind = scale.guide?.kind ?? "colorbar";
+    const count = guideKind === "colorbar"
+      ? 24
+      : Math.max(2, scale.guide?.bins ?? 6);
+    const [lo, hi] = scale.domain as [number, number];
+    nodes.push(
+      labelNode(
+        titleX,
+        y,
+        [scale.guide?.title ?? legendTitle(scale, labels, fallback)],
+        theme,
+        14,
+      ),
+    );
+    y += 0.14;
+    const height = 0.28 / count;
+    const positions = Array.from(
+      { length: count },
+      (_, i): [number, number][] => {
+        const top = y + i * height;
+        return [[swatchX - 0.025, top], [swatchX - 0.025, top + height], [
+          swatchX + 0.025,
+          top + height,
+        ], [swatchX + 0.025, top]];
+      },
+    );
+    const values = Array.from(
+      { length: count },
+      (_, i) => lo + (hi - lo) * (i + 0.5) / count,
+    );
+    nodes.push(...positions.map((position, i) =>
+      node("Polygon", {
+        positions: position,
+        fill: scaleColorValue(scale, values[i]),
+        guideKind,
+      })
+    ));
+    nodes.push(
+      labelNode(labelX, y, [
+        String(Number(hi.toFixed(2))),
+        String(Number(lo.toFixed(2))),
+      ], theme),
+    );
+    y += 0.36;
+  };
+
+  continuousColorGuide(colorScale, "color");
+  continuousColorGuide(fillScale, "fill");
 
   if (sizeScale && !Array.isArray(sizeScale.domain[0])) {
     const [lo, hi] = sizeScale.domain as [number, number];
@@ -1148,12 +1472,12 @@ function legendNodes(
     nodes.push(
       labelNode(titleX, y, [legendTitle(sizeScale, labels, "size")], theme, 14),
     );
-    y -= 0.08;
+    y += 0.14;
     nodes.push(node("Point", {
       positions: values.map((
         _,
         i,
-      ): [number, number] => [swatchX, y - i * 0.07]),
+      ): [number, number] => [swatchX, y + i * 0.11]),
       sizes: values.map((v) => scaleSizeValue(sizeScale, v)),
       color: "#3b82f6",
     }));
@@ -1167,7 +1491,7 @@ function legendNodes(
         theme,
       ),
     );
-    y -= values.length * 0.07 + 0.08;
+    y += values.length * 0.11 + 0.12;
   }
 
   // Alpha is a mapped continuous aesthetic, so it receives the same compact
@@ -1177,20 +1501,38 @@ function legendNodes(
     const [lo, hi] = alphaScale.domain as [number, number];
     const values = hi > lo ? [lo, (lo + hi) / 2, hi] : [lo];
     nodes.push(
-      labelNode(titleX, y, [legendTitle(alphaScale, labels, "alpha")], theme, 14),
+      labelNode(
+        titleX,
+        y,
+        [legendTitle(alphaScale, labels, "alpha")],
+        theme,
+        14,
+      ),
     );
-    y -= 0.08;
+    y += 0.14;
     nodes.push(node("Point", {
-      positions: values.map((_, i): [number, number] => [swatchX, y - i * 0.07]),
+      positions: values.map((
+        _,
+        i,
+      ): [number, number] => [swatchX, y + i * 0.11]),
       size: 7,
       colors: values.map((value) => {
         const [rangeLo, rangeHi] = alphaScale.range as [number, number];
-        const alpha = hi === lo ? rangeHi : rangeLo + (rangeHi - rangeLo) * ((value - lo) / (hi - lo));
+        const alpha = hi === lo
+          ? rangeHi
+          : rangeLo + (rangeHi - rangeLo) * ((value - lo) / (hi - lo));
         return colorWithAlpha("#3b82f6", alpha);
       }),
     }));
-    nodes.push(labelNode(labelX, y, values.map((v) => String(Number(v.toFixed(2)))), theme));
-    y -= values.length * 0.07 + 0.08;
+    nodes.push(
+      labelNode(
+        labelX,
+        y,
+        values.map((v) => String(Number(v.toFixed(2)))),
+        theme,
+      ),
+    );
+    y += values.length * 0.11 + 0.12;
   }
 
   if (
@@ -1207,17 +1549,17 @@ function legendNodes(
         14,
       ),
     );
-    y -= 0.08;
+    y += 0.14;
     levels.forEach((level, i) => {
       nodes.push(node("Point", {
-        positions: [[swatchX, y - i * 0.07]],
+        positions: [[swatchX, y + i * 0.11]],
         shape: scaleShapeValue(shapeScale, level),
         color: "#3b82f6",
         size: 7,
       }));
     });
     nodes.push(labelNode(labelX, y, levels, theme));
-    y -= levels.length * 0.07 + 0.08;
+    y += levels.length * 0.11 + 0.12;
   }
 
   if (
@@ -1234,13 +1576,13 @@ function legendNodes(
         14,
       ),
     );
-    y -= 0.08;
+    y += 0.14;
     levels.forEach((level, i) => {
       const dash = scaleLinetypeValue(linetypeScale, level);
       nodes.push(node("Line", {
-        positions: [[swatchX - 0.025, y - i * 0.07], [
+        positions: [[swatchX - 0.025, y + i * 0.11], [
           swatchX + 0.025,
-          y - i * 0.07,
+          y + i * 0.11,
         ]],
         color: "#3b82f6",
         width: 2,
@@ -1248,7 +1590,7 @@ function legendNodes(
       }));
     });
     nodes.push(labelNode(labelX, y, levels, theme));
-    y -= levels.length * 0.07 + 0.08;
+    y += levels.length * 0.11 + 0.12;
   }
 
   if (linewidthScale && !Array.isArray(linewidthScale.domain[0])) {
@@ -1263,12 +1605,12 @@ function legendNodes(
         14,
       ),
     );
-    y -= 0.08;
+    y += 0.14;
     values.forEach((value, i) => {
       nodes.push(node("Line", {
-        positions: [[swatchX - 0.025, y - i * 0.07], [
+        positions: [[swatchX - 0.025, y + i * 0.11], [
           swatchX + 0.025,
-          y - i * 0.07,
+          y + i * 0.11,
         ]],
         color: "#3b82f6",
         width: scaleLinewidthValue(linewidthScale, value),
@@ -1314,21 +1656,223 @@ function plotLabelNodes(labels: PlotLabels, theme: Theme): RenderNode[] {
     );
   }
   if (labels.tag) {
-    nodes.push(labelNode(0.92, 0.92, [labels.tag], theme, theme.fontSize ?? 14));
+    nodes.push(
+      labelNode(0.92, 0.92, [labels.tag], theme, theme.fontSize ?? 14),
+    );
   }
   return nodes;
 }
 
-/** Panel-local axis titles. A nested Embedded keeps them in normalized layout
- * space without mixing them into the plot-level legend/title overlay. */
-function axisLabelOverlay(
+const DEFAULT_PANEL_BOUNDS: [number, number, number, number] = [
+  -0.72,
+  -0.66,
+  0.92,
+  0.68,
+];
+
+function axisTickValues(
+  scale: TrainedScale | undefined,
+  count = 5,
+): unknown[] {
+  if (!scale) return [];
+  if (scale.kind === "discrete") return scale.domain as string[];
+  const [lo, hi] = scale.domain as [number, number];
+  if (lo === hi) return [lo];
+  return linspace([lo, hi], count);
+}
+
+export interface TextExtent {
+  width: number;
+  height: number;
+}
+
+export type TextMeasurer = (
+  text: string,
+  size: number,
+  family?: string,
+) => TextExtent;
+
+function guideLayout(
+  width: number | undefined,
+  height: number | undefined,
+  measure: TextMeasurer | undefined,
+  theme: Theme,
+  labels: PlotLabels,
+  mapping: Aes,
+  xScale: TrainedScale | undefined,
+  yScale: TrainedScale | undefined,
+  legendScales: (TrainedScale | undefined)[],
+): { bounds: [number, number, number, number]; tickCount: number } {
+  const legendLabels = legendScales.flatMap((scale) => {
+    if (!scale || scale.guide?.kind === "none") return [];
+    const domain = scale.domain;
+    return [scale.name ?? scale.aes, ...domain.map(String)];
+  });
+  if (!width || !height || !measure) {
+    return {
+      bounds: legendLabels.length
+        ? [
+          DEFAULT_PANEL_BOUNDS[0],
+          DEFAULT_PANEL_BOUNDS[1],
+          0.58,
+          DEFAULT_PANEL_BOUNDS[3],
+        ]
+        : DEFAULT_PANEL_BOUNDS,
+      tickCount: 5,
+    };
+  }
+  const tickSize = Math.max((theme.fontSize ?? 13) - 2, 8);
+  const titleSize = theme.fontSize ?? 13;
+  const tickCount = Math.max(2, Math.min(8, Math.floor(width / 90)));
+  const rotated = (extent: TextExtent, angle: number): TextExtent => {
+    const radians = angle * Math.PI / 180;
+    return {
+      width: Math.abs(extent.width * Math.cos(radians)) +
+        Math.abs(extent.height * Math.sin(radians)),
+      height: Math.abs(extent.width * Math.sin(radians)) +
+        Math.abs(extent.height * Math.cos(radians)),
+    };
+  };
+  const yLabels = axisTickValues(yScale, tickCount).map(tickLabel);
+  const yTickWidth = Math.max(
+    0,
+    ...yLabels.map((label) =>
+      rotated(
+        measure(label, tickSize, theme.fontFamily),
+        theme.axisTextYAngle ?? 0,
+      ).width
+    ),
+  );
+  const xTickHeight = Math.max(
+    tickSize,
+    ...axisTickValues(xScale, tickCount).map((value) =>
+      rotated(
+        measure(tickLabel(value), tickSize, theme.fontFamily),
+        theme.axisTextXAngle ?? 0,
+      ).height
+    ),
+  );
+  const xTitle = labelFor(labels, "x", mapping.x ?? "x");
+  const yTitle = labelFor(labels, "y", mapping.y ?? "y");
+  const xTitleHeight = xTitle
+    ? measure(xTitle, titleSize, theme.fontFamily).height
+    : 0;
+  const yTitleBand = yTitle
+    ? rotated(
+      measure(yTitle, titleSize, theme.fontFamily),
+      theme.axisTitleYAngle ?? 0,
+    ).width
+    : 0;
+  const topPx = labels.title || labels.subtitle ? 56 : 16;
+  const leftPx = 14 + yTickWidth + yTitleBand;
+  const bottomPx = 18 + xTickHeight + xTitleHeight;
+  const legendWidth = Math.max(
+    0,
+    ...legendLabels.map((label) =>
+      measure(label, titleSize, theme.fontFamily).width
+    ),
+  );
+  const rightPx = legendLabels.length ? 44 + legendWidth : 16;
+  return {
+    bounds: [
+      -1 + 2 * leftPx / width,
+      -1 + 2 * topPx / height,
+      1 - 2 * rightPx / width,
+      1 - 2 * bottomPx / height,
+    ],
+    tickCount,
+  };
+}
+
+function axisTickPosition(
+  scale: TrainedScale | undefined,
+  value: unknown,
+  lo: number,
+  hi: number,
+): number {
+  if (!scale) return (lo + hi) / 2;
+  if (scale.kind === "discrete") {
+    const levels = scale.domain as string[];
+    const index = levels.indexOf(String(value));
+    return levels.length <= 1
+      ? (lo + hi) / 2
+      : lo + index / (levels.length - 1) * (hi - lo);
+  }
+  const [domainLo, domainHi] = scale.domain as [number, number];
+  return domainHi === domainLo
+    ? (lo + hi) / 2
+    : lo + (Number(value) - domainLo) / (domainHi - domainLo) * (hi - lo);
+}
+
+const tickLabel = (value: unknown): string =>
+  typeof value === "number"
+    ? String(Number(value.toPrecision(4)))
+    : String(value);
+
+/** Axis titles and ticks occupy the margins around the inset Cartesian panel. */
+function axisGuideOverlay(
   labels: PlotLabels,
   mapping: Aes,
   theme: Theme,
+  xScale: TrainedScale | undefined,
+  yScale: TrainedScale | undefined,
+  project: [PositionAxis, PositionAxis],
+  panelBounds: [number, number, number, number],
+  tickCount: number,
 ): RenderNode {
-  return node("Embedded", { normalize: true }, [
-    labelNode(0, -0.96, [labelFor(labels, "x", mapping.x ?? "x")], theme),
-    labelNode(-0.96, 0, [labelFor(labels, "y", mapping.y ?? "y")], theme),
+  const [left, bottom, right, top] = panelBounds;
+  const horizontal = project[0];
+  const vertical = project[1];
+  const horizontalScale = horizontal === "x" ? xScale : yScale;
+  const verticalScale = vertical === "y" ? yScale : xScale;
+  const horizontalValues = axisTickValues(horizontalScale, tickCount);
+  const verticalValues = axisTickValues(verticalScale, tickCount);
+  const color = theme.textColor ?? "#0b0b0b";
+  const family = theme.fontFamily ? { family: theme.fontFamily } : {};
+  // The chart already has one outer Embedded/Plot reconciler. Keep the guide
+  // labels as a transparent sibling group; nesting Embedded here creates a
+  // second virtual-layer/font layout and silently drops its glyph bindings.
+  return node("FacetPanel", {}, [
+    node("Label", {
+      positions: horizontalValues.map((value): [number, number] => [
+        axisTickPosition(horizontalScale, value, left, right),
+        top + (1 - top) * 0.2,
+      ]),
+      labels: horizontalValues.map(tickLabel),
+      color,
+      size: Math.max((theme.fontSize ?? 13) - 2, 8),
+      zBias: 2,
+      ...(theme.axisTextXAngle ? { angle: theme.axisTextXAngle } : {}),
+      ...family,
+    }),
+    node("Label", {
+      positions: verticalValues.map((value): [number, number] => [
+        left - (left + 1) * 0.2,
+        axisTickPosition(verticalScale, value, top, bottom),
+      ]),
+      labels: verticalValues.map(tickLabel),
+      color,
+      size: Math.max((theme.fontSize ?? 13) - 2, 8),
+      zBias: 2,
+      ...(theme.axisTextYAngle ? { angle: theme.axisTextYAngle } : {}),
+      ...family,
+    }),
+    labelNode(
+      (left + right) / 2,
+      top + (1 - top) * 0.7,
+      [labelFor(labels, horizontal, mapping[horizontal] ?? horizontal)],
+      theme,
+      undefined,
+      theme.axisTitleXAngle ?? 0,
+    ),
+    labelNode(
+      -1 + (left + 1) * 0.3,
+      (bottom + top) / 2,
+      [labelFor(labels, vertical, mapping[vertical] ?? vertical)],
+      theme,
+      undefined,
+      theme.axisTitleYAngle ?? 0,
+    ),
   ]);
 }
 
@@ -1439,6 +1983,12 @@ function buildFacetPanels(
 export interface CompileOptions {
   /** Enable runtime-only GPU products; source emission keeps portable CPU nodes. */
   resident?: boolean;
+  /** Concrete host geometry and glyph metrics for guide-aware panel layout. */
+  layout?: {
+    width: number;
+    height: number;
+    measureText: TextMeasurer;
+  };
 }
 
 export function compile(
@@ -1494,6 +2044,7 @@ export function compile(
   const shapeScale = scales.get("shape");
   const linetypeScale = scales.get("linetype");
   const linewidthScale = scales.get("linewidth");
+  const strokeScale = scales.get("stroke");
   let xDomain = numericRange(xScale) ?? [0, 1];
   let yDomain = numericRange(yScale) ?? [0, 1];
   for (const { layer, data, mapping } of allPerLayer) {
@@ -1529,6 +2080,12 @@ export function compile(
       yDomain = widenForTileAxis(yDomain, scaledY, height);
     }
   }
+  const xGuideScale = xScale?.kind === "continuous"
+    ? { ...xScale, domain: xDomain }
+    : xScale;
+  const yGuideScale = yScale?.kind === "continuous"
+    ? { ...yScale, domain: yDomain }
+    : yScale;
 
   // ④ coord → view component
   // "axes" is a swizzle string applied to Cartesian/Polar's output after the
@@ -1541,17 +2098,70 @@ export function compile(
   const axes = project[0] === "y" ? "yx" : "xy";
 
   const theme = spec.theme;
+  const { bounds: panelBounds, tickCount } = guideLayout(
+    options.layout?.width,
+    options.layout?.height,
+    options.layout?.measureText,
+    theme,
+    labels,
+    spec.mapping,
+    xGuideScale,
+    yGuideScale,
+    [
+      colorScale,
+      fillScale,
+      sizeScale,
+      alphaScale,
+      shapeScale,
+      linetypeScale,
+      linewidthScale,
+    ],
+  );
 
   /** Build one panel's Cartesian/Polar view node (guides + this panel's marks). */
   function buildPanel(perLayer: typeof allPerLayer): RenderNode {
+    const free = spec.facet.scales ?? "fixed";
+    const panelScales = free === "fixed" ? scales : trainScales(spec, perLayer);
+    const panelXScale = free === "free" || free === "free_x"
+      ? panelScales.get("x")
+      : xScale;
+    const panelYScale = free === "free" || free === "free_y"
+      ? panelScales.get("y")
+      : yScale;
+    let panelXDomain = free === "free" || free === "free_x"
+      ? numericRange(panelXScale) ?? xDomain
+      : xDomain;
+    let panelYDomain = free === "free" || free === "free_y"
+      ? numericRange(panelYScale) ?? yDomain
+      : yDomain;
+    for (const { layer, data, mapping } of perLayer) {
+      panelYDomain = widenForStackedBars(
+        panelYDomain,
+        layer,
+        mapping,
+        data,
+        panelXScale,
+        panelYScale,
+      );
+      if ((layer.geom === "bar" || layer.geom === "col") && mapping.x) {
+        const values = (valuesOf(data, mapping.x) ?? []).map((value) =>
+          scalePosition(panelXScale, value)
+        );
+        panelXDomain = widenForTileAxis(
+          panelXDomain,
+          values,
+          resolutionOf(panelXScale, values) * 0.9,
+        );
+      }
+    }
     // ⑤ geoms → marks
     const marks = perLayer.flatMap(({ layer, data, mapping, resident }) =>
       resident ? [node("ResidentHistogram", { ...resident })] : lowerLayer(
         layer,
         mapping,
         data,
-        xScale,
-        yScale,
+        panelXScale,
+        panelYScale,
         colorScale,
         fillScale,
         sizeScale,
@@ -1559,12 +2169,40 @@ export function compile(
         shapeScale,
         linetypeScale,
         linewidthScale,
+        strokeScale,
         theme,
-        xDomain,
-        yDomain,
+        panelXDomain,
+        panelYDomain,
       )
     );
-    const viewMarks = view === "Polar" ? marks.map(munchPolygonNode) : marks;
+    const thetaAxis: 0 | 1 = project[0] === "x" ? 0 : 1;
+    const thetaDomain = thetaAxis === 0 ? panelXDomain : panelYDomain;
+    const coordParams = spec.coord.params ?? {};
+    const requestedStart = typeof coordParams.start === "number"
+      ? coordParams.start
+      : 0;
+    const requestedEnd = typeof coordParams.end === "number"
+      ? coordParams.end
+      : requestedStart + Math.PI * 2;
+    // UseGPU Polar's view matrix treats the angular range like a centered
+    // Cartesian axis before bending it. A symmetric radian interval therefore
+    // keeps the circle centered; [0, 2π] translates it by half a viewport.
+    const thetaSpan = requestedEnd - requestedStart;
+    const thetaStart = -thetaSpan / 2;
+    const thetaEnd = thetaSpan / 2;
+    const polarMarks = view === "Polar"
+      ? marks.map((mark) =>
+        munchPolygonNode(
+          polarizeNode(mark, thetaAxis, thetaDomain, thetaStart, thetaEnd),
+        )
+      )
+      : marks;
+    const viewXDomain: [number, number] = view === "Polar" && thetaAxis === 0
+      ? [thetaStart, thetaEnd]
+      : panelXDomain;
+    const viewYDomain: [number, number] = view === "Polar" && thetaAxis === 1
+      ? [thetaStart, thetaEnd]
+      : panelYDomain;
 
     // ⑥ guides — background + grid + axes, themed per spec.theme.
     // A background is only drawn when theme.background is set (default: no
@@ -1583,10 +2221,13 @@ export function compile(
     const guides: RenderNode[] = [];
     if (theme.background) {
       guides.push(node("Polygon", {
-        positions: [[xDomain[0], yDomain[0]], [xDomain[0], yDomain[1]], [
-          xDomain[1],
-          yDomain[1],
-        ], [xDomain[1], yDomain[0]]],
+        positions: [[panelXDomain[0], panelYDomain[0]], [
+          panelXDomain[0],
+          panelYDomain[1],
+        ], [
+          panelXDomain[1],
+          panelYDomain[1],
+        ], [panelXDomain[1], panelYDomain[0]]],
         fill: theme.background,
         depth: 1,
         depthWrite: false,
@@ -1595,38 +2236,40 @@ export function compile(
     if (theme.grid !== false) {
       guides.push(
         view === "Polar"
-          ? polarGridLines(xDomain, yDomain, theme)
+          ? polarGridLines(viewXDomain, viewYDomain, theme)
           : node("Grid", {
             axes,
             width: theme.gridWidth ?? 1,
-            zBias: 1,
+            zBias: -1,
             ...(theme.gridColor ? { color: theme.gridColor } : {}),
           }),
       );
     }
-    guides.push(
-      node("Axis", {
-        axis: "x",
-        width: theme.axisWidth ?? 2,
-        zBias: 1,
-        ...(theme.axisColor ? { color: theme.axisColor } : {}),
-      }),
-      node("Axis", {
-        axis: "y",
-        width: theme.axisWidth ?? 2,
-        zBias: 1,
-        ...(theme.axisColor ? { color: theme.axisColor } : {}),
-      }),
-    );
+    if (theme.axes !== false) {
+      guides.push(
+        node("Axis", {
+          axis: "x",
+          width: theme.axisWidth ?? 2,
+          zBias: 0,
+          ...(theme.axisColor ? { color: theme.axisColor } : {}),
+        }),
+        node("Axis", {
+          axis: "y",
+          width: theme.axisWidth ?? 2,
+          zBias: 0,
+          ...(theme.axisColor ? { color: theme.axisColor } : {}),
+        }),
+      );
+    }
 
     return node(
       view,
       {
-        range: [xDomain, yDomain],
+        range: [viewXDomain, viewYDomain],
         axes,
-        ...(view === "Polar" ? spec.coord.params : {}),
+        ...coordParams,
       },
-      [...guides, ...viewMarks],
+      [...guides, ...polarMarks],
     );
   }
 
@@ -1642,16 +2285,42 @@ export function compile(
       : undefined;
     if (standaloneResident?.autoYDomain) {
       return node("Embedded", { normalize: true }, [
-        node("ResidentHistogramView", { ...standaloneResident, axes, theme }),
-        axisLabelOverlay(labels, spec.mapping, theme),
+        node("PanelViewport", { bounds: panelBounds }, [
+          node("ResidentHistogramView", { ...standaloneResident, axes, theme }),
+        ]),
+        axisGuideOverlay(
+          labels,
+          spec.mapping,
+          theme,
+          xGuideScale,
+          yGuideScale,
+          project,
+          panelBounds,
+          tickCount,
+        ),
         ...plotLabelNodes(labels, theme),
       ]);
     }
     return node("Embedded", { normalize: true }, [
       ...(view === "Polar"
         ? [node("RadialViewport", {}, [buildPanel(panelLayers[0])])]
-        : [buildPanel(panelLayers[0])]),
-      axisLabelOverlay(labels, spec.mapping, theme),
+        : [node("PanelViewport", { bounds: panelBounds }, [
+          buildPanel(panelLayers[0]),
+        ])]),
+      ...(view === "Cartesian"
+        ? [
+          axisGuideOverlay(
+            labels,
+            spec.mapping,
+            theme,
+            xGuideScale,
+            yGuideScale,
+            project,
+            panelBounds,
+            tickCount,
+          ),
+        ]
+        : []),
       ...plotLabelNodes(labels, theme),
       ...legendNodes(
         colorScale,
@@ -1663,6 +2332,7 @@ export function compile(
         linewidthScale,
         labels,
         theme,
+        panelBounds,
       ),
     ]);
   }
@@ -1685,19 +2355,20 @@ export function compile(
       columnValues(panel.data, column).length > 0
     );
     return (
-    node("FacetPanel", {}, [
-      ...(hasRows ? [buildPanel(panelLayers[i])] : []),
-      ...(panel.label
-        ? [
-          node("Label", {
-            positions: [[0, 0.92]],
-            labels: [panel.label],
-            color: theme.textColor ?? "#0b0b0b",
-            size: theme.fontSize ?? 13,
-          }),
-        ]
-        : []),
-    ])
+      node("FacetPanel", {}, [
+        ...(hasRows ? [buildPanel(panelLayers[i])] : []),
+        ...(panel.label
+          ? [
+            node("Label", {
+              positions: [[0, 0.92]],
+              labels: [panel.label],
+              color: theme.textColor ?? "#0b0b0b",
+              size: theme.fontSize ?? 13,
+              zBias: 2,
+            }),
+          ]
+          : []),
+      ])
     );
   });
   return node("Embedded", { normalize: true }, [
@@ -1705,7 +2376,16 @@ export function compile(
     // Axis titles are plot-level for fixed-scale facets. Mounting a second
     // normalized Embedded inside every cell can create zero-sized glyph
     // bindings on UseGPU's nested layout path.
-    axisLabelOverlay(labels, spec.mapping, theme),
+    axisGuideOverlay(
+      labels,
+      spec.mapping,
+      theme,
+      xGuideScale,
+      yGuideScale,
+      project,
+      panelBounds,
+      tickCount,
+    ),
     ...plotLabelNodes(labels, theme),
     ...legendNodes(
       colorScale,
@@ -1717,6 +2397,7 @@ export function compile(
       linewidthScale,
       labels,
       theme,
+      panelBounds,
     ),
   ]);
 }

@@ -10,6 +10,7 @@ import type {
   Facet,
   GeomKind,
   GGSpec,
+  Guide,
   Layer,
   PlotLabels,
   PositionAxis,
@@ -170,12 +171,41 @@ export const geomText = (opts: GeomOpts = {}): SpecPart =>
 export const geomLabel = (opts: GeomOpts = {}): SpecPart =>
   geom("text", "identity", opts);
 export const geomBoxplot = (opts: GeomOpts = {}): SpecPart =>
-  geom("boxplot", "identity", opts);
+  geom("boxplot", "boxplot", opts);
 export const geomErrorbar = (opts: GeomOpts = {}): SpecPart =>
   geom("errorbar", "identity", opts);
 /** Fits a trend line (stat_smooth) plus an optional SE ribbon; params: method ("lm", default), se (default true), n (fitted points, default 80), level. */
 export const geomSmooth = (opts: GeomOpts = {}): SpecPart =>
   geom("smooth", "smooth", opts);
+/** Kernel density estimate rendered as a line. */
+export const geomDensity = (opts: GeomOpts = {}): SpecPart =>
+  geom("line", "density", opts);
+/** Mirrored kernel-density polygon from raw y observations. */
+export const geomViolin = (opts: GeomOpts = {}): SpecPart =>
+  geom("violin", "ydensity", opts);
+/** Deterministic binned and stacked dots. */
+export const geomDotplot = (opts: GeomOpts = {}): SpecPart =>
+  geom("dotplot", "dotplot", opts);
+/** Rectangular 2D count bins, mapped to fill. */
+export const geomBin2d = (opts: GeomOpts = {}): SpecPart =>
+  geom("tile", "bin2d", opts);
+/** Hexagonal 2D count bins, mapped to fill. */
+export const geomHex = (opts: GeomOpts = {}): SpecPart =>
+  geom("hex", "binhex", opts);
+export const geomQq = (opts: GeomOpts = {}): SpecPart =>
+  geom("point", "qq", opts);
+export const geomQqLine = (opts: GeomOpts = {}): SpecPart =>
+  geom("line", "qqline", opts);
+export const statEllipse = (opts: GeomOpts = {}): SpecPart =>
+  geom("line", "ellipse", opts);
+export const statFunction = (
+  fun: (x: number) => number,
+  opts: GeomOpts = {},
+): SpecPart => geom("line", "function", { ...opts, fun });
+export const geomContour = (opts: GeomOpts = {}): SpecPart =>
+  geom("segment", "contour", opts);
+export const geomContourFilled = (opts: GeomOpts = {}): SpecPart =>
+  geom("tile", "contourfilled", opts);
 
 // --- annotations -----------------------------------------------------------
 //
@@ -388,6 +418,26 @@ export const scaleLinewidth = (opts: Partial<Scale> = {}): SpecPart => ({
   tag: "scale",
   value: { aes: "linewidth", kind: "continuous", ...opts },
 });
+/** Map a continuous data column onto point outline width. */
+export const scaleStroke = (opts: Partial<Scale> = {}): SpecPart => ({
+  tag: "scale",
+  value: { aes: "stroke", kind: "continuous", ...opts },
+});
+
+export const guideColourbar = (opts: Omit<Guide, "kind"> = {}): Guide => ({
+  kind: "colorbar",
+  ...opts,
+});
+export const guideColorbar = guideColourbar;
+export const guideColoursteps = (opts: Omit<Guide, "kind"> = {}): Guide => ({
+  kind: "colorsteps",
+  ...opts,
+});
+export const guideColorsteps = guideColoursteps;
+export const guideBins = (opts: Omit<Guide, "kind"> = {}): Guide => ({
+  kind: "bins",
+  ...opts,
+});
 
 // --- coords / facets / themes -------------------------------------------
 
@@ -406,19 +456,52 @@ export const coordPolar = (opts: Record<string, unknown> = {}): SpecPart => {
     value: { kind: "polar", params, ...(project ? { project } : {}) },
   };
 };
+/** Partial-circle/donut polar coordinate system (ggplot2's coord_radial). */
+export const coordRadial = (opts: {
+  start?: number;
+  end?: number;
+  donut?: number;
+  rotateAngle?: boolean;
+  theta?: PositionAxis;
+} = {}): SpecPart => {
+  const { theta, ...params } = opts;
+  return {
+    tag: "coord",
+    value: {
+      kind: "polar",
+      params: { start: 0, end: Math.PI * 2, donut: 0, ...params, radial: true },
+      ...(theta === "y"
+        ? { project: ["y", "x"] as [PositionAxis, PositionAxis] }
+        : {}),
+    },
+  };
+};
+/** Cartesian coordinates with a locked y:x unit aspect ratio. */
+export const coordFixed = (ratio = 1): SpecPart => ({
+  tag: "coord",
+  value: { kind: "cartesian", params: { ratio, fixed: true } },
+});
 /** Swaps rendered x/y axes without touching mark positions or trained domains (ggplot2's coord_flip()) — sugar for a cartesian coord with an x/y projection swap. */
 export const coordFlip = (): SpecPart => ({
   tag: "coord",
   value: { kind: "cartesian", project: ["y", "x"] },
 });
 
-export const facetWrap = (vars: string[], ncol?: number): SpecPart => ({
+export const facetWrap = (
+  vars: string[],
+  ncol?: number,
+  scales: Facet["scales"] = "fixed",
+): SpecPart => ({
   tag: "facet",
-  value: { kind: "wrap", rows: vars, ncol },
+  value: { kind: "wrap", rows: vars, ncol, scales },
 });
-export const facetGrid = (rows: string[], cols: string[]): SpecPart => ({
+export const facetGrid = (
+  rows: string[],
+  cols: string[],
+  scales: Facet["scales"] = "fixed",
+): SpecPart => ({
   tag: "facet",
-  value: { kind: "grid", rows, cols },
+  value: { kind: "grid", rows, cols, scales },
 });
 
 export const labels = (value: PlotLabels = {}): SpecPart => ({
@@ -439,6 +522,59 @@ export const themeClassic = (): SpecPart => ({
 export const themeGrey = (): SpecPart => ({
   tag: "theme",
   value: { name: "grey", background: "#ebebeb", gridColor: "#ffffff" },
+});
+export const themeBw = (): SpecPart => ({
+  tag: "theme",
+  value: {
+    name: "bw",
+    background: "#ffffff",
+    gridColor: "#d9d9d9",
+    axisColor: "#000000",
+  },
+});
+export const themeLinedraw = (): SpecPart => ({
+  tag: "theme",
+  value: {
+    name: "linedraw",
+    background: "#ffffff",
+    gridColor: "#d0d0d0",
+    gridWidth: 0.5,
+    axisColor: "#000000",
+    axisWidth: 0.5,
+  },
+});
+export const themeLight = (): SpecPart => ({
+  tag: "theme",
+  value: {
+    name: "light",
+    background: "#ffffff",
+    gridColor: "#dedede",
+    axisColor: "#8a8a8a",
+  },
+});
+export const themeDark = (): SpecPart => ({
+  tag: "theme",
+  value: {
+    name: "dark",
+    background: "#303030",
+    gridColor: "#666666",
+    axisColor: "#ffffff",
+    textColor: "#ffffff",
+  },
+});
+export const themeVoid = (): SpecPart => ({
+  tag: "theme",
+  value: { name: "void", background: null, grid: false, axes: false },
+});
+export const themeTest = (): SpecPart => ({
+  tag: "theme",
+  value: {
+    name: "test",
+    background: "#ffffff",
+    gridColor: "#c8c8c8",
+    axisColor: "#000000",
+    fontSize: 11,
+  },
 });
 /** Arbitrary theme overrides, mergeable on top of themeMinimal()/themeClassic()/themeGrey() — mirrors ggplot2's theme(...). */
 export const theme = (overrides: Partial<Theme> = {}): SpecPart => ({

@@ -3,7 +3,6 @@
 // A direct Use.GPU Face mark over resident histogram bar vertices.
 
 import * as Live from "@use-gpu/live";
-import * as Plot from "@use-gpu/plot";
 import * as Workbench from "@use-gpu/workbench";
 import type { LiveElement } from "@use-gpu/live";
 import type { ResidentHistogramProduct } from "./resident_live.tsx";
@@ -12,9 +11,11 @@ type UseOne = <T>(create: () => T, dependency?: unknown) => T;
 type UseSource = (definition: unknown, source: unknown) => unknown;
 type FaceComponent = (props: {
   positions: unknown;
+  count: number;
+  segments: unknown;
   chunks: readonly number[];
-  color?: string;
-  opacity?: number;
+  color?: number[];
+  side?: "front" | "back" | "both";
 }) => LiveElement;
 type CreateElement = (
   type: FaceComponent,
@@ -23,7 +24,13 @@ type CreateElement = (
 
 const useOne = (Live as unknown as { useOne: UseOne }).useOne;
 const useSource = (Workbench as unknown as { useSource: UseSource }).useSource;
-const Face = (Plot as unknown as { Face: FaceComponent }).Face;
+const useFaceSegmentsSource = (Workbench as unknown as {
+  useFaceSegmentsSource: (chunks: readonly number[]) => {
+    count: number;
+    segments: unknown;
+  };
+}).useFaceSegmentsSource;
+const Face = (Workbench as unknown as { FaceLayer: FaceComponent }).FaceLayer;
 const createElement =
   (Live as unknown as { createElement: CreateElement }).createElement;
 
@@ -34,10 +41,47 @@ export function histogramBarChunks(
   return Array.from({ length: product.bins * product.groupsCount }, () => 4);
 }
 
+/** Two triangles per four-corner resident bar, without cross-bin segments. */
+export function histogramBarIndices(
+  product: ResidentHistogramProduct,
+): Uint32Array {
+  const cells = product.bins * product.groupsCount;
+  const indices = new Uint32Array(cells * 6);
+  for (let cell = 0; cell < cells; cell++) {
+    const vertex = cell * 4;
+    const index = cell * 6;
+    indices.set([
+      vertex,
+      vertex + 1,
+      vertex + 2,
+      vertex,
+      vertex + 2,
+      vertex + 3,
+    ], index);
+  }
+  return indices;
+}
+
 export interface ResidentHistogramBarsProps {
   product: ResidentHistogramProduct;
   color?: string;
   opacity?: number;
+}
+
+function rgba(color = "#3b82f6", opacity = 1): number[] {
+  const hex = color.startsWith("#") ? color.slice(1) : color;
+  const value = Number.parseInt(
+    hex.length === 3
+      ? hex.split("").map((digit) => digit + digit).join("")
+      : hex.slice(0, 6),
+    16,
+  );
+  return [
+    ((value >> 16) & 255) / 255,
+    ((value >> 8) & 255) / 255,
+    (value & 255) / 255,
+    opacity,
+  ];
 }
 
 /**
@@ -56,5 +100,13 @@ export const ResidentHistogramBars = (
     () => histogramBarChunks(product),
     `${product.groupsCount}:${product.bins}`,
   );
-  return createElement(Face, { positions, chunks, color, opacity });
+  const { count, segments } = useFaceSegmentsSource(chunks);
+  return createElement(Face, {
+    positions,
+    count,
+    segments,
+    chunks,
+    color: rgba(color, opacity),
+    side: "both",
+  });
 };

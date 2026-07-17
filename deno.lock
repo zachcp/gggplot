@@ -16,6 +16,7 @@
     "npm:@use-gpu/shader@0.19": "0.19.0",
     "npm:@use-gpu/webgpu@0.19": "0.19.0",
     "npm:@use-gpu/wgsl-loader@0.19": "0.19.0_rollup@4.62.2",
+    "npm:@use-gpu/wgsl@0.19.0": "0.19.0",
     "npm:@use-gpu/workbench@0.19": "0.19.0",
     "npm:@vitejs/plugin-react@^5.2.0": "5.2.0_vite@7.3.6",
     "npm:gl-matrix@*": "3.4.4",
@@ -1043,6 +1044,7 @@
           "npm:@use-gpu/live@0.19",
           "npm:@use-gpu/plot@0.19",
           "npm:@use-gpu/scene@0.19",
+          "npm:@use-gpu/shader@0.19",
           "npm:@use-gpu/webgpu@0.19",
           "npm:@use-gpu/workbench@0.19",
           "npm:gl-matrix@^3.4.4"

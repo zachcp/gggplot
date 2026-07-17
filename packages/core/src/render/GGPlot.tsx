@@ -42,6 +42,35 @@ import {
 import type { ComponentName, RenderNode } from "../compile/rendertree.ts";
 import type { GGSpec } from "../ir/types.ts";
 import { compile } from "../compile/mod.ts";
+import { RotatedLabel } from "./rotated_label.tsx";
+
+interface TextMeasurementContext {
+  font: string;
+  measureText(text: string): TextMetrics;
+}
+
+let measurementContext: TextMeasurementContext | null | undefined;
+
+function measureText(text: string, size: number, family = "sans-serif") {
+  if (measurementContext === undefined) {
+    const canvas = typeof OffscreenCanvas !== "undefined"
+      ? new OffscreenCanvas(1, 1)
+      : typeof document !== "undefined"
+      ? document.createElement("canvas")
+      : null;
+    measurementContext = canvas?.getContext("2d") ?? null;
+  }
+  const context = measurementContext;
+  if (!context) return { width: text.length * size * 0.6, height: size };
+  context.font = `${size}px ${family}`;
+  const metrics = context.measureText(text);
+  return {
+    width: metrics.width,
+    height:
+      metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent ||
+      size,
+  };
+}
 
 export interface FacetGridProps {
   nrow: number;
@@ -55,6 +84,11 @@ export interface FacetGridProps {
 
 export interface FacetPanelProps {
   layout: [number, number, number, number];
+  children?: unknown[] | unknown;
+}
+
+export interface PanelViewportProps {
+  bounds: [number, number, number, number];
   children?: unknown[] | unknown;
 }
 
@@ -72,10 +106,22 @@ export const FacetPanel = ({ layout, children }: FacetPanelProps) => {
     return [
       [[-1, 1], [-1, 1], [-1, 1], [-1, 1]],
       mat4.fromValues(
-        width / 2, 0, 0, 0,
-        0, height / 2, 0, 0,
-        0, 0, 1, 0,
-        left + width / 2, top + height / 2, 0, 1,
+        width / 2,
+        0,
+        0,
+        0,
+        0,
+        height / 2,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        left + width / 2,
+        top + height / 2,
+        0,
+        1,
       ),
     ];
   }, [layout]);
@@ -91,8 +137,43 @@ export const FacetPanel = ({ layout, children }: FacetPanelProps) => {
   );
 };
 
+/** Convert normalized outer-chart bounds into an inset pixel-space panel. */
+export const PanelViewport = ({ bounds, children }: PanelViewportProps) => {
+  const [x0, y0, x1, y1] = bounds;
+  const matrix = useMemo(
+    () =>
+      mat4.fromValues(
+        (x1 - x0) / 2,
+        0,
+        0,
+        0,
+        0,
+        (y1 - y0) / 2,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        (x0 + x1) / 2,
+        (y0 + y1) / 2,
+        0,
+        1,
+      ),
+    [x0, y0, x1, y1],
+  );
+  const [context, combined] = useCombinedMatrixTransform(matrix);
+  return provide(
+    MatrixContext,
+    combined,
+    provide(TransformContext, context, children as never),
+  );
+};
+
 /** Keep a polar chart circular within a rectangular host canvas. */
-export const RadialViewport = ({ children }: { children?: unknown[] | unknown }) => {
+export const RadialViewport = (
+  { children }: { children?: unknown[] | unknown },
+) => {
   const [left, top, right, bottom] = useContext(LayoutContext) as [
     number,
     number,
@@ -101,12 +182,25 @@ export const RadialViewport = ({ children }: { children?: unknown[] | unknown })
   ];
   const aspect = (bottom - top) / (right - left);
   const matrix = useMemo(
-    () => new Float32Array([
-      aspect, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 1, 0,
-      0, 0, 0, 1,
-    ]),
+    () =>
+      new Float32Array([
+        aspect,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+      ]),
     [aspect],
   );
   const [context, combined] = useCombinedMatrixTransform(matrix);
@@ -167,13 +261,17 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
   Point,
   Line,
   Polygon,
-  Label,
+  Label: (props: Record<string, unknown>) =>
+    typeof props.angle === "number" && props.angle !== 0
+      ? createElement(RotatedLabel, props)
+      : createElement(Label, props),
   ResidentHistogram: ResidentHistogramMark,
   ResidentHistogramView,
   FacetGrid,
   // FacetGrid consumes this transparent tree grouping and mounts its own
   // layout-bearing FacetPanel around each group.
   FacetPanel: Fragment,
+  PanelViewport,
   RadialViewport,
 };
 
@@ -209,7 +307,20 @@ export interface GGPlotProps {
  * renders visibly when the host supplies real font sources.
  */
 export const GGPlot = ({ spec, fonts }: GGPlotProps) => {
-  const tree = compile(spec, { resident: true });
+  const [left, top, right, bottom] = useContext(LayoutContext) as [
+    number,
+    number,
+    number,
+    number,
+  ];
+  const tree = compile(spec, {
+    resident: true,
+    layout: {
+      width: Math.max(right - left, 1),
+      height: Math.max(bottom - top, 1),
+      measureText,
+    },
+  });
   // deno-lint-ignore no-explicit-any
   return createElement(FontLoader, { fonts }, renderTree(tree) as any);
 };

@@ -12,6 +12,7 @@ export {
 import {
   groupedCount1d,
   groupedHistogram1d,
+  groupedHistogram2d,
   groupedLinearRegression1d,
   groupedSummary1d,
 } from "@gggplot/reductions";
@@ -599,12 +600,630 @@ const statSummary: StatFn = (data, mapping, params) => {
   };
 };
 
+function quantile(sorted: number[], probability: number): number {
+  if (sorted.length === 1) return sorted[0];
+  const index = (sorted.length - 1) * probability;
+  const lower = Math.floor(index);
+  const fraction = index - lower;
+  return sorted[lower] +
+    (sorted[Math.min(lower + 1, sorted.length - 1)] - sorted[lower]) * fraction;
+}
+
+/** Compact CPU-reference boxplot product: one row per effective x/group. */
+const statBoxplot: StatFn = (data, mapping, params) => {
+  if (
+    mapping.lower && mapping.middle && mapping.upper && mapping.ymin &&
+    mapping.ymax
+  ) {
+    return { data, mapping };
+  }
+  const xCol = mapping.x;
+  const yCol = mapping.y;
+  if (!xCol || !yCol || !(xCol in data) || !(yCol in data)) {
+    return { data, mapping };
+  }
+  const groupCols = groupColumnsOf(mapping, data).filter((column) =>
+    column !== xCol
+  );
+  const groups = new Map<
+    string,
+    { x: unknown; values: number[]; group: Record<string, unknown> }
+  >();
+  const xs = columnValues(data, xCol);
+  const ys = numericColumnValues(data, yCol);
+  for (let i = 0; i < Math.min(xs.length, ys.length); i++) {
+    const y = ys[i];
+    if (typeof y !== "number" || !Number.isFinite(y)) continue;
+    const key = `${String(xs[i])}\0${groupKeyAt(data, groupCols, i)}`;
+    const entry = groups.get(key) ??
+      { x: xs[i], values: [], group: groupValuesAt(data, groupCols, i) };
+    entry.values.push(y);
+    groups.set(key, entry);
+  }
+  const rows = [...groups.values()].map((entry) => {
+    const values = entry.values.sort((a, b) => a - b);
+    const lower = quantile(values, 0.25);
+    const middle = quantile(values, 0.5);
+    const upper = quantile(values, 0.75);
+    const iqr = upper - lower;
+    const fenceLow = lower - ((params.coef as number) ?? 1.5) * iqr;
+    const fenceHigh = upper + ((params.coef as number) ?? 1.5) * iqr;
+    return {
+      entry,
+      lower,
+      middle,
+      upper,
+      ymin: values.find((value) => value >= fenceLow) ?? values[0],
+      ymax: [...values].reverse().find((value) => value <= fenceHigh) ??
+        values.at(-1)!,
+    };
+  });
+  return {
+    data: dataFrameFromColumns({
+      [xCol]: rows.map((row) => row.entry.x),
+      ...Object.fromEntries(
+        groupCols.map((column) => [
+          column,
+          rows.map((row) => row.entry.group[column]),
+        ]),
+      ),
+      lower: rows.map((row) => row.lower),
+      middle: rows.map((row) => row.middle),
+      upper: rows.map((row) => row.upper),
+      ymin: rows.map((row) => row.ymin),
+      ymax: rows.map((row) => row.ymax),
+    }),
+    mapping: {
+      ...mapping,
+      lower: "lower",
+      middle: "middle",
+      upper: "upper",
+      ymin: "ymin",
+      ymax: "ymax",
+    },
+  };
+};
+
+function densityGrid(
+  values: number[],
+  n: number,
+  bandwidth?: number,
+): { samples: number[]; density: number[] } {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return { samples: [], density: [] };
+  const lo = sorted[0], hi = sorted.at(-1)!;
+  const mean = sorted.reduce((sum, value) => sum + value, 0) / sorted.length;
+  const variance = sorted.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
+    Math.max(1, sorted.length - 1);
+  const bw = bandwidth ??
+    Math.max(
+      Number.EPSILON,
+      1.06 * Math.sqrt(variance) * sorted.length ** -0.2,
+    );
+  const samples = Array.from(
+    { length: n },
+    (_, i) => lo + (hi - lo || 1) * i / Math.max(1, n - 1),
+  );
+  const norm = sorted.length * bw * Math.sqrt(2 * Math.PI);
+  return {
+    samples,
+    density: samples.map((sample) =>
+      sorted.reduce(
+        (sum, value) => sum + Math.exp(-0.5 * ((sample - value) / bw) ** 2),
+        0,
+      ) / norm
+    ),
+  };
+}
+
+function statDensityAxis(axis: "x" | "y"): StatFn {
+  return (data, mapping, params) => {
+    const valueCol = mapping[axis];
+    if (!valueCol || !(valueCol in data)) return { data, mapping };
+    const groupCols = groupColumnsOf(mapping, data).filter((column) =>
+      column !== valueCol
+    );
+    const grouped = new Map<
+      string,
+      { rows: number[]; group: Record<string, unknown> }
+    >();
+    for (let i = 0; i < rowCount(data); i++) {
+      const key = groupKeyAt(data, groupCols, i);
+      const entry = grouped.get(key) ??
+        { rows: [], group: groupValuesAt(data, groupCols, i) };
+      entry.rows.push(i);
+      grouped.set(key, entry);
+    }
+    const out: Record<string, unknown[]> = { [valueCol]: [], density: [] };
+    for (const column of groupCols) out[column] = [];
+    for (const entry of grouped.values()) {
+      const raw = numericColumnValues(data, valueCol);
+      const grid = densityGrid(
+        entry.rows.map((row) => raw[row]).filter((value): value is number =>
+          typeof value === "number" && Number.isFinite(value)
+        ),
+        Math.max(2, (params.n as number) ?? 128),
+        params.bw as number | undefined,
+      );
+      out[valueCol].push(...grid.samples);
+      out.density.push(...grid.density);
+      for (const column of groupCols) {
+        out[column].push(...grid.samples.map(() => entry.group[column]));
+      }
+    }
+    return {
+      data: dataFrameFromColumns(out),
+      mapping: axis === "x"
+        ? { ...mapping, x: valueCol, y: "density", density: "density" }
+        : { ...mapping, y: valueCol, density: "density" },
+    };
+  };
+}
+
+const statDotplot: StatFn = (data, mapping, params) => {
+  const xCol = mapping.x;
+  if (!xCol || !(xCol in data)) return { data, mapping };
+  const raw = numericColumnValues(data, xCol);
+  const groupCols = groupColumnsOf(mapping, data).filter((column) =>
+    column !== xCol
+  );
+  const grouped = new Map<
+    string,
+    { values: number[]; group: Record<string, unknown> }
+  >();
+  for (let i = 0; i < raw.length; i++) {
+    const value = raw[i];
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    const key = groupKeyAt(data, groupCols, i);
+    const entry = grouped.get(key) ?? {
+      values: [],
+      group: groupValuesAt(data, groupCols, i),
+    };
+    entry.values.push(value);
+    grouped.set(key, entry);
+  }
+  const allValues = [...grouped.values()].flatMap((entry) => entry.values);
+  if (!allValues.length) return { data, mapping };
+  const bins = Math.max(1, (params.bins as number) ?? 30);
+  const lo = Math.min(...allValues), hi = Math.max(...allValues);
+  const width = (params.binwidth as number) ?? ((hi - lo || 1) / bins);
+  const centers: number[] = [];
+  const stacks: number[] = [];
+  const groupOut: Record<string, unknown[]> = Object.fromEntries(
+    groupCols.map((column) => [column, []]),
+  );
+  for (const entry of grouped.values()) {
+    const counts = new Map<number, number>();
+    for (const value of entry.values) {
+      const bin = Math.floor((value - lo) / width);
+      const stack = (counts.get(bin) ?? 0) + 1;
+      counts.set(bin, stack);
+      centers.push(lo + (bin + 0.5) * width);
+      stacks.push(stack);
+      for (const column of groupCols) {
+        groupOut[column].push(entry.group[column]);
+      }
+    }
+  }
+  return {
+    data: dataFrameFromColumns({
+      [xCol]: centers,
+      ...groupOut,
+      dotstack: stacks,
+    }),
+    mapping: { ...mapping, x: xCol, y: "dotstack" },
+  };
+};
+
+/** Dense grouped 2D count grid, compacted to observed cells for CPU marks. */
+const statBin2d: StatFn = (data, mapping, params) => {
+  const xCol = mapping.x;
+  const yCol = mapping.y;
+  if (!xCol || !yCol || !(xCol in data) || !(yCol in data)) {
+    return { data, mapping };
+  }
+  const xs = numericColumnValues(data, xCol);
+  const ys = numericColumnValues(data, yCol);
+  const finite = xs.flatMap((x, i) =>
+    typeof x === "number" && Number.isFinite(x) && typeof ys[i] === "number" &&
+      Number.isFinite(ys[i])
+      ? [i]
+      : []
+  );
+  if (!finite.length) return { data, mapping };
+  const xValues = finite.map((i) => xs[i] as number);
+  const yValues = finite.map((i) => ys[i] as number);
+  const groups = encodeEffectiveGroups(mapping, data, finite);
+  const xLo = Math.min(...xValues), xHi = Math.max(...xValues);
+  const yLo = Math.min(...yValues), yHi = Math.max(...yValues);
+  const bins = Math.max(1, (params.bins as number) ?? 30);
+  const xBins = Math.max(1, (params.xbins as number) ?? bins);
+  const yBins = Math.max(1, (params.ybins as number) ?? bins);
+  const product = groupedHistogram2d({
+    x: Float32Array.from(xValues),
+    y: Float32Array.from(yValues),
+    xLo,
+    xHi,
+    yLo,
+    yHi,
+    xBins,
+    yBins,
+    groupIds: groups.ids,
+    groupsCount: groups.values.length,
+  });
+  const out: Record<string, unknown[]> = {
+    [xCol]: [],
+    [yCol]: [],
+    count: [],
+    binwidthX: [],
+    binwidthY: [],
+  };
+  for (const column of groups.columns) out[column] = [];
+  for (let group = 0; group < product.groupsCount; group++) {
+    for (let y = 0; y < product.yBins; y++) {
+      for (let x = 0; x < product.xBins; x++) {
+        const count = product
+          .counts[
+            group * product.yBins * product.xBins + y * product.xBins + x
+          ];
+        if (!count) continue;
+        out[xCol].push(product.xCenters[x]);
+        out[yCol].push(product.yCenters[y]);
+        out.count.push(count);
+        out.binwidthX.push(xHi > xLo ? (xHi - xLo) / xBins : 1);
+        out.binwidthY.push(yHi > yLo ? (yHi - yLo) / yBins : 1);
+        for (const column of groups.columns) {
+          out[column].push(groups.values[group][column]);
+        }
+      }
+    }
+  }
+  return {
+    data: dataFrameFromColumns(out),
+    mapping: { ...mapping, x: xCol, y: yCol, fill: "count" },
+  };
+};
+
+// Peter J. Acklam's rational approximation of the standard-normal quantile.
+function normalQuantile(p: number): number {
+  const a = [
+    -39.6968302866538,
+    220.946098424521,
+    -275.928510446969,
+    138.357751867269,
+    -30.6647980661472,
+    2.50662827745924,
+  ];
+  const b = [
+    -54.4760987982241,
+    161.585836858041,
+    -155.698979859887,
+    66.8013118877197,
+    -13.2806815528857,
+  ];
+  const c = [
+    -0.00778489400243029,
+    -0.322396458041136,
+    -2.40075827716184,
+    -2.54973253934373,
+    4.37466414146497,
+    2.93816398269878,
+  ];
+  const d = [
+    0.00778469570904146,
+    0.32246712907004,
+    2.445134137143,
+    3.75440866190742,
+  ];
+  const low = 0.02425;
+  if (p < low) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q +
+      c[5]) /
+      ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+  if (p > 1 - low) return -normalQuantile(1 - p);
+  const q = p - 0.5;
+  const r = q * q;
+  return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) *
+    q /
+    (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+}
+
+function statQqProduct(line: boolean): StatFn {
+  return (data, mapping) => {
+    const sampleCol = mapping.y ?? mapping.x;
+    if (!sampleCol || !(sampleCol in data)) return { data, mapping };
+    const groupCols = groupColumnsOf(mapping, data).filter((column) =>
+      column !== sampleCol
+    );
+    const grouped = new Map<
+      string,
+      { sample: number[]; group: Record<string, unknown> }
+    >();
+    const raw = numericColumnValues(data, sampleCol);
+    for (let i = 0; i < raw.length; i++) {
+      const value = raw[i];
+      if (typeof value !== "number" || !Number.isFinite(value)) continue;
+      const key = groupKeyAt(data, groupCols, i);
+      const entry = grouped.get(key) ?? {
+        sample: [],
+        group: groupValuesAt(data, groupCols, i),
+      };
+      entry.sample.push(value);
+      grouped.set(key, entry);
+    }
+    const out: Record<string, unknown[]> = { qqx: [], qqy: [] };
+    for (const column of groupCols) out[column] = [];
+    for (const entry of grouped.values()) {
+      const sample = entry.sample.sort((a, b) => a - b);
+      const xs = line
+        ? [normalQuantile(0.25), normalQuantile(0.75)]
+        : sample.map((_, i) => normalQuantile((i + 0.5) / sample.length));
+      const ys = line
+        ? [quantile(sample, 0.25), quantile(sample, 0.75)]
+        : sample;
+      out.qqx.push(...xs);
+      out.qqy.push(...ys);
+      for (const column of groupCols) {
+        out[column].push(...xs.map(() => entry.group[column]));
+      }
+    }
+    if (out.qqx.length === 0) return { data, mapping };
+    return {
+      data: dataFrameFromColumns(out),
+      mapping: { ...mapping, x: "qqx", y: "qqy" },
+    };
+  };
+}
+
+const statEllipse: StatFn = (data, mapping, params) => {
+  const xCol = mapping.x, yCol = mapping.y;
+  if (!xCol || !yCol || !(xCol in data) || !(yCol in data)) {
+    return { data, mapping };
+  }
+  const groupCols = groupColumnsOf(mapping, data).filter((column) =>
+    column !== xCol && column !== yCol
+  );
+  const grouped = new Map<
+    string,
+    { pairs: [number, number][]; group: Record<string, unknown> }
+  >();
+  const xs = numericColumnValues(data, xCol);
+  const ys = numericColumnValues(data, yCol);
+  for (let i = 0; i < Math.min(xs.length, ys.length); i++) {
+    const x = xs[i], y = ys[i];
+    if (
+      typeof x !== "number" || !Number.isFinite(x) ||
+      typeof y !== "number" || !Number.isFinite(y)
+    ) continue;
+    const key = groupKeyAt(data, groupCols, i);
+    const entry = grouped.get(key) ?? {
+      pairs: [],
+      group: groupValuesAt(data, groupCols, i),
+    };
+    entry.pairs.push([x, y]);
+    grouped.set(key, entry);
+  }
+  const level = (params.level as number) ?? 0.95;
+  const radius = Math.sqrt(-2 * Math.log(Math.max(Number.EPSILON, 1 - level)));
+  const n = Math.max(4, (params.n as number) ?? 80);
+  const out: Record<string, unknown[]> = { ellipsex: [], ellipsey: [] };
+  for (const column of groupCols) out[column] = [];
+  for (const entry of grouped.values()) {
+    const pairs = entry.pairs;
+    if (pairs.length < 2) continue;
+    const mx = pairs.reduce((sum, [x]) => sum + x, 0) / pairs.length;
+    const my = pairs.reduce((sum, [, y]) => sum + y, 0) / pairs.length;
+    const denom = Math.max(1, pairs.length - 1);
+    const sxx = pairs.reduce((sum, [x]) => sum + (x - mx) ** 2, 0) / denom;
+    const syy = pairs.reduce((sum, [, y]) => sum + (y - my) ** 2, 0) / denom;
+    const sxy = pairs.reduce((sum, [x, y]) => sum + (x - mx) * (y - my), 0) /
+      denom;
+    const trace = sxx + syy;
+    const delta = Math.sqrt(Math.max(0, (sxx - syy) ** 2 + 4 * sxy ** 2));
+    const l1 = Math.max(0, (trace + delta) / 2);
+    const l2 = Math.max(0, (trace - delta) / 2);
+    const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+    const points = Array.from({ length: n + 1 }, (_, i) => {
+      const theta = 2 * Math.PI * i / n;
+      const u = radius * Math.sqrt(l1) * Math.cos(theta);
+      const v = radius * Math.sqrt(l2) * Math.sin(theta);
+      return [
+        mx + u * Math.cos(angle) - v * Math.sin(angle),
+        my + u * Math.sin(angle) + v * Math.cos(angle),
+      ];
+    });
+    out.ellipsex.push(...points.map(([x]) => x));
+    out.ellipsey.push(...points.map(([, y]) => y));
+    for (const column of groupCols) {
+      out[column].push(...points.map(() => entry.group[column]));
+    }
+  }
+  if (out.ellipsex.length === 0) return { data, mapping };
+  return {
+    data: dataFrameFromColumns(out),
+    mapping: { ...mapping, x: "ellipsex", y: "ellipsey" },
+  };
+};
+
+const statFunctionProduct: StatFn = (data, mapping, params) => {
+  const fun = params.fun;
+  if (typeof fun !== "function") return { data, mapping };
+  const sourceX = mapping.x && mapping.x in data
+    ? numericColumnValues(data, mapping.x).filter((value): value is number =>
+      typeof value === "number" && Number.isFinite(value)
+    )
+    : [];
+  const xlim = params.xlim as [number, number] | undefined;
+  const lo = xlim?.[0] ?? (sourceX.length ? Math.min(...sourceX) : 0);
+  const hi = xlim?.[1] ?? (sourceX.length ? Math.max(...sourceX) : 1);
+  const n = Math.max(2, (params.n as number) ?? 101);
+  const xs = Array.from({ length: n }, (_, i) => lo + (hi - lo) * i / (n - 1));
+  return {
+    data: dataFrameFromColumns({
+      functionx: xs,
+      functiony: xs.map((x) => (fun as (x: number) => number)(x)),
+    }),
+    mapping: { ...mapping, x: "functionx", y: "functiony" },
+  };
+};
+
+function contourBreaks(
+  values: number[],
+  params: Record<string, unknown>,
+): number[] {
+  const explicit = params.breaks;
+  if (Array.isArray(explicit)) {
+    return explicit.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  }
+  const lo = Math.min(...values), hi = Math.max(...values);
+  const bins = Math.max(1, (params.bins as number) ?? 10);
+  return Array.from(
+    { length: Math.max(0, bins - 1) },
+    (_, i) => lo + (hi - lo) * (i + 1) / bins,
+  );
+}
+
+const statContour: StatFn = (data, mapping, params) => {
+  const xCol = mapping.x, yCol = mapping.y, zCol = mapping.z ?? mapping.fill;
+  if (
+    !xCol || !yCol || !zCol || !(xCol in data) || !(yCol in data) ||
+    !(zCol in data)
+  ) return { data, mapping };
+  const xs = [
+    ...new Set(
+      numericColumnValues(data, xCol).filter((v): v is number =>
+        typeof v === "number" && Number.isFinite(v)
+      ),
+    ),
+  ].sort((a, b) => a - b);
+  const ys = [
+    ...new Set(
+      numericColumnValues(data, yCol).filter((v): v is number =>
+        typeof v === "number" && Number.isFinite(v)
+      ),
+    ),
+  ].sort((a, b) => a - b);
+  const rawX = numericColumnValues(data, xCol),
+    rawY = numericColumnValues(data, yCol),
+    rawZ = numericColumnValues(data, zCol);
+  const grid = new Map<string, number>();
+  const zValues: number[] = [];
+  for (let i = 0; i < Math.min(rawX.length, rawY.length, rawZ.length); i++) {
+    const x = rawX[i], y = rawY[i], z = rawZ[i];
+    if (
+      typeof x === "number" && typeof y === "number" && typeof z === "number" &&
+      Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)
+    ) {
+      grid.set(`${x}\0${y}`, z);
+      zValues.push(z);
+    }
+  }
+  const out = {
+    contourx: [] as number[],
+    contoury: [] as number[],
+    contourxend: [] as number[],
+    contouryend: [] as number[],
+    level: [] as number[],
+  };
+  const interpolate = (
+    a: [number, number, number],
+    b: [number, number, number],
+    level: number,
+  ): [number, number] => {
+    const t = a[2] === b[2] ? 0.5 : (level - a[2]) / (b[2] - a[2]);
+    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  };
+  for (const level of contourBreaks(zValues, params)) {
+    for (let yi = 0; yi < ys.length - 1; yi++) {
+      for (let xi = 0; xi < xs.length - 1; xi++) {
+        const corners: [number, number, number][] = [
+          [xs[xi], ys[yi], grid.get(`${xs[xi]}\0${ys[yi]}`) ?? NaN],
+          [xs[xi + 1], ys[yi], grid.get(`${xs[xi + 1]}\0${ys[yi]}`) ?? NaN],
+          [
+            xs[xi + 1],
+            ys[yi + 1],
+            grid.get(`${xs[xi + 1]}\0${ys[yi + 1]}`) ?? NaN,
+          ],
+          [xs[xi], ys[yi + 1], grid.get(`${xs[xi]}\0${ys[yi + 1]}`) ?? NaN],
+        ];
+        if (
+          corners.some((corner) => !Number.isFinite(corner[2]))
+        ) continue;
+        const points: [number, number][] = [];
+        for (const [a, b] of [[0, 1], [1, 2], [2, 3], [3, 0]] as const) {
+          if ((corners[a][2] < level) !== (corners[b][2] < level)) {
+            points.push(interpolate(corners[a], corners[b], level));
+          }
+        }
+        for (let i = 0; i + 1 < points.length; i += 2) {
+          out.contourx.push(points[i][0]);
+          out.contoury.push(points[i][1]);
+          out.contourxend.push(points[i + 1][0]);
+          out.contouryend.push(points[i + 1][1]);
+          out.level.push(level);
+        }
+      }
+    }
+  }
+  return {
+    data: dataFrameFromColumns(out),
+    mapping: {
+      ...mapping,
+      x: "contourx",
+      y: "contoury",
+      xend: "contourxend",
+      yend: "contouryend",
+      color: "level",
+    },
+  };
+};
+
+const statContourFilled: StatFn = (data, mapping, params) => {
+  const zCol = mapping.z ?? mapping.fill;
+  if (!zCol || !(zCol in data)) return { data, mapping };
+  const values = numericColumnValues(data, zCol);
+  const finite = values.filter((v): v is number =>
+    typeof v === "number" && Number.isFinite(v)
+  );
+  if (!finite.length) return { data, mapping };
+  const breaks = contourBreaks(finite, params);
+  const bands = values.map((value) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return Number.NaN;
+    return breaks.findIndex((limit) => value < limit) < 0
+      ? breaks.length
+      : breaks.findIndex((limit) => value < limit);
+  });
+  return {
+    data: dataFrameFromColumns({
+      ...Object.fromEntries(
+        Object.keys(data).map((column) => [column, columnValues(data, column)]),
+      ),
+      contourband: bands,
+    }),
+    mapping: { ...mapping, fill: "contourband" },
+  };
+};
+
 const REGISTRY: Record<Layer["stat"], StatFn> = {
   identity: statIdentity,
   count: statCount,
   bin: statBin,
   smooth: statSmooth,
   summary: statSummary,
+  boxplot: statBoxplot,
+  density: statDensityAxis("x"),
+  ydensity: statDensityAxis("y"),
+  dotplot: statDotplot,
+  bin2d: statBin2d,
+  binhex: statBin2d,
+  qq: statQqProduct(false),
+  qqline: statQqProduct(true),
+  ellipse: statEllipse,
+  function: statFunctionProduct,
+  contour: statContour,
+  contourfilled: statContourFilled,
 };
 
 export function applyStat(

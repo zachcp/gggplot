@@ -48,7 +48,13 @@ export function stackBars(
       const y1 = cum + b.y;
       cum = y1;
       out[i] = mode === "fill"
-        ? { ...b, y0: total > 0 ? y0 / total : 0, y1: total > 0 ? y1 / total : 0, xOffset: 0, width }
+        ? {
+          ...b,
+          y0: total > 0 ? y0 / total : 0,
+          y1: total > 0 ? y1 / total : 0,
+          xOffset: 0,
+          width,
+        }
         : { ...b, y0, y1, xOffset: 0, width };
     }
   }
@@ -69,6 +75,43 @@ export function dodgeBars(bars: PositionedBar[], width: number): PlacedBar[] {
     const xOffset = (gi - (n - 1) / 2) * dodgedWidth;
     return { ...b, y0: 0, y1: b.y, xOffset, width: dodgedWidth };
   });
+}
+
+/** Dodge bars using their own optional widths, preserving the total group span. */
+export function dodge2Bars(
+  bars: (PositionedBar & { width?: number })[],
+  defaultWidth: number,
+  padding = 0.1,
+): PlacedBar[] {
+  const byX = new Map<number, number[]>();
+  bars.forEach((bar, i) => {
+    const group = byX.get(bar.x) ?? [];
+    group.push(i);
+    byX.set(bar.x, group);
+  });
+  const out = new Array<PlacedBar>(bars.length);
+  for (const indices of byX.values()) {
+    const widths = indices.map((i) => bars[i].width ?? defaultWidth);
+    const total = widths.reduce((sum, width) => sum + width, 0) || defaultWidth;
+    let cursor = -total / 2;
+    indices.forEach((index, slot) => {
+      const width = widths[slot] * (1 - padding);
+      const center = cursor + widths[slot] / 2;
+      const bar = bars[index];
+      out[index] = { ...bar, y0: 0, y1: bar.y, xOffset: center, width };
+      cursor += widths[slot];
+    });
+  }
+  return out;
+}
+
+/** Apply a fixed offset to each point. */
+export function nudge(
+  positions: readonly [number, number][],
+  x = 0,
+  y = 0,
+): [number, number][] {
+  return positions.map(([px, py]) => [px + x, py + y]);
 }
 
 /** Nudge a scale-mapped value by uniform random noise in [-amount, amount]. */

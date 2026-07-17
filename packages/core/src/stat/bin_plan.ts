@@ -11,7 +11,9 @@ export interface StatBinPlanOptions {
  * Declarative product for the first resident statistic. The `count` grid is
  * retained as GPU-native `[group, bin]` data; it is not expanded into rows.
  */
-export function createStatBinProductPlan(options: StatBinPlanOptions): ProductPlan {
+export function createStatBinProductPlan(
+  options: StatBinPlanOptions,
+): ProductPlan {
   const inputs = [{ field: options.x, access: "read" as const }];
   if (options.group) inputs.push({ field: options.group, access: "read" });
   return {

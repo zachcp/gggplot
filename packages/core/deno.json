@@ -10,7 +10,8 @@
     "@use-gpu/plot": "npm:@use-gpu/plot@^0.19.0",
     "@use-gpu/workbench": "npm:@use-gpu/workbench@^0.19.0",
     "@use-gpu/webgpu": "npm:@use-gpu/webgpu@^0.19.0",
-    "@use-gpu/scene": "npm:@use-gpu/scene@^0.19.0"
+    "@use-gpu/scene": "npm:@use-gpu/scene@^0.19.0",
+    "@use-gpu/shader/wgsl": "npm:@use-gpu/shader@^0.19.0/wgsl"
   },
   "tasks": {
     "test": "deno test --allow-read --allow-write tests/"

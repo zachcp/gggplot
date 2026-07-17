@@ -20,6 +20,8 @@ export type ComponentName =
   | "ResidentHistogramView"
   /** One facet cell with a concrete viewport supplied by FacetGrid. */
   | "FacetPanel"
+  /** Insets a single plot panel while outer labels remain in chart space. */
+  | "PanelViewport"
   /** Centers a square viewport inside the host before a Polar view. */
   | "RadialViewport"
   /**

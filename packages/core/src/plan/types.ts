@@ -33,7 +33,11 @@ export type Scalar = string | number | boolean | null;
 export type Expression =
   | { kind: "field"; name: string }
   | { kind: "constant"; value: Scalar }
-  | { kind: "call"; op: "add" | "subtract" | "multiply" | "divide" | "negate"; args: Expression[] };
+  | {
+    kind: "call";
+    op: "add" | "subtract" | "multiply" | "divide" | "negate";
+    args: Expression[];
+  };
 
 /** Mapping phases are explicit, preventing accidental CPU callback capture. */
 export type MappingExpr =
@@ -42,7 +46,13 @@ export type MappingExpr =
   | { kind: "afterScale"; expression: Expression };
 
 export type SemanticMapping = Partial<Record<AesName, MappingExpr>>;
-export type ExtensionKind = "stat" | "geom" | "position" | "scale" | "coord" | "facet";
+export type ExtensionKind =
+  | "stat"
+  | "geom"
+  | "position"
+  | "scale"
+  | "coord"
+  | "facet";
 export type ExecutionScope = "plot" | "panel" | "group" | "row";
 export type MissingValuePolicy = "drop" | "propagate" | "zero" | "error";
 

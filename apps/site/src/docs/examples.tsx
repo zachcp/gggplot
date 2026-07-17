@@ -36,12 +36,9 @@ import {
   countData,
   facetedData,
   groupedData,
-  groupedHistogramData,
   heatmapData,
-  histogramData,
   rankedData,
   scatterData,
-  smoothData,
   summaryData,
   transformData,
 } from "./data/demo.ts";
@@ -89,45 +86,47 @@ export const discreteX: DocExample = {
     .build(),
 };
 
-const histogramStatBinSpec = ggplot(histogramData, { x: "value" })
-  .add(geomHistogram({ binwidth: 1, fill: "#3b82f6" }))
-  .build();
-
 export const histogramStatBin: DocExample = {
   id: "HistogramStatBin",
   title: "Histogram with stat_bin",
   description:
-    "A bar layer can request stat_bin to reduce raw continuous values into count bins.",
+    "The full 234-row mpg table shows stat_bin over engine displacement.",
   whatChanged:
-    "stat_bin replaces raw x values with bin centers and emits computed count and density columns. This literal-fill chart is eligible for the resident histogram path at runtime; the table is a CPU inspection preview.",
-  dataPreview: histogramData,
-  dslSource: `ggplot(data, { x: "value" })
-  .add(geomHistogram({ binwidth: 1, fill: "#3b82f6" }))
+    "This example selects the CPU-reference stat path so its computed bin geometry remains inspectable; 234 observations make the distribution shape and bin resolution visible.",
+  dslSource: `const data = await loadStaticDataset("mpg");
+ggplot(data, { x: "displ" })
+  .add(geomHistogram({ bins: 18, fill: "#3b82f6" }))
+  .add(theme({ resident: false }))
   .build();`,
-  computedDataPreview: previewStatRows(histogramStatBinSpec),
-  spec: histogramStatBinSpec,
+  dataSource: { id: "mpg" },
+  buildSpec: (data) =>
+    ggplot(data, { x: "displ" })
+      .add(geomHistogram({ bins: 18, fill: "#3b82f6" }))
+      .add(theme({ resident: false }))
+      .build(),
 };
-
-const groupedHistogramSpec = ggplot(groupedHistogramData, {
-  x: "value",
-  fill: "cohort",
-})
-  .add(geomHistogram({ binwidth: 1 }))
-  .build();
 
 export const groupedHistogram: DocExample = {
   id: "GroupedHistogram",
   title: "Grouped histogram",
   description:
-    "Mapped fill becomes an effective group before stat_bin, so counts are reduced per cohort.",
+    "All 150 iris measurements show species-specific sepal-length distributions.",
   whatChanged:
-    "The fill factor is encoded as group ids before groupedHistogram1d counts each cohort per bin. Mapped fills deliberately use the CPU-reference lowering today, because the resident histogram consumer does not yet carry per-group palette bindings.",
-  dataPreview: groupedHistogramData,
-  dslSource: `ggplot(data, { x: "value", fill: "cohort" })
-  .add(geomHistogram({ binwidth: 1 }))
+    "Species is encoded as a discrete fill group before stat_bin. The mapped-fill path remains the documented CPU reference while rendering all real observations.",
+  dslSource: `const data = await loadStaticDataset("iris");
+ggplot(data, { x: "Sepal.Length", fill: "Species" })
+  .add(geomHistogram({ bins: 16, opacity: 0.78 }))
   .build();`,
-  computedDataPreview: previewStatRows(groupedHistogramSpec),
-  spec: groupedHistogramSpec,
+  dataSource: { id: "iris" },
+  buildSpec: (data) =>
+    ggplot(data, { x: "Sepal.Length", fill: "Species" })
+      .add(geomHistogram({ bins: 16, opacity: 0.78 }))
+      .build(),
+};
+
+const categoricalGroupedData = {
+  ...groupedData,
+  cyl: groupedData.cyl.map((value) => `cyl ${value}`),
 };
 
 export const colorMapped: DocExample = {
@@ -137,12 +136,16 @@ export const colorMapped: DocExample = {
     "A discrete color aesthetic assigns the fixed categorical palette by factor level.",
   whatChanged:
     "Mapped color trains a discrete color scale and emits a legend; literal color params would skip both.",
-  dataPreview: groupedData,
+  dataPreview: categoricalGroupedData,
   dslSource: `ggplot(data, { x: "wt", y: "mpg", color: "cyl" })
   .add(geomPoint({ size: 8 }))
   .add(theme({ textColor: "#e8e8f0" }))
   .build();`,
-  spec: ggplot(groupedData, { x: "wt", y: "mpg", color: "cyl" })
+  spec: ggplot(categoricalGroupedData, {
+    x: "wt",
+    y: "mpg",
+    color: "cyl",
+  })
     .add(geomPoint({ size: 8 }))
     .add(theme({ textColor: "#e8e8f0" }))
     .build(),
@@ -272,12 +275,12 @@ export const themedChart: DocExample = {
   dataPreview: groupedData,
   dslSource: `ggplot(data, { x: "wt", y: "mpg", label: "cyl" })
   .add(geomPoint({ size: 8, color: "#1a1a2e" }))
-  .add(geomText({ size: 14 }))
+  .add(geomText({ size: 14, angle: -25 }))
   .add(theme({ background: "#241f45", gridColor: "#a78bfa", axisColor: "#4a3aa7", fontFamily: "Georgia" }))
   .build();`,
   spec: ggplot(groupedData, { x: "wt", y: "mpg", label: "cyl" })
     .add(geomPoint({ size: 8, color: "#1a1a2e" }))
-    .add(geomText({ size: 14 }))
+    .add(geomText({ size: 14, angle: -25 }))
     .add(
       theme({
         background: "#241f45",
@@ -343,29 +346,24 @@ export const summaryMean: DocExample = {
   spec: summaryMeanSpec,
 };
 
-const smoothLmSpec = ggplot(smoothData, {
-  x: "dose",
-  y: "response",
-  color: "cohort",
-})
-  .add(geomPoint({ size: 6 }))
-  .add(geomSmooth({ method: "lm", se: false, n: 5 }))
-  .build();
-
 export const smoothLm: DocExample = {
   id: "SmoothLm",
   title: "Grouped linear smooth",
   description:
-    "geomSmooth fits one linear model per mapped color group and emits fitted line rows.",
+    "geomSmooth fits drivetrain-specific trends across all 234 mpg vehicles.",
   whatChanged:
-    "Effective color groups feed groupedLinearRegression1d; the compiler lowers each fitted group to a Line.",
-  dataPreview: smoothData,
-  dslSource: `ggplot(data, { x: "dose", y: "response", color: "cohort" })
-  .add(geomPoint({ size: 6 }))
-  .add(geomSmooth({ method: "lm", se: false, n: 5 }))
+    "The discrete drivetrain color groups feed groupedLinearRegression1d; 80 fitted samples per group produce visibly smooth GPU lines over the real scatter.",
+  dslSource: `const data = await loadStaticDataset("mpg");
+ggplot(data, { x: "displ", y: "hwy", color: "drv" })
+  .add(geomPoint({ size: 3, opacity: 0.55 }))
+  .add(geomSmooth({ method: "lm", se: false, n: 80 }))
   .build();`,
-  computedDataPreview: previewStatRows(smoothLmSpec, 1),
-  spec: smoothLmSpec,
+  dataSource: { id: "mpg" },
+  buildSpec: (data) =>
+    ggplot(data, { x: "displ", y: "hwy", color: "drv" })
+      .add(geomPoint({ size: 3, opacity: 0.55 }))
+      .add(geomSmooth({ method: "lm", se: false, n: 80 }))
+      .build(),
 };
 
 export const tileHeatmap: DocExample = {

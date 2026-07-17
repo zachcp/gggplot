@@ -5,7 +5,8 @@ import type {
   ProductPlan,
 } from "./types.ts";
 
-const EXTENSION_ID = /^(?:@[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*:)?[a-z0-9][a-z0-9_-]*@[1-9][0-9]*$/;
+const EXTENSION_ID =
+  /^(?:@[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*:)?[a-z0-9][a-z0-9_-]*@[1-9][0-9]*$/;
 
 export function validateExpression(expression: Expression): string[] {
   if (expression.kind !== "call") return [];
@@ -23,7 +24,9 @@ export function validateMapping(mapping: MappingExpr): string[] {
   if (mapping.kind === "afterStat" && mapping.field.length === 0) {
     return ["afterStat mapping requires an output field"];
   }
-  return mapping.kind === "afterScale" ? validateExpression(mapping.expression) : [];
+  return mapping.kind === "afterScale"
+    ? validateExpression(mapping.expression)
+    : [];
 }
 
 export function validateProductPlan(plan: ProductPlan): string[] {
@@ -31,7 +34,9 @@ export function validateProductPlan(plan: ProductPlan): string[] {
   const errors: string[] = [];
   for (const field of plan.outputs) {
     if (!field.name) errors.push("output fields require a name");
-    if (names.has(field.name)) errors.push(`duplicate output field: ${field.name}`);
+    if (names.has(field.name)) {
+      errors.push(`duplicate output field: ${field.name}`);
+    }
     names.add(field.name);
     if (field.dimensions.length === 0 && field.shape !== "scalar") {
       errors.push(`non-scalar field ${field.name} requires dimensions`);
@@ -49,7 +54,9 @@ export function validateExtension(definition: ExtensionDefinition): string[] {
     : ["extension id must be versioned, for example @scope/pkg:stat_bin@1"];
   const names = new Set<string>();
   for (const field of definition.outputFields ?? []) {
-    if (names.has(field.name)) errors.push(`duplicate output field: ${field.name}`);
+    if (names.has(field.name)) {
+      errors.push(`duplicate output field: ${field.name}`);
+    }
     names.add(field.name);
   }
   for (const mapping of Object.values(definition.computedAes ?? {})) {
@@ -78,7 +85,9 @@ export function validateParameters(
     }
   }
   for (const [name, schema] of Object.entries(definition.parameters ?? {})) {
-    if (schema.required && !(name in parameters) && schema.default === undefined) {
+    if (
+      schema.required && !(name in parameters) && schema.default === undefined
+    ) {
       errors.push(`missing required parameter: ${name}`);
     }
   }

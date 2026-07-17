@@ -77,19 +77,19 @@ const AwaitSummaryView = (
     theme.grid === false ? null : createElement(Grid, {
       axes,
       width: theme.gridWidth ?? 1,
-      zBias: 1,
+      zBias: -1,
       ...(theme.gridColor ? { color: theme.gridColor } : {}),
     }),
     createElement(Axis, {
       axis: "x",
       width: theme.axisWidth ?? 2,
-      zBias: 1,
+      zBias: 0,
       ...(theme.axisColor ? { color: theme.axisColor } : {}),
     }),
     createElement(Axis, {
       axis: "y",
       width: theme.axisWidth ?? 2,
-      zBias: 1,
+      zBias: 0,
       ...(theme.axisColor ? { color: theme.axisColor } : {}),
     }),
     createElement(ResidentHistogramBars as unknown as Component, {

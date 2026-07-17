@@ -24,6 +24,9 @@ export type AesName =
   | "shape"
   | "linetype"
   | "linewidth"
+  | "stroke"
+  | "density"
+  | "z"
   | "group"
   | "label"
   | "xmin"
@@ -56,15 +59,43 @@ export type GeomKind =
   | "boxplot"
   | "errorbar"
   | "smooth"
+  | "violin"
+  | "dotplot"
+  | "hex"
   | "segment"
   | "rect"
   | "hline"
   | "vline"
   | "abline";
 
-export type StatKind = "identity" | "count" | "bin" | "smooth" | "summary";
+export type StatKind =
+  | "identity"
+  | "count"
+  | "bin"
+  | "smooth"
+  | "summary"
+  | "boxplot"
+  | "density"
+  | "ydensity"
+  | "dotplot"
+  | "bin2d"
+  | "binhex"
+  | "qq"
+  | "qqline"
+  | "ellipse"
+  | "function"
+  | "contour"
+  | "contourfilled";
 
-export type PositionKind = "identity" | "stack" | "dodge" | "jitter" | "fill";
+export type PositionKind =
+  | "identity"
+  | "stack"
+  | "dodge"
+  | "dodge2"
+  | "jitter"
+  | "jitterdodge"
+  | "nudge"
+  | "fill";
 
 /** One drawing layer: a geom + its stat + position + params/data overrides. */
 export interface Layer {
@@ -108,6 +139,13 @@ export interface Scale {
    * expansion(mult, add). Off (no padding) unless set.
    */
   expand?: [number, number];
+  guide?: Guide;
+}
+
+export interface Guide {
+  kind: "colorbar" | "colorsteps" | "bins" | "none";
+  title?: string;
+  bins?: number;
 }
 
 export type CoordKind = "cartesian" | "polar";
@@ -138,6 +176,8 @@ export interface Facet {
   rows?: string[];
   cols?: string[];
   ncol?: number;
+  /** Whether panels share position domains or train x/y independently. */
+  scales?: "fixed" | "free" | "free_x" | "free_y";
 }
 
 /**
@@ -161,6 +201,11 @@ export interface Theme {
   fontFamily?: string;
   fontSize?: number;
   textColor?: string;
+  /** Tick/title rotation in degrees. */
+  axisTextXAngle?: number;
+  axisTextYAngle?: number;
+  axisTitleXAngle?: number;
+  axisTitleYAngle?: number;
   [key: string]: unknown;
 }
 

@@ -10,6 +10,7 @@ import { AutoCanvas, WebGPU } from "@use-gpu/webgpu";
 import { FlatCamera, Pass } from "@use-gpu/workbench";
 import { GGPlot } from "@gggplot/core";
 import type { GGSpec } from "@gggplot/core";
+import { withSiteChartTheme } from "./chart_theme.ts";
 
 interface Props {
   canvas: HTMLCanvasElement;
@@ -17,7 +18,12 @@ interface Props {
 }
 
 const fonts = [
-  { family: "sans-serif", weight: 400, style: "normal", src: "/fonts/SFNS.ttf" },
+  {
+    family: "sans-serif",
+    weight: 400,
+    style: "normal",
+    src: "/fonts/SFNS.ttf",
+  },
   { family: "Georgia", weight: 400, style: "normal", src: "/fonts/SFNS.ttf" },
 ];
 
@@ -26,7 +32,7 @@ export const Scene = ({ canvas, spec }: Props) => (
     <AutoCanvas canvas={canvas} backgroundColor={[0.05, 0.05, 0.07, 1]}>
       <FlatCamera>
         <Pass>
-          <GGPlot spec={spec} fonts={fonts} />
+          <GGPlot spec={withSiteChartTheme(spec)} fonts={fonts} />
         </Pass>
       </FlatCamera>
     </AutoCanvas>

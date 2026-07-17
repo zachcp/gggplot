@@ -13,6 +13,8 @@ type UseOne = <T>(create: () => T, dependency?: unknown) => T;
 type UseSource = (definition: unknown, source: unknown) => unknown;
 type FaceComponent = (props: {
   positions: unknown;
+  count: number;
+  segments: unknown;
   chunks: readonly number[];
   color?: string;
   opacity?: number;
@@ -24,6 +26,12 @@ type CreateElement = (
 
 const useOne = (Live as unknown as { useOne: UseOne }).useOne;
 const useSource = (Workbench as unknown as { useSource: UseSource }).useSource;
+const useFaceSegmentsSource = (Workbench as unknown as {
+  useFaceSegmentsSource: (chunks: readonly number[]) => {
+    count: number;
+    segments: unknown;
+  };
+}).useFaceSegmentsSource;
 const Face = (Plot as unknown as { Face: FaceComponent }).Face;
 const createElement =
   (Live as unknown as { createElement: CreateElement }).createElement;
@@ -47,5 +55,13 @@ export const ResidentHistogramTiles = (
     () => histogramBarChunks(product),
     `${product.groupsCount}:${product.bins}`,
   );
-  return createElement(Face, { positions, chunks, color, opacity });
+  const { count, segments } = useFaceSegmentsSource(chunks);
+  return createElement(Face, {
+    positions,
+    count,
+    segments,
+    chunks,
+    color,
+    opacity,
+  });
 };

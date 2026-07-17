@@ -270,7 +270,7 @@ export function scaleShapeValue(
 /** Train a continuous size/alpha scale: data extent -> a visual [min,max] range. */
 function trainContinuousAuxScale(
   perLayer: { data: DataFrame; mapping: Aes }[],
-  aesName: "size" | "alpha" | "linewidth",
+  aesName: "size" | "alpha" | "linewidth" | "stroke",
   declared: Scale | undefined,
   defaultRange: [number, number],
 ): TrainedScale | undefined {
@@ -359,6 +359,7 @@ function trainColorScale(
       aes: aesName,
       kind: "color",
       name: declared?.name,
+      guide: declared?.guide,
       domain: levels,
       range: (declared?.range as string[] | undefined) ??
         categoricalRange(levels.length),
@@ -381,6 +382,7 @@ function trainColorScale(
     aes: aesName,
     kind: "color",
     name: declared?.name,
+    guide: declared?.guide,
     domain: (declared?.domain as [number, number]) ?? [lo, hi],
     range: declared?.range as string[] | undefined,
   };
@@ -462,12 +464,14 @@ export function trainScales(
     if (scale) trained.set(aesName, scale);
   }
 
-  for (const aesName of ["size", "alpha", "linewidth"] as const) {
+  for (const aesName of ["size", "alpha", "linewidth", "stroke"] as const) {
     const declared = spec.scales.find((s) => s.aes === aesName);
     const defaultRange = aesName === "size"
       ? DEFAULT_SIZE_RANGE
       : aesName === "alpha"
       ? DEFAULT_ALPHA_RANGE
+      : aesName === "stroke"
+      ? [0.5, 4] as [number, number]
       : DEFAULT_LINEWIDTH_RANGE;
     const scale = trainContinuousAuxScale(
       perLayer,

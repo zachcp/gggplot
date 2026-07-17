@@ -2,44 +2,67 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 // Headless pipeline: DSL → compile → emit, no UseGPU runtime import.
 import {
   annotate,
+  coordFixed,
   coordFlip,
   coordPolar,
+  coordRadial,
   facetGrid,
   facetWrap,
   geomAbline,
   geomArea,
   geomBar,
+  geomBin2d,
   geomBoxplot,
   geomCol,
+  geomContour,
+  geomContourFilled,
+  geomDensity,
+  geomDotplot,
   geomErrorbar,
+  geomHex,
   geomHistogram,
   geomHline,
   geomLine,
   geomPath,
   geomPoint,
   geomPolygon,
+  geomQq,
+  geomQqLine,
   geomRibbon,
   geomSmooth,
   geomText,
   geomTile,
+  geomViolin,
   geomVline,
   ggplot,
+  guideBins,
+  guideColourbar,
+  guideColoursteps,
   labels,
+  scaleAlpha,
   scaleColor,
   scaleColorGradient2,
   scaleColorViridis,
-  scaleAlpha,
   scaleFill,
   scaleLinetype,
   scaleLinewidth,
+  scaleStroke,
   scaleXContinuous,
   scaleXDiscrete,
   scaleXLog10,
   scaleXSqrt,
   scaleYContinuous,
+  statEllipse,
+  statFunction,
   theme,
+  themeBw,
   themeClassic,
+  themeDark,
   themeGrey,
+  themeLight,
+  themeLinedraw,
+  themeTest,
+  themeVoid,
 } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
@@ -57,7 +80,13 @@ import {
   scaleSizeValue,
   trainScales,
 } from "../src/scale/mod.ts";
-import { dodgeBars, jitter, stackBars } from "../src/position/mod.ts";
+import {
+  dodge2Bars,
+  dodgeBars,
+  jitter,
+  nudge,
+  stackBars,
+} from "../src/position/mod.ts";
 import type { DataFrame, Layer } from "../src/ir/types.ts";
 
 const data = { x: [0, 1, 2], y: [10, 20, 30] };
@@ -80,18 +109,21 @@ function findNodes(
   ];
 }
 
+function plotPanel(tree: RenderNode): RenderNode {
+  return findNodes(tree, "Cartesian")[0] ?? findNodes(tree, "Polar")[0];
+}
+
 Deno.test("compile builds an Embedded > Cartesian tree with a Point mark", () => {
   const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint()).build();
   const tree = compile(spec);
 
   assertEquals(tree.component, "Embedded");
   assertEquals(tree.props.normalize, true);
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   assertEquals(panel.component, "Cartesian");
   // range is trained from the data extents
-  assertEquals(panel.props.range, [[0, 2], [10, 30]]);
-
   const point = panel.children.find((c) => c.component === "Point");
+  assertEquals(panel.props.range, [[0, 2], [10, 30]]);
   assertEquals(point?.props.positions, [[0, 10], [1, 20], [2, 30]]);
 });
 
@@ -102,7 +134,7 @@ Deno.test("ggplot accepts row-store data at the DSL boundary", () => {
     { x: 2, y: 30 },
   ], { x: "x", y: "y" }).add(geomPoint()).build();
   const tree = compile(spec);
-  const point = tree.children[0].children.find((c) => c.component === "Point");
+  const point = plotPanel(tree).children.find((c) => c.component === "Point");
 
   assertEquals(point?.props.positions, [
     [0, 10],
@@ -121,7 +153,7 @@ Deno.test("layer data overrides accept row-store data at the DSL boundary", () =
     }),
   ).build();
   const tree = compile(spec);
-  const point = tree.children[0].children.find((c) => c.component === "Point");
+  const point = plotPanel(tree).children.find((c) => c.component === "Point");
 
   assertEquals(point?.props.positions, [[1, 2], [3, 4]]);
 });
@@ -139,7 +171,7 @@ Deno.test("ggplot asFactor override makes numeric-coded groups discrete", () => 
     columns: { cyl: asFactor(["4", "6"]) },
   }).add(geomLine()).build();
   const tree = compile(spec);
-  const lines = tree.children[0].children.filter((c) => c.component === "Line");
+  const lines = plotPanel(tree).children.filter((c) => c.component === "Line");
 
   assertEquals(lines.length, 2);
   assertEquals(lines.map((line) => line.props.positions), [
@@ -199,7 +231,7 @@ Deno.test("geom_line sorting preserves typed column metadata", () => {
     columns: { x: asNumeric(), cyl: asFactor(["4"]) },
   }).add(geomLine()).build();
   const tree = compile(spec);
-  const line = tree.children[0].children.find((c) => c.component === "Line");
+  const line = plotPanel(tree).children.find((c) => c.component === "Line");
 
   assertEquals(line?.props.positions, [[1, 10], [2, 20]]);
   assertEquals(line?.props.colors, [
@@ -214,7 +246,7 @@ Deno.test("compile trains a discrete x scale and maps categories to level indice
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   // levels default-sort alphabetically: a, b, c → domain span [0, 2]
   assertEquals(panel.props.range, [[0, 2], [10, 40]]);
 
@@ -229,7 +261,7 @@ Deno.test("scaleXDiscrete domain fixes explicit level ordering", () => {
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
   assertEquals(point?.props.positions, [[1, 1], [2, 2], [0, 3]]);
 });
@@ -305,15 +337,15 @@ Deno.test("geom_bar with fill stacks stat_count output by fill group and emits a
     .build();
   const tree = compile(spec);
 
-  const polygon = tree.children[0].children.find((c) =>
+  const polygons = plotPanel(tree).children.filter((c) =>
     c.component === "Polygon"
-  );
-  assertEquals(polygon?.props.positions, [
+  ).filter((node) => !node.props.guideKind);
+  assertEquals(polygons.map((polygon) => polygon.props.positions), [
     [[-0.45, 0], [-0.45, 2], [0.45, 2], [0.45, 0]],
     [[-0.45, 2], [-0.45, 3], [0.45, 3], [0.45, 2]],
     [[0.55, 0], [0.55, 2], [1.45, 2], [1.45, 0]],
   ]);
-  assertEquals(polygon?.props.fills, [
+  assertEquals(polygons.map((polygon) => polygon.props.fill), [
     CATEGORICAL_PALETTE[1],
     CATEGORICAL_PALETTE[0],
     CATEGORICAL_PALETTE[0],
@@ -361,7 +393,7 @@ Deno.test("geom_text renders a Label with per-point positions and text", () => {
   ).build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const label = panel.children.find((c) => c.component === "Label");
   assertEquals(label?.props.positions, [[0, 10], [1, 20]]);
   assertEquals(label?.props.labels, ["Alice", "Bob"]);
@@ -371,6 +403,31 @@ Deno.test("geom_text renders a Label with per-point positions and text", () => {
   assertStringIncludes(src, "Alice");
 });
 
+Deno.test("geom_text and axis guides preserve GPU-native text rotation", () => {
+  const tree = compile(
+    ggplot({ x: [1], y: [2], label: ["tilted"] }, {
+      x: "x",
+      y: "y",
+      label: "label",
+    }).add(
+      geomText({ angle: 35 }),
+      theme({ axisTextXAngle: 45, axisTitleYAngle: -90 }),
+    ).build(),
+  );
+  assertEquals(
+    findNodes(tree, "Label").some((n) => n.props.angle === 35),
+    true,
+  );
+  assertEquals(
+    findNodes(tree, "Label").some((n) => n.props.angle === 45),
+    true,
+  );
+  assertEquals(
+    findNodes(tree, "Label").some((n) => n.props.angle === -90),
+    true,
+  );
+});
+
 Deno.test("geom_errorbar renders a stem plus top/bottom caps per row", () => {
   const errData = { x: [0, 2], lo: [1, 3], hi: [5, 9] };
   const spec = ggplot(errData, { x: "x", ymin: "lo", ymax: "hi" }).add(
@@ -378,7 +435,7 @@ Deno.test("geom_errorbar renders a stem plus top/bottom caps per row", () => {
   ).build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const line = panel.children.find((c) => c.component === "Line");
   assertEquals(line?.props.positions, [
     [[-0.9, 5], [0.9, 5]],
@@ -404,7 +461,7 @@ Deno.test("geom_boxplot renders a box plus median/whisker/cap segments", () => {
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const box = panel.children.find((c) => c.component === "Polygon");
   assertEquals(box?.props.positions, [
     [[-0.375, 2], [-0.375, 8], [0.375, 8], [0.375, 2]],
@@ -420,24 +477,235 @@ Deno.test("geom_boxplot renders a box plus median/whisker/cap segments", () => {
   ]);
 });
 
+Deno.test("geom_boxplot computes compact grouped quartiles and whiskers from raw y", () => {
+  const raw = {
+    group: ["a", "a", "a", "a", "a", "b", "b", "b"],
+    y: [1, 2, 3, 4, 100, 10, 20, 30],
+  };
+  const layer: Layer = {
+    geom: "boxplot",
+    stat: "boxplot",
+    position: "identity",
+    params: {},
+  };
+  const result = applyStat(layer, { x: "group", y: "y" }, ingest(raw));
+  assertEquals(values(result.data, "lower"), [2, 15]);
+  assertEquals(values(result.data, "middle"), [3, 20]);
+  assertEquals(values(result.data, "upper"), [4, 25]);
+  assertEquals(values(result.data, "ymin"), [1, 10]);
+  assertEquals(values(result.data, "ymax"), [4, 30]);
+  assertEquals(
+    findNodes(
+      compile(ggplot(raw, { x: "group", y: "y" }).add(geomBoxplot()).build()),
+      "Polygon",
+    ).length > 0,
+    true,
+  );
+});
+
+Deno.test("density, violin, and dotplot stats emit dense deterministic products", () => {
+  const densityTree = compile(
+    ggplot({
+      value: [0, 1, 2, 10, 11, 12],
+      group: ["a", "a", "a", "b", "b", "b"],
+    }, { x: "value", color: "group" }).add(
+      geomDensity({ n: 16 }),
+    ).build(),
+  );
+  const densityLines = findNodes(densityTree, "Line").filter((node) =>
+    Array.isArray(node.props.positions) &&
+    (node.props.positions as unknown[]).length === 16
+  );
+  assertEquals(densityLines.length, 2);
+
+  const violinTree = compile(
+    ggplot({
+      group: ["a", "a", "a", "b", "b", "b"],
+      value: [0, 1, 2, 10, 11, 12],
+    }, { x: "group", y: "value", fill: "group" }).add(
+      geomViolin({ n: 12 }),
+    ).build(),
+  );
+  assertEquals(
+    findNodes(violinTree, "Polygon").filter((node) =>
+      (node.props.positions as unknown[])?.length === 24
+    ).length,
+    2,
+  );
+
+  const dots = findNodes(
+    compile(
+      ggplot({ value: [0.01, 0.02, 0.9] }, { x: "value" }).add(
+        geomDotplot({ binwidth: 0.1 }),
+      ).build(),
+    ),
+    "Point",
+  )[0];
+  assertEquals(dots.props.positions, [[0.060000000000000005, 1], [
+    0.060000000000000005,
+    2,
+  ], [
+    0.8600000000000001,
+    1,
+  ]]);
+});
+
+Deno.test("2D bin and hex products count observed cells and lower distinct topology", () => {
+  const points = { x: [0, 0.1, 0.9, 1], y: [0, 0.1, 0.9, 1] };
+  const tiles = findNodes(
+    compile(
+      ggplot(points, { x: "x", y: "y" }).add(geomBin2d({ bins: 2 })).build(),
+    ),
+    "Polygon",
+  ).filter((node) => !node.props.guideKind);
+  assertEquals(tiles.length, 2);
+  assertEquals((tiles[0].props.positions as unknown[]).length, 4);
+  assertEquals(
+    tiles.every((tile) => typeof tile.props.fill === "string"),
+    true,
+  );
+
+  const hexes = findNodes(
+    compile(
+      ggplot(points, { x: "x", y: "y" }).add(geomHex({ bins: 2 })).build(),
+    ),
+    "Polygon",
+  ).filter((node) => !node.props.guideKind);
+  assertEquals(hexes.length, 2);
+  assertEquals((hexes[0].props.positions as unknown[]).length, 6);
+});
+
+Deno.test("QQ, ellipse, and function stats emit deterministic line/point products", () => {
+  const qq = findNodes(
+    compile(
+      ggplot({ sample: [3, 1, 2] }, { y: "sample" }).add(geomQq()).build(),
+    ),
+    "Point",
+  )[0];
+  assertEquals((qq.props.positions as unknown[]).length, 3);
+  assertEquals(
+    (qq.props.positions as [number, number][]).map((point) => point[1]),
+    [1, 2, 3],
+  );
+
+  const qqLine = findNodes(
+    compile(
+      ggplot({ sample: [1, 2, 3, 4] }, { y: "sample" }).add(geomQqLine())
+        .build(),
+    ),
+    "Line",
+  ).find((node) => (node.props.positions as unknown[])?.length === 2)!;
+  assertEquals(
+    (qqLine.props.positions as [number, number][]).map((point) => point[1]),
+    [1.75, 3.25],
+  );
+
+  const ellipse = findNodes(
+    compile(
+      ggplot({ x: [0, 1, 2, 3], y: [0, 1, 1, 2] }, { x: "x", y: "y" }).add(
+        statEllipse({ n: 12 }),
+      ).build(),
+    ),
+    "Line",
+  ).find((node) => (node.props.positions as unknown[])?.length === 13)!;
+  assertEquals((ellipse.props.positions as unknown[]).length, 13);
+
+  const fn = findNodes(
+    compile(
+      ggplot({}, {}).add(statFunction((x) => x * x, { xlim: [-1, 1], n: 3 }))
+        .build(),
+    ),
+    "Line",
+  ).find((node) => (node.props.positions as unknown[])?.length === 3)!;
+  assertEquals(fn.props.positions, [[-1, 1], [0, 0], [1, 1]]);
+});
+
+Deno.test("QQ lines and ellipses preserve effective color groups", () => {
+  const groupedQq = findNodes(
+    compile(
+      ggplot(
+        {
+          sample: [1, 2, 3, 10, 20, 30],
+          group: ["a", "a", "a", "b", "b", "b"],
+        },
+        { y: "sample", color: "group" },
+      ).add(geomQqLine()).build(),
+    ),
+    "Line",
+  ).filter((node) => (node.props.positions as unknown[])?.length === 2);
+  assertEquals(groupedQq.length, 2);
+  assertEquals(
+    groupedQq.map((node) =>
+      (node.props.positions as [number, number][]).map((point) => point[1])
+    ),
+    [[1.5, 2.5], [15, 25]],
+  );
+
+  const groupedEllipse = findNodes(
+    compile(
+      ggplot(
+        {
+          x: [0, 1, 2, 10, 11, 12],
+          y: [0, 1, 0, 10, 11, 10],
+          group: ["a", "a", "a", "b", "b", "b"],
+        },
+        { x: "x", y: "y", color: "group" },
+      ).add(statEllipse({ n: 8 })).build(),
+    ),
+    "Line",
+  ).filter((node) => (node.props.positions as unknown[])?.length === 9);
+  assertEquals(groupedEllipse.length, 2);
+});
+
+Deno.test("contour stats extract isoline segments and stepped filled grid bands", () => {
+  const grid = {
+    x: [0, 1, 0, 1],
+    y: [0, 0, 1, 1],
+    z: [0, 1, 1, 2],
+  };
+  const contours = findNodes(
+    compile(
+      ggplot(grid, { x: "x", y: "y", z: "z" }).add(
+        geomContour({ breaks: [0.5, 1.5] }),
+      ).build(),
+    ),
+    "Line",
+  ).find((node) => (node.props.positions as unknown[])?.length === 2)!;
+  assertEquals((contours.props.positions as unknown[]).length, 2);
+
+  const filled = findNodes(
+    compile(
+      ggplot(grid, { x: "x", y: "y", z: "z" }).add(
+        geomContourFilled({ breaks: [0.5, 1.5] }),
+      ).build(),
+    ),
+    "Polygon",
+  ).filter((node) => !node.props.guideKind);
+  assertEquals(filled.length, 4);
+  assertEquals(new Set(filled.map((node) => node.props.fill)).size, 3);
+});
+
 Deno.test("geom_tile renders full-resolution cells centered on (x,y), widening the domain past the edge cells", () => {
   const gridData = { x: [0, 2, 0, 2], y: [0, 0, 1, 1], val: [1, 2, 3, 4] };
   const spec = ggplot(gridData, { x: "x", y: "y", fill: "val" }).add(geomTile())
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   // x resolution 2, y resolution 1 -> half-cell padding of 1 and 0.5 on each side
   assertEquals(panel.props.range, [[-1, 3], [-0.5, 1.5]]);
 
-  const polygon = panel.children.find((c) => c.component === "Polygon");
-  assertEquals(polygon?.props.positions, [
+  const polygons = panel.children.filter((c) => c.component === "Polygon");
+  assertEquals(polygons.map((polygon) => polygon.props.positions), [
     [[-1, -0.5], [-1, 0.5], [1, 0.5], [1, -0.5]],
     [[1, -0.5], [1, 0.5], [3, 0.5], [3, -0.5]],
     [[-1, 0.5], [-1, 1.5], [1, 1.5], [1, 0.5]],
     [[1, 0.5], [1, 1.5], [3, 1.5], [3, 0.5]],
   ]);
-  assertEquals((polygon?.props.fills as string[]).length, 4);
+  assertEquals(
+    polygons.every((polygon) => typeof polygon.props.fill === "string"),
+    true,
+  );
 });
 
 Deno.test("geom_tile cells tile edge-to-edge with no gaps by default", () => {
@@ -447,7 +715,7 @@ Deno.test("geom_tile cells tile edge-to-edge with no gaps by default", () => {
   ).build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const polygon = panel.children.find((c) => c.component === "Polygon");
   const loops = polygon?.props.positions as [number, number][][];
   // tile0's right edge (x=0.5) meets tile1's left edge (x=0.5) exactly
@@ -461,7 +729,7 @@ Deno.test("geom_polygon renders row-ordered x/y positions as a Polygon loop", ()
     .build();
   const tree = compile(spec);
 
-  const polygon = tree.children[0].children.find((c) =>
+  const polygon = plotPanel(tree).children.find((c) =>
     c.component === "Polygon"
   );
   assertEquals(polygon?.props.positions, [[0, 0], [1, 0], [0, 1]]);
@@ -483,7 +751,7 @@ Deno.test("geom_polygon splits grouped polygons and maps fill per group", () => 
     .build();
   const tree = compile(spec);
 
-  const polygon = tree.children[0].children.find((c) =>
+  const polygon = plotPanel(tree).children.find((c) =>
     c.component === "Polygon"
   );
   assertEquals(polygon?.props.positions, [
@@ -503,18 +771,18 @@ Deno.test("geom_col defaults to stacking bars sharing an x by their fill group",
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   // full bar widths widen x; stacked totals (8 at x=a, 6 at x=b) widen y
   assertEquals(panel.props.range, [[-0.45, 1.45], [0, 8]]);
 
-  const polygon = panel.children.find((c) => c.component === "Polygon");
-  assertEquals(polygon?.props.positions, [
+  const polygons = panel.children.filter((c) => c.component === "Polygon");
+  assertEquals(polygons.map((polygon) => polygon.props.positions), [
     [[-0.45, 0], [-0.45, 3], [0.45, 3], [0.45, 0]],
     [[-0.45, 3], [-0.45, 8], [0.45, 8], [0.45, 3]],
     [[0.55, 0], [0.55, 2], [1.45, 2], [1.45, 0]],
     [[0.55, 2], [0.55, 6], [1.45, 6], [1.45, 2]],
   ]);
-  assertEquals(polygon?.props.fills, [
+  assertEquals(polygons.map((polygon) => polygon.props.fill), [
     CATEGORICAL_PALETTE[0],
     CATEGORICAL_PALETTE[1],
     CATEGORICAL_PALETTE[0],
@@ -533,12 +801,12 @@ Deno.test("geom_col position=dodge places same-x bars side by side instead of st
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   // dodge doesn't stack, so the y range is just the raw row extent
-  assertEquals(panel.props.range, [[-0.45, 1.45], [2, 5]]);
+  assertEquals(panel.props.range, [[-0.45, 1.45], [0, 5]]);
 
-  const polygon = panel.children.find((c) => c.component === "Polygon");
-  assertEquals(polygon?.props.positions, [
+  const polygons = panel.children.filter((c) => c.component === "Polygon");
+  assertEquals(polygons.map((polygon) => polygon.props.positions), [
     [[-0.45, 0], [-0.45, 3], [0, 3], [0, 0]],
     [[0, 0], [0, 5], [0.45, 5], [0.45, 0]],
     [[0.55, 0], [0.55, 2], [1, 2], [1, 0]],
@@ -553,11 +821,11 @@ Deno.test("geom_col position=fill normalizes each x's stack to proportions summi
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   assertEquals(panel.props.range, [[-0.45, 0.45], [0, 1]]);
 
-  const polygon = panel.children.find((c) => c.component === "Polygon");
-  assertEquals(polygon?.props.positions, [
+  const polygons = panel.children.filter((c) => c.component === "Polygon");
+  assertEquals(polygons.map((polygon) => polygon.props.positions), [
     [[-0.45, 0], [-0.45, 0.25], [0.45, 0.25], [0.45, 0]],
     [[-0.45, 0.25], [-0.45, 1], [0.45, 1], [0.45, 0.25]],
   ]);
@@ -570,7 +838,7 @@ Deno.test("geom_point position=jitter nudges positions within the configured amo
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
   const positions = point?.props.positions as [number, number][];
   assertEquals(positions.length, 3);
@@ -580,12 +848,69 @@ Deno.test("geom_point position=jitter nudges positions within the configured amo
   }
 });
 
+Deno.test("new position products support variable-width dodge2 and fixed nudge", () => {
+  assertEquals(
+    dodge2Bars(
+      [
+        { x: 0, y: 2, groupKey: "a", width: 0.4 },
+        { x: 0, y: 3, groupKey: "b", width: 0.6 },
+      ],
+      1,
+      0,
+    ).map(({ xOffset, width }) => [xOffset, width]),
+    [
+      [-0.3, 0.4],
+      [0.2, 0.6],
+    ],
+  );
+  assertEquals(nudge([[1, 2], [3, 4]], 0.5, -1), [[1.5, 1], [3.5, 3]]);
+  const point = findNodes(
+    compile(
+      ggplot(data, { x: "x", y: "y" }).add(
+        geomPoint({ position: "nudge", x: 2, y: -3 }),
+      ).build(),
+    ),
+    "Point",
+  )[0];
+  assertEquals(point.props.positions, [[2, 7], [3, 17], [4, 27]]);
+
+  const dodge2 = findNodes(
+    compile(
+      ggplot(
+        { x: ["a", "a"], y: [2, 3], group: ["one", "two"] },
+        { x: "x", y: "y", fill: "group" },
+      ).add(geomCol({ position: "dodge2", width: 0.8, padding: 0 })).build(),
+    ),
+    "Polygon",
+  );
+  assertEquals(dodge2.length, 2);
+  assertEquals((dodge2[0].props.positions as unknown[]).length, 4);
+
+  const jitterDodged = findNodes(
+    compile(
+      ggplot(
+        { x: [0, 0], y: [1, 1], group: ["one", "two"] },
+        { x: "x", y: "y", color: "group" },
+      ).add(
+        geomPoint({
+          position: "jitterdodge",
+          dodgeWidth: 0.8,
+          jitterWidth: 0,
+          jitterHeight: 0,
+        }),
+      ).build(),
+    ),
+    "Point",
+  );
+  assertEquals(jitterDodged[0].props.positions, [[-0.2, 1], [0.2, 1]]);
+});
+
 Deno.test("coord_flip swizzles rendered axes to yx without touching mark positions or domains", () => {
   const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint(), coordFlip())
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   assertEquals(panel.component, "Cartesian");
   assertEquals(panel.props.axes, "yx");
   // range/positions stay in original x/y order -- only rendered axes swap
@@ -609,10 +934,42 @@ Deno.test("coord_polar selects the Polar view and passes through bend/on params"
   assertEquals(panel.component, "Polar");
   assertEquals(panel.props.bend, 0.5);
   assertEquals(panel.props.on, "y");
-  assertEquals(panel.props.range, [[0, 2], [10, 30]]);
+  assertEquals(panel.props.range, [[-Math.PI, Math.PI], [10, 30]]);
+  const point = panel.children.find((c) => c.component === "Point");
+  assertEquals(point?.props.positions, [
+    [-Math.PI, 10],
+    [0, 20],
+    [Math.PI, 30],
+  ]);
   const src = emitSource(tree, "CircularPolar");
   assertStringIncludes(src, "const RadialViewport");
   assertStringIncludes(src, "useCombinedMatrixTransform");
+});
+
+Deno.test("coord_radial and coord_fixed preserve their declarative view transforms", () => {
+  const radial = compile(
+    ggplot(data, { x: "x", y: "y" }).add(
+      geomPoint(),
+      coordRadial({ end: Math.PI, donut: 0.3, rotateAngle: true }),
+    ).build(),
+  ).children[0].children[0];
+  assertEquals(radial.component, "Polar");
+  assertEquals(radial.props.end, Math.PI);
+  assertEquals(radial.props.donut, 0.3);
+  assertEquals(radial.props.rotateAngle, true);
+
+  const fixedTree = compile(
+    ggplot(data, { x: "x", y: "y" }).add(
+      geomPoint(),
+      coordFixed(2),
+    ).build(),
+  );
+  const fixed = plotPanel(fixedTree);
+  assertEquals(fixedTree.children[0].component, "PanelViewport");
+  assertEquals(fixedTree.children[0].props.bounds, [-0.72, -0.66, 0.92, 0.68]);
+  assertEquals(fixed.component, "Cartesian");
+  assertEquals(fixed.props.ratio, 2);
+  assertEquals(fixed.props.fixed, true);
 });
 
 Deno.test("coord_polar theta:'y' reassigns the angle to y, same projection swap as coord_flip", () => {
@@ -625,10 +982,13 @@ Deno.test("coord_polar theta:'y' reassigns the angle to y, same projection swap 
   assertEquals(panel.component, "Polar");
   assertEquals(panel.props.axes, "yx");
   assertEquals(panel.props.bend, 0.5);
-  // reassigning theta doesn't touch mark positions or the trained domain
-  assertEquals(panel.props.range, [[0, 2], [10, 30]]);
+  assertEquals(panel.props.range, [[0, 2], [-Math.PI, Math.PI]]);
   const point = panel.children.find((c) => c.component === "Point");
-  assertEquals(point?.props.positions, [[0, 10], [1, 20], [2, 30]]);
+  assertEquals(point?.props.positions, [
+    [0, -Math.PI],
+    [1, 0],
+    [2, Math.PI],
+  ]);
 });
 
 Deno.test("coord_polar munches Polygon edges for curved bar wedges", () => {
@@ -637,15 +997,16 @@ Deno.test("coord_polar munches Polygon edges for curved bar wedges", () => {
     .build();
   const tree = compile(spec);
   const panel = tree.children[0].children[0];
-  const polygon = panel.children.find((c) => c.component === "Polygon");
-
-  const positions = polygon?.props.positions as [number, number][][];
+  const polygons = panel.children.filter((c) => c.component === "Polygon");
+  const positions = polygons.map((polygon) =>
+    polygon.props.positions as [number, number][]
+  );
   assertEquals(panel.component, "Polar");
   assertEquals(positions.length, 2);
   // geom_col rectangles have 4 edges; munching inserts 16 points per edge.
   assertEquals(positions[0].length, 64);
-  assertEquals(positions[0][0], [-0.45, 0]);
-  assertEquals(positions[0][16], [-0.45, 2]);
+  assertEquals(positions[0][0], [-Math.PI, 0]);
+  assertEquals(positions[0][16], [-Math.PI, 2]);
 });
 
 Deno.test("coord_polar uses explicit Line rings/spokes instead of Cartesian Grid", () => {
@@ -658,7 +1019,7 @@ Deno.test("coord_polar uses explicit Line rings/spokes instead of Cartesian Grid
   assertEquals(panel.children.find((c) => c.component === "Grid"), undefined);
   const grid = panel.children.find((c) => c.component === "Line");
   const positions = grid?.props.positions as [number, number][][];
-  assertEquals(grid?.props.zBias, 1);
+  assertEquals(grid?.props.zBias, -1);
   assertEquals(positions.length, 16);
   assertEquals(positions[0].length, 96);
   assertEquals(positions[4].length, 32);
@@ -669,16 +1030,12 @@ Deno.test("geom_line sorts by x before connecting, unlike geom_path", () => {
 
   const lineSpec = ggplot(unsorted, { x: "x", y: "y" }).add(geomLine()).build();
   const lineTree = compile(lineSpec);
-  const line = lineTree.children[0].children.find((c) =>
-    c.component === "Line"
-  );
+  const line = plotPanel(lineTree).children.find((c) => c.component === "Line");
   assertEquals(line?.props.positions, [[0, 10], [1, 20], [2, 30]]);
 
   const pathSpec = ggplot(unsorted, { x: "x", y: "y" }).add(geomPath()).build();
   const pathTree = compile(pathSpec);
-  const path = pathTree.children[0].children.find((c) =>
-    c.component === "Line"
-  );
+  const path = plotPanel(pathTree).children.find((c) => c.component === "Line");
   assertEquals(path?.props.positions, [[2, 30], [0, 10], [1, 20]]);
 });
 
@@ -692,7 +1049,7 @@ Deno.test("group aesthetic splits geom_line into one connected Line per group", 
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const lines = panel.children.filter((c) => c.component === "Line");
   assertEquals(lines.length, 2);
   assertEquals(lines.map((l) => l.props.positions), [
@@ -717,7 +1074,7 @@ Deno.test("linetype splits connected lines and lowers a compact dash binding per
     linewidth: "thickness",
   }).add(geomLine()).build();
   const tree = compile(spec);
-  const lines = tree.children[0].children.filter((c) => c.component === "Line");
+  const lines = plotPanel(tree).children.filter((c) => c.component === "Line");
 
   assertEquals(lines.length, 2);
   // Level 0 is solid (no dash property); level 1 gets the second dash
@@ -737,7 +1094,7 @@ Deno.test("literal linetype and linewidth lower on ordinary and reference Line m
       geomHline({ yintercept: 20, linetype: "dotted", linewidth: 4 }),
     )
     .build();
-  const lines = compile(spec).children[0].children.filter((c) =>
+  const lines = plotPanel(compile(spec)).children.filter((c) =>
     c.component === "Line"
   );
 
@@ -784,7 +1141,7 @@ Deno.test("color aesthetic alone splits geom_line into one connected Line per gr
     .build();
   const tree = compile(spec);
 
-  const lines = tree.children[0].children.filter((c) => c.component === "Line");
+  const lines = plotPanel(tree).children.filter((c) => c.component === "Line");
   assertEquals(lines.length, 2);
   assertEquals(lines.map((l) => l.props.positions), [
     [[0, 1], [1, 2], [2, 3]],
@@ -803,7 +1160,7 @@ Deno.test("inheritAes: false ignores the plot's top-level mapping", () => {
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
   assertEquals(point?.props.positions, [[100, 1], [200, 2]]);
 });
@@ -817,7 +1174,7 @@ Deno.test("annotate('segment', ...) renders a literal Line ignoring the plot's m
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const line = panel.children.find((c) => c.component === "Line");
   assertEquals(line?.props.positions, [[[0, 10], [2, 30]]]);
   assertEquals(line?.props.color, "#ff0000");
@@ -838,7 +1195,7 @@ Deno.test("annotate('rect', ...) renders a literal rectangle Polygon", () => {
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const polygon = panel.children.find((c) => c.component === "Polygon");
   assertEquals(polygon?.props.positions, [[[0, 10], [0, 20], [1, 20], [
     1,
@@ -853,7 +1210,7 @@ Deno.test("annotate('text', ...) places a literal Label independent of the plot'
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const label = panel.children.find((c) => c.component === "Label");
   assertEquals(label?.props.positions, [[1, 25]]);
   assertEquals(label?.props.labels, ["peak"]);
@@ -865,7 +1222,7 @@ Deno.test("geom_hline draws a full-width reference line at each yintercept", () 
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const [xDomain] = panel.props.range as [[number, number], [number, number]];
   const line = panel.children.find((c) => c.component === "Line");
   assertEquals(line?.props.positions, [
@@ -881,7 +1238,7 @@ Deno.test("geom_vline draws a full-height reference line at xintercept", () => {
   ).build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const [, yDomain] = panel.props.range as [[number, number], [number, number]];
   const line = panel.children.find((c) => c.component === "Line");
   assertEquals(line?.props.positions, [[[1, yDomain[0]], [1, yDomain[1]]]]);
@@ -894,7 +1251,7 @@ Deno.test("geom_abline draws y = slope*x + intercept spanning the panel's x doma
   ).build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const [xDomain] = panel.props.range as [[number, number], [number, number]];
   const line = panel.children.find((c) => c.component === "Line");
   assertEquals(line?.props.positions, [
@@ -929,7 +1286,7 @@ Deno.test("geom_area fills a closed band from a 0 baseline to y", () => {
   const spec = ggplot(areaData, { x: "x", y: "y" }).add(geomArea()).build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const polygon = panel.children.find((c) => c.component === "Polygon");
   assertEquals(polygon?.props.positions, [
     [0, 10],
@@ -948,7 +1305,7 @@ Deno.test("geom_ribbon fills a closed band between ymin and ymax", () => {
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const polygon = panel.children.find((c) => c.component === "Polygon");
   assertEquals(polygon?.props.positions, [
     [0, 10],
@@ -967,7 +1324,7 @@ Deno.test("geom_ribbon's ymin/ymax widen the trained y domain beyond a plain y m
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   assertEquals(panel.props.range, [[0, 2], [5, 20]]);
 });
 
@@ -979,7 +1336,7 @@ Deno.test("scaleXLog10 transforms both the trained domain and mark positions", (
   ).build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   assertEquals(panel.props.range, [[0, 2], [1, 3]]);
 
   const point = panel.children.find((c) => c.component === "Point");
@@ -994,7 +1351,7 @@ Deno.test("scaleXSqrt transforms both the trained domain and mark positions", ()
   ).build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   assertEquals(panel.props.range, [[0, 3], [1, 3]]);
 
   const point = panel.children.find((c) => c.component === "Point");
@@ -1008,7 +1365,7 @@ Deno.test("explicit scale domain overrides the auto-trained data extent (user li
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   assertEquals(panel.props.range, [[0, 100], [10, 30]]);
   // positions stay at their real data values regardless of the view's limits
   const point = panel.children.find((c) => c.component === "Point");
@@ -1022,7 +1379,7 @@ Deno.test("scale expand pads the trained domain by a multiplicative + additive a
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   // span 10 * 0.1 = 1, + additive 1 = 2 padding on each side
   assertEquals(panel.props.range, [[-2, 12], [0, 1]]);
 });
@@ -1034,7 +1391,7 @@ Deno.test("continuous size scale maps mark radius via a mapped size column", () 
   ).build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
   // default size range [1,6] over domain [0,10]: 0->1, 5->3.5, 10->6
   assertEquals(point?.props.sizes, [1, 3.5, 6]);
@@ -1153,7 +1510,7 @@ Deno.test("shape mapping splits point marks and emits a shape legend", () => {
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const markPoints = panel.children.filter((c) => c.component === "Point");
   assertEquals(markPoints.map((p) => p.props.shape), ["square", "circle"]);
 
@@ -1172,32 +1529,115 @@ Deno.test("geomPoint alpha param passes through as a flat opacity", () => {
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
   assertEquals(point?.props.opacity, 0.4);
 });
 
+Deno.test("literal and mapped point stroke use an explicit compositional CPU fallback", () => {
+  const literal = findNodes(
+    compile(
+      ggplot({ x: [1], y: [2] }, { x: "x", y: "y" }).add(
+        geomPoint({
+          size: 5,
+          stroke: 2,
+          strokeColor: "#000000",
+          fill: "#ffffff",
+        }),
+      ).build(),
+    ),
+    "Point",
+  );
+  assertEquals(literal.length, 2);
+  assertEquals(literal[0].props.sizes, [9]);
+  assertEquals(literal[0].props.color, "#000000");
+  assertEquals(literal[1].props.sizes, [5]);
+  assertEquals(
+    literal.every((node) => node.props.execution === "cpu-outline-fallback"),
+    true,
+  );
+
+  const mapped = findNodes(
+    compile(
+      ggplot(
+        { x: [1, 2], y: [2, 3], border: [0, 10] },
+        { x: "x", y: "y", stroke: "border" },
+      ).add(geomPoint({ size: 4 }), scaleStroke({ range: [1, 3] })).build(),
+    ),
+    "Point",
+  );
+  assertEquals(mapped[0].props.sizes, [6, 10]);
+  assertEquals(mapped[1].props.sizes, [4, 4]);
+});
+
 Deno.test("axis labels default from mappings and honor labels() overrides", () => {
-  const defaultTree = compile(ggplot(data, { x: "x", y: "y" }).add(geomPoint()).build());
+  const defaultTree = compile(
+    ggplot(data, { x: "x", y: "y" }).add(geomPoint()).build(),
+  );
   const defaultOverlay = defaultTree.children.find((child) =>
-    child.component === "Embedded" && child.children.every((node) => node.component === "Label")
+    child.component === "FacetPanel" &&
+    child.children.every((node) => node.component === "Label")
   )!;
-  assertEquals(defaultOverlay.children.map((node) => node.props.labels), [["x"], ["y"]]);
+  assertEquals(defaultOverlay.children.map((node) => node.props.labels), [
+    ["0", "0.5", "1", "1.5", "2"],
+    ["10", "15", "20", "25", "30"],
+    ["x"],
+    ["y"],
+  ]);
+  assertEquals(
+    defaultOverlay.children.every((node) => node.props.zBias === 2),
+    true,
+  );
 
   const namedTree = compile(
     ggplot(data, { x: "x", y: "y" }).add(geomPoint())
       .add(labels({ x: "Weight", y: "Mileage", tag: "A" })).build(),
   );
   const namedOverlay = namedTree.children.find((child) =>
-    child.component === "Embedded" && child.children.every((node) => node.component === "Label")
+    child.component === "FacetPanel" &&
+    child.children.every((node) => node.component === "Label")
   )!;
-  assertEquals(namedOverlay.children.map((node) => node.props.labels), [["Weight"], ["Mileage"]]);
+  assertEquals(namedOverlay.children.map((node) => node.props.labels), [
+    ["0", "0.5", "1", "1.5", "2"],
+    ["10", "15", "20", "25", "30"],
+    ["Weight"],
+    ["Mileage"],
+  ]);
   assertEquals(
     findNodes(namedTree, "Label").some((node) =>
       (node.props.labels as string[] | undefined)?.[0] === "A"
     ),
     true,
   );
+});
+
+Deno.test("measured guide layout reserves glyph-sized margins and adapts ticks", () => {
+  const tree = compile(
+    ggplot(data, { x: "x", y: "y" }).add(geomPoint()).build(),
+    {
+      layout: {
+        width: 360,
+        height: 240,
+        measureText: (_text, _size) => ({
+          width: 40,
+          height: 10,
+        }),
+      },
+    },
+  );
+  const viewport = findNodes(tree, "PanelViewport")[0];
+  assertEquals(viewport.props.bounds, [
+    -1 + 2 * 94 / 360,
+    -1 + 2 * 16 / 240,
+    1 - 2 * 16 / 360,
+    1 - 2 * 39 / 240,
+  ]);
+  const overlay = tree.children.find((child) =>
+    child.component === "FacetPanel" &&
+    child.children.every((node) => node.component === "Label")
+  )!;
+  assertEquals((overlay.children[0].props.labels as string[]).length, 4);
+  assertEquals((overlay.children[1].props.labels as string[]).length, 4);
 });
 
 Deno.test("mapped alpha lowers per-point RGBA colors and emits an alpha guide", () => {
@@ -1208,7 +1648,7 @@ Deno.test("mapped alpha lowers per-point RGBA colors and emits an alpha guide", 
       .add(scaleAlpha({ name: "Strength" }))
       .build(),
   );
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const mark = panel.children.find((child) => child.component === "Point");
   assertEquals(mark?.props.colors, ["#3b82f61a", "#3b82f68c", "#3b82f6ff"]);
   const guideTitles = tree.children
@@ -1344,8 +1784,12 @@ Deno.test("grouped histogram retains zero bins, stacks shared centers, and keeps
     { x: "x", fill: "cohort" },
   ).add(geomHistogram({ binwidth: 2 })).build();
   const tree = compile(spec);
-  const polygon = findNodes(tree, "Polygon").at(-1)!;
-  const loops = polygon.props.positions as [number, number][][];
+  const polygons = plotPanel(tree).children.filter((node) =>
+    node.component === "Polygon"
+  );
+  const loops = polygons.map((polygon) =>
+    polygon.props.positions as [number, number][]
+  );
   const roundedLoops = loops.map((loop) =>
     loop.map(([x, y]) => [Number(x.toFixed(6)), y])
   );
@@ -1360,7 +1804,7 @@ Deno.test("grouped histogram retains zero bins, stacks shared centers, and keeps
     [[2.1, 1], [2.1, 2], [3.9, 2], [3.9, 1]],
     [[4.1, 0], [4.1, 2], [5.9, 2], [5.9, 0]],
   ]);
-  assertEquals(polygon.props.fills, [
+  assertEquals(polygons.map((polygon) => polygon.props.fill), [
     CATEGORICAL_PALETTE[0],
     CATEGORICAL_PALETTE[0],
     CATEGORICAL_PALETTE[0],
@@ -1368,9 +1812,10 @@ Deno.test("grouped histogram retains zero bins, stacks shared centers, and keeps
     CATEGORICAL_PALETTE[1],
     CATEGORICAL_PALETTE[1],
   ]);
-  assertEquals(findNodes(tree, "Point").some((n) =>
-    n.props.colors && n.props.size === 7
-  ), true);
+  assertEquals(
+    findNodes(tree, "Point").some((n) => n.props.colors && n.props.size === 7),
+    true,
+  );
 });
 
 Deno.test("resident compile lowers an eligible histogram without stat rows", () => {
@@ -1459,7 +1904,7 @@ Deno.test("discrete color scale assigns fixed categorical palette slots by level
   ).build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
   // levels sort to [a, b] → a=slot0 (blue), b=slot1 (aqua)
   assertEquals(point?.props.colors, [
@@ -1510,12 +1955,33 @@ Deno.test("continuous color scale interpolates the sequential ramp across the do
   assertEquals(scaleColorValue(colorScale, 10), "#0d366b"); // darkest ramp step
 });
 
+Deno.test("continuous colorbar, coloursteps, and bins guides lower serializable swatches", () => {
+  const guidesOf = (guide: ReturnType<typeof guideColourbar>) =>
+    findNodes(
+      compile(
+        ggplot({ x: [0, 1], y: [0, 1], value: [0, 10] }, {
+          x: "x",
+          y: "y",
+          color: "value",
+        }).add(geomPoint(), scaleColor({ guide })).build(),
+      ),
+      "Polygon",
+    ).filter((node) => node.props.guideKind);
+  const bar = guidesOf(guideColourbar({ title: "Intensity" }));
+  assertEquals(bar.length, 24);
+  assertEquals(bar.every((node) => node.props.guideKind === "colorbar"), true);
+  const steps = guidesOf(guideColoursteps({ bins: 5 }));
+  assertEquals(steps.length, 5);
+  const bins = guidesOf(guideBins({ bins: 4 }));
+  assertEquals(bins.length, 4);
+});
+
 Deno.test("viridis and gradient2 builders preserve serializable ramps through color lowering", () => {
   const paletteData = { x: [0, 1, 2], y: [0, 1, 2], value: [0, 5, 10] };
   const viridis = ggplot(paletteData, { x: "x", y: "y", color: "value" })
     .add(geomPoint(), scaleColorViridis())
     .build();
-  const viridisPoint = compile(viridis).children[0].children.find((node) =>
+  const viridisPoint = plotPanel(compile(viridis)).children.find((node) =>
     node.component === "Point"
   );
   assertEquals(viridisPoint?.props.colors, ["#440154", "#23908c", "#fde725"]);
@@ -1523,7 +1989,7 @@ Deno.test("viridis and gradient2 builders preserve serializable ramps through co
   const diverging = ggplot(paletteData, { x: "x", y: "y", color: "value" })
     .add(geomPoint(), scaleColorGradient2())
     .build();
-  const divergingPoint = compile(diverging).children[0].children.find((node) =>
+  const divergingPoint = plotPanel(compile(diverging)).children.find((node) =>
     node.component === "Point"
   );
   assertEquals(divergingPoint?.props.colors, ["#b2182b", "#f7f7f7", "#2166ac"]);
@@ -1539,7 +2005,7 @@ Deno.test("scaleColor domain fixes explicit categorical color assignment", () =>
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
   assertEquals(point?.props.colors, ["#222222", "#111111"]);
 });
@@ -1551,7 +2017,7 @@ Deno.test("mapped aesthetics train scales instead of treating strings as visual 
     .build();
   const tree = compile(spec);
 
-  const point = tree.children[0].children.find((c) => c.component === "Point");
+  const point = plotPanel(tree).children.find((c) => c.component === "Point");
   // The words "blue"/"red" are data values. They train a discrete scale and
   // map to palette slots, rather than passing through as CSS color names.
   assertEquals(point?.props.colors, [
@@ -1581,7 +2047,7 @@ Deno.test("fixed layer params pass through as literal visual settings without gu
     .build();
   const tree = compile(spec);
 
-  const point = tree.children[0].children.find((c) => c.component === "Point");
+  const point = plotPanel(tree).children.find((c) => c.component === "Point");
   assertEquals(point?.props.color, "red");
   assertEquals(point?.props.size, 9);
   assertEquals(point?.props.colors, undefined);
@@ -1606,12 +2072,12 @@ Deno.test("color and fill mappings keep independent scales in the same plot", ()
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
-  const tile = panel.children.find((c) => c.component === "Polygon");
+  const tiles = panel.children.filter((c) => c.component === "Polygon");
 
   assertEquals(point?.props.colors, ["#111111", "#222222"]);
-  assertEquals(tile?.props.fills, ["#bbbbbb", "#aaaaaa"]);
+  assertEquals(tiles.map((tile) => tile.props.fill), ["#bbbbbb", "#aaaaaa"]);
 
   const labels = tree.children.filter((c) => c.component === "Label").map((c) =>
     c.props.labels
@@ -1702,7 +2168,7 @@ Deno.test("geom_smooth renders a Line plus a CI Ribbon Polygon", () => {
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const line = panel.children.find((c) => c.component === "Line");
   assertEquals(line?.props.positions, [[0, 1], [1, 3], [2, 5], [3, 7], [4, 9]]);
 
@@ -1729,7 +2195,7 @@ Deno.test("geom_smooth se:false skips the Ribbon Polygon entirely", () => {
   ).build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   assertEquals(
     panel.children.find((c) => c.component === "Polygon"),
     undefined,
@@ -1749,7 +2215,7 @@ Deno.test("geom_smooth fits and renders one line per effective color group", () 
     .build();
   const tree = compile(spec);
 
-  const lines = tree.children[0].children.filter((c) => c.component === "Line");
+  const lines = plotPanel(tree).children.filter((c) => c.component === "Line");
   assertEquals(lines.length, 2);
   assertEquals(lines.map((l) => l.props.positions), [
     [[0, 1], [1, 1], [2, 1]],
@@ -1873,17 +2339,17 @@ Deno.test("default theme renders no background Polygon, unstyled Grid/Axis", () 
   const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint()).build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   assertEquals(
     panel.children.find((c) => c.component === "Polygon"),
     undefined,
   );
   const grid = panel.children.find((c) => c.component === "Grid");
-  assertEquals(grid?.props, { axes: "xy", width: 1, zBias: 1 });
+  assertEquals(grid?.props, { axes: "xy", width: 1, zBias: -1 });
   const axis = panel.children.find((c) =>
     c.component === "Axis" && c.props.axis === "x"
   );
-  assertEquals(axis?.props, { axis: "x", width: 2, zBias: 1 });
+  assertEquals(axis?.props, { axis: "x", width: 2, zBias: 0 });
 });
 
 Deno.test("themeGrey adds a full-panel background Polygon and a white grid color", () => {
@@ -1891,7 +2357,7 @@ Deno.test("themeGrey adds a full-panel background Polygon and a white grid color
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   const bg = panel.children.find((c) => c.component === "Polygon");
   assertEquals(bg?.props.fill, "#ebebeb");
   assertEquals(bg?.props.depth, 1);
@@ -1903,7 +2369,7 @@ Deno.test("themeGrey adds a full-panel background Polygon and a white grid color
 
   const grid = panel.children.find((c) => c.component === "Grid");
   assertEquals(grid?.props.color, "#ffffff");
-  assertEquals(grid?.props.zBias, 1);
+  assertEquals(grid?.props.zBias, -1);
 });
 
 Deno.test("themeClassic omits the Grid node entirely", () => {
@@ -1911,9 +2377,39 @@ Deno.test("themeClassic omits the Grid node entirely", () => {
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   assertEquals(panel.children.find((c) => c.component === "Grid"), undefined);
   assertEquals(panel.children.filter((c) => c.component === "Axis").length, 2);
+});
+
+Deno.test("remaining named theme presets are distinct and themeVoid removes guides", () => {
+  const presets = [
+    themeBw(),
+    themeLinedraw(),
+    themeLight(),
+    themeDark(),
+    themeVoid(),
+    themeTest(),
+  ];
+  assertEquals(
+    new Set(presets.map((part) => part.tag === "theme" && part.value.name))
+      .size,
+    6,
+  );
+  const voidPanel = compile(
+    ggplot(data, { x: "x", y: "y" }).add(
+      geomPoint(),
+      themeVoid(),
+    ).build(),
+  ).children[0];
+  assertEquals(
+    voidPanel.children.some((node) => node.component === "Grid"),
+    false,
+  );
+  assertEquals(
+    voidPanel.children.some((node) => node.component === "Axis"),
+    false,
+  );
 });
 
 Deno.test("theme() merges over a prior theme_*() instead of replacing it", () => {
@@ -1922,7 +2418,7 @@ Deno.test("theme() merges over a prior theme_*() instead of replacing it", () =>
     .build();
   const tree = compile(spec);
 
-  const panel = tree.children[0];
+  const panel = plotPanel(tree);
   // themeGrey's background survives even though theme() was applied after
   assertEquals(
     panel.children.find((c) => c.component === "Polygon")?.props.fill,
@@ -1942,7 +2438,7 @@ Deno.test("theme fontFamily/fontSize/textColor style geom_text's Label unless th
     .build();
   const tree = compile(spec);
 
-  const label = tree.children[0].children.find((c) => c.component === "Label");
+  const label = plotPanel(tree).children.find((c) => c.component === "Label");
   assertEquals(label?.props.family, "Georgia");
   assertEquals(label?.props.size, 20);
   assertEquals(label?.props.color, "#112233");
@@ -1953,7 +2449,7 @@ Deno.test("theme fontFamily/fontSize/textColor style geom_text's Label unless th
       theme({ fontSize: 20, textColor: "#112233" }),
     )
     .build();
-  const overriddenLabel = compile(overridden).children[0].children.find((c) =>
+  const overriddenLabel = plotPanel(compile(overridden)).children.find((c) =>
     c.component === "Label"
   );
   assertEquals(overriddenLabel?.props.size, 8);
@@ -2032,6 +2528,34 @@ Deno.test("facet_wrap honors an explicit ncol", () => {
     "FacetPanel",
     "FacetPanel",
   ]);
+});
+
+Deno.test("facet_wrap free scale modes train independent panel domains", () => {
+  const facetData = {
+    grp: ["a", "a", "b", "b"],
+    x: [0, 1, 100, 200],
+    y: [0, 10, 1000, 2000],
+  };
+  const ranges = (scales: "free" | "free_x" | "free_y") => {
+    const tree = compile(
+      ggplot(facetData, { x: "x", y: "y" }).add(
+        geomPoint(),
+        facetWrap(["grp"], undefined, scales),
+      ).build(),
+    );
+    return facetGridNode(tree).children.map((panel) =>
+      panel.children.find((node) => node.component === "Cartesian")?.props.range
+    );
+  };
+  assertEquals(ranges("free"), [[[0, 1], [0, 10]], [[100, 200], [1000, 2000]]]);
+  assertEquals(ranges("free_x"), [[[0, 1], [0, 2000]], [[100, 200], [
+    0,
+    2000,
+  ]]]);
+  assertEquals(ranges("free_y"), [[[0, 200], [0, 10]], [[0, 200], [
+    1000,
+    2000,
+  ]]]);
 });
 
 Deno.test("faceted plots keep plot-level color legends outside FacetGrid", () => {
@@ -2133,13 +2657,13 @@ Deno.test("facet partitions before stats, so stat_count aggregates within each p
   const facet = facetGridNode(tree);
 
   const panels = facet.children.map((embed) =>
-    embed.children.find((c) => c.component === "Cartesian")?.children.find((
+    embed.children.find((c) => c.component === "Cartesian")?.children.filter((
       c,
-    ) => c.component === "Polygon")
+    ) => c.component === "Polygon") ?? []
   );
   // panel "a": cat=x (x2), cat=y (x1) -> 2 bars; panel "b": cat=x (x1), cat=y (x1) -> 2 bars
-  assertEquals((panels[0]?.props.positions as unknown[]).length, 2);
-  assertEquals((panels[1]?.props.positions as unknown[]).length, 2);
+  assertEquals(panels[0].length, 2);
+  assertEquals(panels[1].length, 2);
 });
 
 Deno.test("emitSource inlines a standalone FacetGrid definition for faceted specs", () => {

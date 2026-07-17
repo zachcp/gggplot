@@ -47,6 +47,7 @@ export function residentHistogramProps(
   allowAutomaticY = false,
 ): ResidentHistogramNodeProps | undefined {
   if (
+    spec.theme.resident === false ||
     spec.coord.kind !== "cartesian" || spec.facet.kind !== "none" ||
     layer.geom !== "bar" || layer.stat !== "bin" ||
     !["identity", "stack", "dodge", "fill"].includes(layer.position) ||

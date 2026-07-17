@@ -3,6 +3,7 @@
 import { compile } from "../../../../../packages/core/src/compile/mod.ts";
 import { geomLine, ggplot } from "../../../../../packages/core/src/dsl/mod.ts";
 import { loadStaticDataset } from "./real.ts";
+import type { RenderNode } from "../../../../../packages/core/src/compile/rendertree.ts";
 
 function assertEquals<T>(actual: T, expected: T): void {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
@@ -12,6 +13,13 @@ function assertEquals<T>(actual: T, expected: T): void {
       }`,
     );
   }
+}
+
+function findNodes(tree: RenderNode, component: string): RenderNode[] {
+  return [
+    ...(tree.component === component ? [tree] : []),
+    ...tree.children.flatMap((child) => findNodes(child, component)),
+  ];
 }
 
 Deno.test("the lazily loaded mtcars asset remains typed and supports numeric linetype grouping", async () => {
@@ -32,9 +40,8 @@ Deno.test("the lazily loaded mtcars asset remains typed and supports numeric lin
     linetype: "am",
     linewidth: "hp",
   }).add(geomLine()).build();
-  const lines = compile(spec).children[0].children.filter((node) =>
-    node.component === "Line"
-  );
+  const panel = findNodes(compile(spec), "Cartesian")[0];
+  const lines = panel.children.filter((node) => node.component === "Line");
   assertEquals(lines.length, 2);
   assertEquals(lines[0].props.widths instanceof Array, true);
   assertEquals(

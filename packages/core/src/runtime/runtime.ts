@@ -26,7 +26,9 @@ export class GPUPlotRuntime {
   /** Binding the same typed column is stable; replacing it advances its version. */
   setData(data: TypedDataFrame): void {
     for (const [name, next] of Object.entries(data)) {
-      if (this.#data[name] !== next) this.#versions[name] = (this.#versions[name] ?? 0) + 1;
+      if (this.#data[name] !== next) {
+        this.#versions[name] = (this.#versions[name] ?? 0) + 1;
+      }
     }
     for (const name of Object.keys(this.#data)) {
       if (!(name in data)) this.release(name);

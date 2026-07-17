@@ -24,24 +24,32 @@ async function loadSpec(specPath: string): Promise<GGSpec> {
   const mod = await import(url);
   const spec = mod.spec ?? mod.default;
   if (!spec) {
-    throw new Error(`${specPath} must export a GGSpec as 'spec' or as the default export`);
+    throw new Error(
+      `${specPath} must export a GGSpec as 'spec' or as the default export`,
+    );
   }
   return spec as GGSpec;
 }
 
 function defaultOutPath(specPath: string): string {
-  return join(dirname(specPath), `${basename(specPath, extname(specPath))}.tsx`);
+  return join(
+    dirname(specPath),
+    `${basename(specPath, extname(specPath))}.tsx`,
+  );
 }
 
 /** Programmatic entry point — takes argv-style args, writes the .tsx, and returns the path written. */
 export async function runCli(args: string[]): Promise<string> {
   const [command, specPath, ...rest] = args;
   if (command !== "compile" || !specPath) {
-    throw new Error("Usage: gggplot compile <spec.ts> [out.tsx] [--name=ComponentName]");
+    throw new Error(
+      "Usage: gggplot compile <spec.ts> [out.tsx] [--name=ComponentName]",
+    );
   }
 
   const nameFlag = rest.find((a) => a.startsWith("--name="));
-  const outPath = rest.find((a) => !a.startsWith("--")) ?? defaultOutPath(specPath);
+  const outPath = rest.find((a) => !a.startsWith("--")) ??
+    defaultOutPath(specPath);
   const componentName = nameFlag
     ? nameFlag.slice("--name=".length)
     : pascalCase(basename(outPath, extname(outPath)));
