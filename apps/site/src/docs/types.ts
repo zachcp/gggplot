@@ -14,7 +14,8 @@ export type DocSection =
   | "themes"
   | "internals"
   | "guides"
-  | "faq";
+  | "faq"
+  | "reference";
 
 export interface DocExample {
   id: string;
@@ -42,11 +43,25 @@ export interface DocNarrative {
   body: string;
 }
 
+export interface GeomReferenceEntry {
+  constructor: string;
+  geom: string;
+  summary: string;
+  defaultStat: string;
+  defaultPosition: string;
+  requiredAesthetics: readonly string[];
+  optionalAesthetics: readonly string[];
+  params: Readonly<Record<string, string>>;
+  residency: string;
+  exampleIds: readonly string[];
+}
+
 export interface DocPage {
   slug: string;
   section: DocSection;
   title: string;
   summary: string;
   narrative?: DocNarrative[];
+  geomReferences?: GeomReferenceEntry[];
   examples: DocExample[];
 }

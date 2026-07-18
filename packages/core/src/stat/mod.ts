@@ -27,16 +27,22 @@ import {
   statQqProduct,
 } from "./analytic.ts";
 import { type StatFn, statIdentity, type StatResult } from "./shared.ts";
+import { statAlign } from "./alignment.ts";
 
 export {
   createStatBinProductPlan,
   type StatBinPlanOptions,
 } from "./bin_plan.ts";
+export {
+  createStatCountProductPlan,
+  type StatCountPlanOptions,
+} from "./count_plan.ts";
 export * from "./shared.ts";
 export * from "./binning.ts";
 export * from "./smoothing.ts";
 export * from "./distributions.ts";
 export * from "./analytic.ts";
+export * from "./alignment.ts";
 
 const REGISTRY: Record<Layer["stat"], StatFn> = {
   identity: statIdentity,
@@ -66,6 +72,7 @@ const REGISTRY: Record<Layer["stat"], StatFn> = {
   ecdf: statEcdfProduct,
   unique: statUniqueProduct,
   connect: statConnectProduct,
+  align: statAlign,
   waffle: statWaffleProduct,
 };
 

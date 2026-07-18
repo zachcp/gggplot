@@ -108,6 +108,88 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `.trim();
 
+export const GROUPED_COUNT_1D_WGSL = `
+struct CountParams {
+  rows: u32,
+  values: u32,
+  groups: u32,
+  hasGroups: u32,
+};
+
+@group(0) @binding(0) var<storage, read> valueIds: array<u32>;
+@group(0) @binding(1) var<storage, read> groupIds: array<u32>;
+@group(0) @binding(2) var<storage, read_write> counts: array<atomic<u32>>;
+@group(0) @binding(3) var<uniform> params: CountParams;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let row = global_id.x;
+  if (row >= params.rows || params.values == 0u || params.groups == 0u) {
+    return;
+  }
+  let value = valueIds[row];
+  let group = select(0u, groupIds[row], params.hasGroups != 0u);
+  if (value >= params.values || group >= params.groups) {
+    return;
+  }
+  atomicAdd(&counts[group * params.values + value], 1u);
+}
+`.trim();
+
+/** Expands a [group, category] count grid into 0.9-wide categorical bars. */
+export const COUNT_BAR_VERTICES_WGSL = `
+struct CountParams {
+  rows: u32,
+  values: u32,
+  groups: u32,
+  hasGroups: u32,
+  unusedLo: f32,
+  unusedWidth: f32,
+  position: u32,
+};
+@group(0) @binding(0) var<storage, read> counts: array<u32>;
+@group(0) @binding(1) var<storage, read_write> vertices: array<vec2<f32>>;
+@group(0) @binding(2) var<uniform> params: CountParams;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let cell = global_id.x;
+  if (cell >= params.groups * params.values || params.values == 0u) { return; }
+  let group = cell / params.values;
+  let value = cell % params.values;
+  let count = counts[cell];
+  var lower = 0u;
+  var upper = count;
+  if (params.position == 1u || params.position == 3u) {
+    for (var prior = 0u; prior < group; prior = prior + 1u) {
+      lower = lower + counts[prior * params.values + value];
+    }
+    upper = lower + count;
+  }
+  var width = 0.9;
+  var left = f32(value) - width * 0.5;
+  if (params.position == 2u) {
+    width = width / f32(params.groups);
+    left = f32(value) - 0.45 + f32(group) * width;
+  }
+  var y0 = f32(lower);
+  var y1 = f32(upper);
+  if (params.position == 3u) {
+    var total = 0u;
+    for (var index = 0u; index < params.groups; index = index + 1u) {
+      total = total + counts[index * params.values + value];
+    }
+    y0 = select(0.0, f32(lower) / f32(total), total > 0u);
+    y1 = select(0.0, f32(upper) / f32(total), total > 0u);
+  }
+  let offset = cell * 4u;
+  vertices[offset] = vec2<f32>(left, y0);
+  vertices[offset + 1u] = vec2<f32>(left, y1);
+  vertices[offset + 2u] = vec2<f32>(left + width, y1);
+  vertices[offset + 3u] = vec2<f32>(left + width, y0);
+}
+`.trim();
+
 /**
  * Expands the resident [group, bin] count grid into four XY vertices per bar.
  * It encodes identity, stack, dodge, and fill directly into GPU vertices so

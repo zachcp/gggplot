@@ -1,0 +1,698 @@
+{
+  "plain": {
+    "component": "Embedded",
+    "props": {
+      "normalize": true
+    },
+    "children": [
+      {
+        "component": "PanelViewport",
+        "props": {
+          "bounds": [
+            -0.72,
+            -0.66,
+            0.58,
+            0.68
+          ]
+        },
+        "children": [
+          {
+            "component": "Cartesian",
+            "props": {
+              "range": [
+                [
+                  -0.45,
+                  1.45
+                ],
+                [
+                  0,
+                  8
+                ]
+              ],
+              "axes": "xy"
+            },
+            "children": [
+              {
+                "component": "Grid",
+                "props": {
+                  "axes": "xy",
+                  "width": 1,
+                  "zBias": -1
+                },
+                "children": []
+              },
+              {
+                "component": "Axis",
+                "props": {
+                  "axis": "x",
+                  "width": 2,
+                  "zBias": 0
+                },
+                "children": []
+              },
+              {
+                "component": "Axis",
+                "props": {
+                  "axis": "y",
+                  "width": 2,
+                  "zBias": 0
+                },
+                "children": []
+              },
+              {
+                "component": "Polygon",
+                "props": {
+                  "positions": [
+                    [
+                      -0.45,
+                      0
+                    ],
+                    [
+                      -0.45,
+                      3
+                    ],
+                    [
+                      0,
+                      3
+                    ],
+                    [
+                      0,
+                      0
+                    ]
+                  ],
+                  "fill": "#2a78d6"
+                },
+                "children": []
+              },
+              {
+                "component": "Polygon",
+                "props": {
+                  "positions": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      0,
+                      5
+                    ],
+                    [
+                      0.45,
+                      5
+                    ],
+                    [
+                      0.45,
+                      0
+                    ]
+                  ],
+                  "fill": "#1baf7a"
+                },
+                "children": []
+              },
+              {
+                "component": "Polygon",
+                "props": {
+                  "positions": [
+                    [
+                      0.55,
+                      0
+                    ],
+                    [
+                      0.55,
+                      2
+                    ],
+                    [
+                      1,
+                      2
+                    ],
+                    [
+                      1,
+                      0
+                    ]
+                  ],
+                  "fill": "#2a78d6"
+                },
+                "children": []
+              },
+              {
+                "component": "Polygon",
+                "props": {
+                  "positions": [
+                    [
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      8
+                    ],
+                    [
+                      1.4500000000000002,
+                      8
+                    ],
+                    [
+                      1.4500000000000002,
+                      0
+                    ]
+                  ],
+                  "fill": "#1baf7a"
+                },
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "component": "FacetPanel",
+        "props": {},
+        "children": [
+          {
+            "component": "Label",
+            "props": {
+              "positions": [
+                [
+                  -0.72,
+                  0.744
+                ],
+                [
+                  0.5799999999999998,
+                  0.744
+                ]
+              ],
+              "labels": [
+                "a",
+                "b"
+              ],
+              "color": "#0b0b0b",
+              "size": 11,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          },
+          {
+            "component": "Label",
+            "props": {
+              "positions": [
+                [
+                  -0.776,
+                  0.68
+                ],
+                [
+                  -0.776,
+                  0.34500000000000003
+                ],
+                [
+                  -0.776,
+                  0.010000000000000009
+                ],
+                [
+                  -0.776,
+                  -0.32500000000000007
+                ],
+                [
+                  -0.776,
+                  -0.66
+                ]
+              ],
+              "labels": [
+                "0",
+                "2",
+                "4",
+                "6",
+                "8"
+              ],
+              "color": "#0b0b0b",
+              "size": 11,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          },
+          {
+            "component": "Label",
+            "props": {
+              "positions": [
+                [
+                  -0.07,
+                  0.904
+                ]
+              ],
+              "labels": [
+                "cls"
+              ],
+              "color": "#0b0b0b",
+              "size": 13,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          },
+          {
+            "component": "Label",
+            "props": {
+              "positions": [
+                [
+                  -0.916,
+                  0.010000000000000009
+                ]
+              ],
+              "labels": [
+                "n"
+              ],
+              "color": "#0b0b0b",
+              "size": 13,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          }
+        ]
+      },
+      {
+        "component": "Label",
+        "props": {
+          "positions": [
+            [
+              0.6,
+              -0.76
+            ]
+          ],
+          "labels": [
+            "fill"
+          ],
+          "color": "#0b0b0b",
+          "size": 14,
+          "zBias": 2,
+          "weight": "normal",
+          "style": "normal"
+        },
+        "children": []
+      },
+      {
+        "component": "Point",
+        "props": {
+          "positions": [
+            [
+              0.625,
+              -0.62
+            ],
+            [
+              0.625,
+              -0.51
+            ]
+          ],
+          "colors": [
+            "#2a78d6",
+            "#1baf7a"
+          ],
+          "size": 7
+        },
+        "children": []
+      },
+      {
+        "component": "Label",
+        "props": {
+          "positions": [
+            [
+              0.6649999999999999,
+              -0.62
+            ],
+            [
+              0.6649999999999999,
+              -0.51
+            ]
+          ],
+          "labels": [
+            "x",
+            "y"
+          ],
+          "color": "#0b0b0b",
+          "size": 13,
+          "zBias": 2,
+          "weight": "normal",
+          "style": "normal"
+        },
+        "children": []
+      }
+    ]
+  },
+  "laidOut": {
+    "component": "Embedded",
+    "props": {
+      "normalize": true
+    },
+    "children": [
+      {
+        "component": "PanelViewport",
+        "props": {
+          "bounds": [
+            -0.82875,
+            -0.9333333333333333,
+            0.765,
+            0.825
+          ]
+        },
+        "children": [
+          {
+            "component": "Cartesian",
+            "props": {
+              "range": [
+                [
+                  -0.45,
+                  1.45
+                ],
+                [
+                  0,
+                  8
+                ]
+              ],
+              "axes": "xy"
+            },
+            "children": [
+              {
+                "component": "Grid",
+                "props": {
+                  "axes": "xy",
+                  "width": 1,
+                  "zBias": -1
+                },
+                "children": []
+              },
+              {
+                "component": "Axis",
+                "props": {
+                  "axis": "x",
+                  "width": 2,
+                  "zBias": 0
+                },
+                "children": []
+              },
+              {
+                "component": "Axis",
+                "props": {
+                  "axis": "y",
+                  "width": 2,
+                  "zBias": 0
+                },
+                "children": []
+              },
+              {
+                "component": "Polygon",
+                "props": {
+                  "positions": [
+                    [
+                      -0.45,
+                      0
+                    ],
+                    [
+                      -0.45,
+                      3
+                    ],
+                    [
+                      0,
+                      3
+                    ],
+                    [
+                      0,
+                      0
+                    ]
+                  ],
+                  "fill": "#2a78d6"
+                },
+                "children": []
+              },
+              {
+                "component": "Polygon",
+                "props": {
+                  "positions": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      0,
+                      5
+                    ],
+                    [
+                      0.45,
+                      5
+                    ],
+                    [
+                      0.45,
+                      0
+                    ]
+                  ],
+                  "fill": "#1baf7a"
+                },
+                "children": []
+              },
+              {
+                "component": "Polygon",
+                "props": {
+                  "positions": [
+                    [
+                      0.55,
+                      0
+                    ],
+                    [
+                      0.55,
+                      2
+                    ],
+                    [
+                      1,
+                      2
+                    ],
+                    [
+                      1,
+                      0
+                    ]
+                  ],
+                  "fill": "#2a78d6"
+                },
+                "children": []
+              },
+              {
+                "component": "Polygon",
+                "props": {
+                  "positions": [
+                    [
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      8
+                    ],
+                    [
+                      1.4500000000000002,
+                      8
+                    ],
+                    [
+                      1.4500000000000002,
+                      0
+                    ]
+                  ],
+                  "fill": "#1baf7a"
+                },
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "component": "FacetPanel",
+        "props": {},
+        "children": [
+          {
+            "component": "Label",
+            "props": {
+              "positions": [
+                [
+                  -0.82875,
+                  0.86
+                ],
+                [
+                  0.765,
+                  0.86
+                ]
+              ],
+              "labels": [
+                "a",
+                "b"
+              ],
+              "color": "#0b0b0b",
+              "size": 11,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          },
+          {
+            "component": "Label",
+            "props": {
+              "positions": [
+                [
+                  -0.863,
+                  0.825
+                ],
+                [
+                  -0.863,
+                  0.5319444444444444
+                ],
+                [
+                  -0.863,
+                  0.23888888888888893
+                ],
+                [
+                  -0.863,
+                  -0.054166666666666696
+                ],
+                [
+                  -0.863,
+                  -0.3472222222222221
+                ],
+                [
+                  -0.863,
+                  -0.640277777777778
+                ],
+                [
+                  -0.863,
+                  -0.9333333333333333
+                ]
+              ],
+              "labels": [
+                "0",
+                "1.333",
+                "2.667",
+                "4",
+                "5.333",
+                "6.667",
+                "8"
+              ],
+              "color": "#0b0b0b",
+              "size": 11,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          },
+          {
+            "component": "Label",
+            "props": {
+              "positions": [
+                [
+                  -0.03187499999999999,
+                  0.9475
+                ]
+              ],
+              "labels": [
+                "cls"
+              ],
+              "color": "#0b0b0b",
+              "size": 13,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          },
+          {
+            "component": "Label",
+            "props": {
+              "positions": [
+                [
+                  -0.948625,
+                  -0.054166666666666696
+                ]
+              ],
+              "labels": [
+                "n"
+              ],
+              "color": "#0b0b0b",
+              "size": 13,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          }
+        ]
+      },
+      {
+        "component": "Label",
+        "props": {
+          "positions": [
+            [
+              0.79,
+              -0.76
+            ]
+          ],
+          "labels": [
+            "fill"
+          ],
+          "color": "#0b0b0b",
+          "size": 14,
+          "zBias": 2,
+          "weight": "normal",
+          "style": "normal"
+        },
+        "children": []
+      },
+      {
+        "component": "Point",
+        "props": {
+          "positions": [
+            [
+              0.82125,
+              -0.62
+            ],
+            [
+              0.82125,
+              -0.51
+            ]
+          ],
+          "colors": [
+            "#2a78d6",
+            "#1baf7a"
+          ],
+          "size": 7
+        },
+        "children": []
+      },
+      {
+        "component": "Label",
+        "props": {
+          "positions": [
+            [
+              0.8712500000000001,
+              -0.62
+            ],
+            [
+              0.8712500000000001,
+              -0.51
+            ]
+          ],
+          "labels": [
+            "x",
+            "y"
+          ],
+          "color": "#0b0b0b",
+          "size": 13,
+          "zBias": 2,
+          "weight": "normal",
+          "style": "normal"
+        },
+        "children": []
+      }
+    ]
+  }
+}

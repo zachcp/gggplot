@@ -1,11 +1,14 @@
 import {
   CLEAR_U32_WGSL,
+  GROUPED_COUNT_1D_WGSL,
   GROUPED_HISTOGRAM_1D_WGSL,
   GROUPED_HISTOGRAM_2D_WGSL,
 } from "./wgsl.ts";
 import type {
+  GpuGroupedCount1DResult,
   GpuGroupedHistogram1DResult,
   GpuGroupedHistogram2DResult,
+  GroupedCount1DInput,
   GroupedHistogram1DInput,
   GroupedHistogram2DInput,
 } from "./types.ts";
@@ -31,6 +34,29 @@ function inferGroupsCount(groupIds: Uint32Array | undefined): number {
   let max = 0;
   for (const id of groupIds) max = Math.max(max, id);
   return max + 1;
+}
+
+export function packCount1dParams(input: GroupedCount1DInput): {
+  params: ArrayBuffer;
+  groupsCount: number;
+  countsLength: number;
+} {
+  if (input.valuesCount < 0) {
+    throw new Error("[gggplot/reductions] valuesCount must be non-negative");
+  }
+  if (input.groupIds && input.groupIds.length !== input.valueIds.length) {
+    throw new Error(
+      "[gggplot/reductions] groupIds length must match input length",
+    );
+  }
+  const groupsCount = input.groupsCount ?? inferGroupsCount(input.groupIds);
+  const params = new ArrayBuffer(16);
+  const view = new DataView(params);
+  view.setUint32(0, input.valueIds.length, true);
+  view.setUint32(4, input.valuesCount, true);
+  view.setUint32(8, groupsCount, true);
+  view.setUint32(12, input.groupIds ? 1 : 0, true);
+  return { params, groupsCount, countsLength: groupsCount * input.valuesCount };
 }
 
 function resolveHistogram1dBins(
@@ -338,6 +364,82 @@ export async function groupedHistogram1dGpu(
       packed.binwidth,
       packed.groupsCount,
     ),
+    backend: "webgpu",
+    timings: {
+      uploadMs: uploadEnd - start,
+      dispatchMs: dispatchEnd - uploadEnd,
+      readbackMs: readbackEnd - dispatchEnd,
+      totalMs: readbackEnd - start,
+    },
+  };
+}
+
+export async function groupedCount1dGpu(
+  device: GPUDevice,
+  input: GroupedCount1DInput,
+): Promise<GpuGroupedCount1DResult> {
+  const start = now();
+  const packed = packCount1dParams(input);
+  const valuesBuffer = createStorageBuffer(
+    device,
+    input.valueIds,
+    GPU_BUFFER_USAGE.COPY_SRC,
+  );
+  const groupIds = input.groupIds ?? new Uint32Array(input.valueIds.length);
+  const groupBuffer = createStorageBuffer(
+    device,
+    groupIds,
+    GPU_BUFFER_USAGE.COPY_SRC,
+  );
+  const countsBuffer = device.createBuffer({
+    size: Math.max(4, packed.countsLength * Uint32Array.BYTES_PER_ELEMENT),
+    usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_SRC |
+      GPU_BUFFER_USAGE.COPY_DST,
+  });
+  const paramsBuffer = createUniformBuffer(device, packed.params);
+  const uploadEnd = now();
+
+  if (packed.countsLength > 0 && input.valueIds.length > 0) {
+    const pipeline = device.createComputePipeline({
+      layout: "auto",
+      compute: {
+        module: device.createShaderModule({ code: GROUPED_COUNT_1D_WGSL }),
+        entryPoint: "main",
+      },
+    });
+    const bindGroup = device.createBindGroup({
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: valuesBuffer } },
+        { binding: 1, resource: { buffer: groupBuffer } },
+        { binding: 2, resource: { buffer: countsBuffer } },
+        { binding: 3, resource: { buffer: paramsBuffer } },
+      ],
+    });
+    const encoder = device.createCommandEncoder();
+    dispatchClear(device, encoder, countsBuffer, packed.countsLength);
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(input.valueIds.length / 64));
+    pass.end();
+    device.queue.submit([encoder.finish()]);
+    await device.queue.onSubmittedWorkDone();
+  }
+  const dispatchEnd = now();
+  const counts = packed.countsLength > 0
+    ? await readU32Buffer(device, countsBuffer, packed.countsLength)
+    : new Uint32Array();
+  const readbackEnd = now();
+  valuesBuffer.destroy();
+  groupBuffer.destroy();
+  countsBuffer.destroy();
+  paramsBuffer.destroy();
+  return {
+    counts,
+    valuesCount: input.valuesCount,
+    groupsCount: packed.groupsCount,
+    shape: [packed.groupsCount, input.valuesCount],
     backend: "webgpu",
     timings: {
       uploadMs: uploadEnd - start,

@@ -16,8 +16,13 @@ export type ComponentName =
   | "Face"
   | "Polygon"
   | "Label"
-  | "ResidentHistogram"
-  | "ResidentHistogramView"
+  /**
+   * A GPU-resident product mark, resolved at render time through the runtime
+   * resident registry: props.product (a plan id string) selects the live
+   * component and props.view picks its standalone auto-domain form. Serializable
+   * and runtime-only — emitSource compiles portable CPU nodes, never this.
+   */
+  | "ResidentProduct"
   /** One facet cell with a concrete viewport supplied by FacetGrid. */
   | "FacetPanel"
   /** Insets a single plot panel while outer labels remain in chart space. */

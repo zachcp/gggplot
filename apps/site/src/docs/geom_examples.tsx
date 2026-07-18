@@ -37,6 +37,7 @@ import {
   geomViolin,
   geomWaffle,
   ggplot,
+  statAlign,
   statConnect,
   statSummary2d,
   statSummaryBin,
@@ -160,6 +161,22 @@ export const labelsAndIntervals: DocExample = {
   ).build(),
 };
 
+export const boxplotReference: DocExample = {
+  id: "BoxplotReference",
+  title: "Grouped boxplots",
+  description:
+    "Raw grouped observations are reduced into quartiles, whiskers, and outliers.",
+  visualSummary: "Two side-by-side boxplots summarizing grouped values.",
+  whatChanged:
+    "geomBoxplot owns the example so its stat_boxplot inputs and box topology can be read without unrelated layers.",
+  dataPreview: distributionData,
+  dslSource: `ggplot(data, { x: "group", y: "value" })
+  .add(geomBoxplot({ fill: "#bfdbfe", coef: 1.5 }))
+  .build();`,
+  spec: ggplot(distributionData, { x: "group", y: "value" })
+    .add(geomBoxplot({ fill: "#bfdbfe", coef: 1.5 })).build(),
+};
+
 export const densityCurve: DocExample = {
   id: "DensityCurve",
   title: "Grouped density curves",
@@ -201,6 +218,21 @@ export const violinAndDots: DocExample = {
       size: 4,
     }),
   ).build(),
+};
+
+export const violinReference: DocExample = {
+  id: "ViolinReference",
+  title: "Grouped violins",
+  description: "Mirrored kernel densities compare grouped y distributions.",
+  visualSummary: "Two translucent violin density polygons.",
+  whatChanged:
+    "The dedicated example exposes geomViolin's ydensity stat and bandwidth-controlled polygon product.",
+  dataPreview: distributionData,
+  dslSource: `ggplot(data, { x: "group", y: "value", fill: "group" })
+  .add(geomViolin({ n: 48, opacity: 0.55 }))
+  .build();`,
+  spec: ggplot(distributionData, { x: "group", y: "value", fill: "group" })
+    .add(geomViolin({ n: 48, opacity: 0.55 })).build(),
 };
 
 export const rectangularAndHexBins: DocExample = {
@@ -672,6 +704,46 @@ export const streamgraph: DocExample = {
   }).add(geomArea({ position: "stack", offset: "silhouette" })).build(),
 };
 
+export const stackedArea: DocExample = {
+  id: "StackedArea",
+  title: "Cumulative stacked areas",
+  description:
+    "Aligned grouped series accumulate into non-overlapping area bands.",
+  visualSummary:
+    "Three positive area bands stacked from a shared zero baseline.",
+  whatChanged:
+    "position stack carries each group's lower boundary forward at every x value and trains the y scale on cumulative totals.",
+  dataPreview: streamgraphData,
+  dslSource: `ggplot(data, { x: "month", y: "titles", fill: "genre" })
+  .add(geomArea({ position: "stack" }))
+  .build();`,
+  spec: ggplot(streamgraphData, { x: "month", y: "titles", fill: "genre" })
+    .add(geomArea({ position: "stack" }))
+    .build(),
+};
+
+const mismatchedAreaData = {
+  x: [0, 2, 4, 1, 3, 5],
+  y: [3, 7, 4, 5, 2, 6],
+  series: ["A", "A", "A", "B", "B", "B"],
+};
+export const alignedStackedArea: DocExample = {
+  id: "AlignedStackedArea",
+  title: "Shared-grid stacked areas",
+  description:
+    "statAlign resamples mismatched grouped x values before cumulative stacking.",
+  visualSummary:
+    "Two area series aligned onto one union grid and stacked without crossed boundaries.",
+  whatChanged:
+    "Each group is linearly interpolated on the sorted union of x values; outside support is zero and the resulting rows feed ordinary position stack.",
+  dataPreview: mismatchedAreaData,
+  dslSource: `ggplot(data, { x: "x", y: "y", fill: "series" })
+  .add(statAlign())
+  .build();`,
+  spec: ggplot(mismatchedAreaData, { x: "x", y: "y", fill: "series" })
+    .add(statAlign()).build(),
+};
+
 const bumpData = {
   round: [1, 2, 3, 4, 1, 2, 3, 4],
   rank: [3, 2, 1, 2, 1, 1, 3, 1],
@@ -723,8 +795,10 @@ export const geomDocExamples = [
   polygonShapes,
   rasterGrid,
   labelsAndIntervals,
+  boxplotReference,
   densityCurve,
   violinAndDots,
+  violinReference,
   rectangularAndHexBins,
   qqDiagnostics,
   contourBands,
@@ -742,6 +816,8 @@ export const geomDocExamples = [
   uniqueRows,
   summaryHexCells,
   streamgraph,
+  stackedArea,
+  alignedStackedArea,
   bumpChart,
   waffleChart,
 ];

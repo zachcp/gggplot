@@ -1,6 +1,9 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import * as geomDsl from "../../../../packages/core/src/dsl/geoms.ts";
-import { geomExampleCoverage } from "./geom_coverage.ts";
+import { GEOM_REGISTRY } from "../../../../packages/core/src/geom/mod.ts";
+import type { GeomKind } from "../../../../packages/core/src/ir/types.ts";
+import { geomConstructorKinds, geomExampleCoverage } from "./geom_coverage.ts";
+import { geomReferenceEntries } from "./geom_reference.ts";
 
 Deno.test("every public geom constructor has a live documentation example", async () => {
   const constructors = Object.entries(geomDsl)
@@ -10,6 +13,46 @@ Deno.test("every public geom constructor has a live documentation example", asyn
     .map(([name]) => name)
     .sort();
   assertEquals(Object.keys(geomExampleCoverage).sort(), constructors);
+  assertEquals(Object.keys(geomConstructorKinds).sort(), constructors);
+
+  for (const constructor of constructors) {
+    const kind = geomConstructorKinds[
+      constructor as keyof typeof geomConstructorKinds
+    ] as GeomKind;
+    const definition = GEOM_REGISTRY[kind];
+    assertEquals(
+      definition.doc.summary.trim().length > 0,
+      true,
+      `${constructor} needs a summary`,
+    );
+    assertEquals(Array.isArray(definition.doc.aesthetics.required), true);
+    assertEquals(Array.isArray(definition.doc.aesthetics.optional), true);
+    JSON.stringify(definition.doc);
+
+    const fn = geomDsl[constructor as keyof typeof geomDsl] as (
+      ...args: unknown[]
+    ) => { value: { stat: string; position: string } };
+    const part = constructor === "geomFunction"
+      ? fn((x: number) => x)
+      : constructor === "geomHline"
+      ? fn({ yintercept: 0 })
+      : constructor === "geomVline"
+      ? fn({ xintercept: 0 })
+      : fn();
+    const reference = geomReferenceEntries.find((entry) =>
+      entry.constructor === constructor
+    );
+    assertEquals(
+      reference?.defaultStat,
+      part.value.stat,
+      `${constructor} default stat drift`,
+    );
+    assertEquals(
+      reference?.defaultPosition,
+      part.value.position,
+      `${constructor} default position drift`,
+    );
+  }
 
   const sources = await Promise.all([
     Deno.readTextFile(new URL("./examples.tsx", import.meta.url)),
@@ -22,6 +65,15 @@ Deno.test("every public geom constructor has a live documentation example", asyn
   );
   assertEquals(new Set(ids).size, ids.length, "DocExample ids must be unique");
   const known = new Set(ids);
+  for (const reference of geomReferenceEntries) {
+    for (const id of reference.exampleIds) {
+      if (!known.has(id)) {
+        throw new Error(
+          `${reference.constructor} reference links missing example ${id}`,
+        );
+      }
+    }
+  }
   const declarations = new Map<string, string>();
   for (const source of sources) {
     for (

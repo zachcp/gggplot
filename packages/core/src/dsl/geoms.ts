@@ -6,6 +6,7 @@ import type {
   StatKind,
 } from "../ir/types.ts";
 import { ingest, type IngestOptions, type InputData } from "../data/mod.ts";
+import { GEOM_REGISTRY } from "../geom/mod.ts";
 import type { SpecPart } from "./base.ts";
 
 interface GeomOpts {
@@ -19,20 +20,22 @@ interface GeomOpts {
   [param: string]: unknown;
 }
 
-function geom(
-  kind: GeomKind,
-  defaultStat: StatKind,
-  opts: GeomOpts = {},
-  defaultPosition: PositionKind = "identity",
-): SpecPart {
+/**
+ * Build a layer spec part. The default stat/position come from the geom
+ * registry (the single source of truth shared with lowering) unless the caller
+ * supplies `stat`/`position` in `opts`. Constructors needing a non-registry
+ * default pass it explicitly via `opts.stat`/`opts.position`.
+ */
+function geom(kind: GeomKind, opts: GeomOpts = {}): SpecPart {
   const { mapping, data, dataOptions, stat, position, inheritAes, ...params } =
     opts;
+  const def = GEOM_REGISTRY[kind];
   return {
     tag: "layer",
     value: {
       geom: kind,
-      stat: stat ?? defaultStat,
-      position: position ?? defaultPosition,
+      stat: stat ?? def.defaultStat,
+      position: position ?? def.defaultPosition ?? "identity",
       mapping,
       data: data ? ingest(data, dataOptions) : undefined,
       inheritAes,
@@ -41,113 +44,104 @@ function geom(
   };
 }
 
-export const geomPoint = (opts: GeomOpts = {}): SpecPart =>
-  geom("point", "identity", opts);
-export const geomLine = (opts: GeomOpts = {}): SpecPart =>
-  geom("line", "identity", opts);
-export const geomPath = (opts: GeomOpts = {}): SpecPart =>
-  geom("path", "identity", opts);
-export const geomBar = (opts: GeomOpts = {}): SpecPart =>
-  geom("bar", "count", opts, "stack");
+export const geomPoint = (opts: GeomOpts = {}): SpecPart => geom("point", opts);
+export const geomLine = (opts: GeomOpts = {}): SpecPart => geom("line", opts);
+export const geomPath = (opts: GeomOpts = {}): SpecPart => geom("path", opts);
+export const geomBar = (opts: GeomOpts = {}): SpecPart => geom("bar", opts);
 export const geomHistogram = (opts: GeomOpts = {}): SpecPart =>
-  geom("bar", "bin", { ...opts, stat: "bin" }, "stack");
-export const geomCol = (opts: GeomOpts = {}): SpecPart =>
-  geom("col", "identity", opts, "stack");
-export const geomArea = (opts: GeomOpts = {}): SpecPart =>
-  geom("area", "identity", opts);
+  geom("bar", { ...opts, stat: "bin" });
+export const geomCol = (opts: GeomOpts = {}): SpecPart => geom("col", opts);
+export const geomArea = (opts: GeomOpts = {}): SpecPart => geom("area", opts);
 export const geomRibbon = (opts: GeomOpts = {}): SpecPart =>
-  geom("ribbon", "identity", opts);
+  geom("ribbon", opts);
 export const geomPolygon = (opts: GeomOpts = {}): SpecPart =>
-  geom("polygon", "identity", opts);
-export const geomTile = (opts: GeomOpts = {}): SpecPart =>
-  geom("tile", "identity", opts);
+  geom("polygon", opts);
+export const geomTile = (opts: GeomOpts = {}): SpecPart => geom("tile", opts);
 /** Like geomTile, but always at full axis resolution — pass no width/height. */
-export const geomRaster = (opts: GeomOpts = {}): SpecPart =>
-  geom("tile", "identity", opts);
-export const geomText = (opts: GeomOpts = {}): SpecPart =>
-  geom("text", "identity", opts);
-export const geomLabel = (opts: GeomOpts = {}): SpecPart =>
-  geom("label", "identity", opts);
+export const geomRaster = (opts: GeomOpts = {}): SpecPart => geom("tile", opts);
+export const geomText = (opts: GeomOpts = {}): SpecPart => geom("text", opts);
+export const geomLabel = (opts: GeomOpts = {}): SpecPart => geom("label", opts);
 export const geomBoxplot = (opts: GeomOpts = {}): SpecPart =>
-  geom("boxplot", "boxplot", opts);
+  geom("boxplot", opts);
 export const geomErrorbar = (opts: GeomOpts = {}): SpecPart =>
-  geom("errorbar", "identity", opts);
+  geom("errorbar", opts);
 export const geomErrorbarh = (opts: GeomOpts = {}): SpecPart =>
-  geom("errorbar", "identity", { ...opts, orientation: "y" });
+  geom("errorbar", { ...opts, orientation: "y" });
 export const geomLinerange = (opts: GeomOpts = {}): SpecPart =>
-  geom("linerange", "identity", opts);
+  geom("linerange", opts);
 export const geomPointrange = (opts: GeomOpts = {}): SpecPart =>
-  geom("pointrange", "identity", opts);
+  geom("pointrange", opts);
 export const geomCrossbar = (opts: GeomOpts = {}): SpecPart =>
-  geom("crossbar", "identity", opts);
+  geom("crossbar", opts);
 /** Fits a trend line plus an optional SE ribbon. Core methods: lm (default), loess (span/robustIterations), and binomial-logit glm; gam requires an extension adapter. */
 export const geomSmooth = (opts: GeomOpts = {}): SpecPart =>
-  geom("smooth", "smooth", opts);
+  geom("smooth", opts);
 /** Kernel density estimate rendered as a line. */
 export const geomDensity = (opts: GeomOpts = {}): SpecPart =>
-  geom("line", "density", opts);
+  geom("line", { ...opts, stat: opts.stat ?? "density" });
 /** Mirrored kernel-density polygon from raw y observations. */
 export const geomViolin = (opts: GeomOpts = {}): SpecPart =>
-  geom("violin", "ydensity", opts);
+  geom("violin", opts);
 /** Deterministic binned and stacked dots. */
 export const geomDotplot = (opts: GeomOpts = {}): SpecPart =>
-  geom("dotplot", "dotplot", opts);
+  geom("dotplot", opts);
 /** Rectangular 2D count bins, mapped to fill. */
 export const geomBin2d = (opts: GeomOpts = {}): SpecPart =>
-  geom("tile", "bin2d", opts);
+  geom("tile", { ...opts, stat: opts.stat ?? "bin2d" });
 /** Hexagonal 2D count bins, mapped to fill. */
-export const geomHex = (opts: GeomOpts = {}): SpecPart =>
-  geom("hex", "binhex", opts);
+export const geomHex = (opts: GeomOpts = {}): SpecPart => geom("hex", opts);
 /** Expand integer group counts into column-major unit tiles. */
 export const statWaffle = (opts: GeomOpts = {}): SpecPart =>
-  geom("tile", "waffle", opts);
+  geom("tile", { ...opts, stat: opts.stat ?? "waffle" });
 /** Waffle chart convenience geom backed by statWaffle and ordinary tile lowering. */
 export const geomWaffle = (opts: GeomOpts = {}): SpecPart =>
-  geom("tile", "waffle", { ...opts, stat: "waffle" });
+  geom("tile", { ...opts, stat: "waffle" });
 /** Rectangular 2D bins that summarize mapped z values (default mean). */
 export const statSummary2d = (opts: GeomOpts = {}): SpecPart =>
-  geom("tile", "summary2d", opts);
+  geom("tile", { ...opts, stat: opts.stat ?? "summary2d" });
 /** Hexagonal bins that summarize mapped z values (default mean). */
 export const statSummaryHex = (opts: GeomOpts = {}): SpecPart =>
-  geom("hex", "summaryhex", { ...opts, hex: true });
+  geom("hex", { ...opts, hex: true, stat: opts.stat ?? "summaryhex" });
 /** Alias for rectangular statSummary2d, matching the summary-bin vocabulary. */
 export const statSummaryBin = (opts: GeomOpts = {}): SpecPart =>
-  geom("tile", "summarybin", opts);
+  geom("tile", { ...opts, stat: opts.stat ?? "summarybin" });
 export const geomQq = (opts: GeomOpts = {}): SpecPart =>
-  geom("point", "qq", opts);
+  geom("point", { ...opts, stat: opts.stat ?? "qq" });
 export const geomQqLine = (opts: GeomOpts = {}): SpecPart =>
-  geom("line", "qqline", opts);
+  geom("line", { ...opts, stat: opts.stat ?? "qqline" });
 export const statEllipse = (opts: GeomOpts = {}): SpecPart =>
-  geom("line", "ellipse", opts);
+  geom("line", { ...opts, stat: opts.stat ?? "ellipse" });
 export const statFunction = (
   fun: (x: number) => number,
   opts: GeomOpts = {},
-): SpecPart => geom("line", "function", { ...opts, fun });
+): SpecPart => geom("line", { ...opts, fun, stat: opts.stat ?? "function" });
 export const geomContour = (opts: GeomOpts = {}): SpecPart =>
-  geom("segment", "contour", opts);
+  geom("segment", { ...opts, stat: opts.stat ?? "contour" });
 export const geomContourFilled = (opts: GeomOpts = {}): SpecPart =>
-  geom("tile", "contourfilled", opts);
+  geom("tile", { ...opts, stat: opts.stat ?? "contourfilled" });
 /** Frequency polygon: binned counts connected through ascending bin centers. */
 export const geomFreqpoly = (opts: GeomOpts = {}): SpecPart =>
-  geom("line", "bin", opts);
+  geom("line", { ...opts, stat: opts.stat ?? "bin" });
 /** Train scales and facets without emitting marks or legend keys. */
-export const geomBlank = (opts: GeomOpts = {}): SpecPart =>
-  geom("blank", "identity", opts);
+export const geomBlank = (opts: GeomOpts = {}): SpecPart => geom("blank", opts);
 /** Connect sorted observations with horizontal/vertical steps; direction is hv, vh, or mid. */
-export const geomStep = (opts: GeomOpts = {}): SpecPart =>
-  geom("step", "identity", opts);
+export const geomStep = (opts: GeomOpts = {}): SpecPart => geom("step", opts);
 /** Expand grouped points with linear, stepped, midpoint, or sigmoid connectors. */
 export const statConnect = (opts: GeomOpts = {}): SpecPart =>
-  geom("line", "connect", opts);
+  geom("line", { ...opts, stat: opts.stat ?? "connect" });
+/** Resample grouped x/y series onto a shared grid before stacked area lowering. */
+export const statAlign = (opts: GeomOpts = {}): SpecPart =>
+  geom("area", {
+    ...opts,
+    stat: opts.stat ?? "align",
+    position: opts.position ?? "stack",
+  });
 /** Approximate a curved x/y to xend/yend segment with deterministic quadratic tessellation. */
-export const geomCurve = (opts: GeomOpts = {}): SpecPart =>
-  geom("curve", "identity", opts);
+export const geomCurve = (opts: GeomOpts = {}): SpecPart => geom("curve", opts);
 /** Draw rays from x/y using angle (radians) and radius aesthetics. */
-export const geomSpoke = (opts: GeomOpts = {}): SpecPart =>
-  geom("spoke", "identity", opts);
+export const geomSpoke = (opts: GeomOpts = {}): SpecPart => geom("spoke", opts);
 /** Draw short observations ticks along panel edges. */
-export const geomRug = (opts: GeomOpts = {}): SpecPart =>
-  geom("rug", "identity", opts);
+export const geomRug = (opts: GeomOpts = {}): SpecPart => geom("rug", opts);
 /** Public geom spelling for a line evaluated from a function. */
 export const geomFunction = (
   fun: (x: number) => number,
@@ -155,44 +149,45 @@ export const geomFunction = (
 ): SpecPart => statFunction(fun, opts);
 /** Point sugar whose default position is deterministic jitter. */
 export const geomJitter = (opts: GeomOpts = {}): SpecPart =>
-  geom("point", "identity", opts, "jitter");
+  geom("point", { ...opts, position: opts.position ?? "jitter" });
 /** Aggregate duplicate x/y tuples and size their points by count/weight. */
 export const geomCount = (opts: GeomOpts = {}): SpecPart => {
   const mapping = opts.mapping?.size || opts.size !== undefined
     ? opts.mapping
     : { ...opts.mapping, size: "n" };
-  return geom("point", "sum", { ...opts, mapping });
+  return geom("point", { ...opts, mapping, stat: opts.stat ?? "sum" });
 };
 /** Explicit stat_sum layer; point is the default geom. */
 export const statSum = (opts: GeomOpts = {}): SpecPart =>
-  geom("point", "sum", opts);
+  geom("point", { ...opts, stat: opts.stat ?? "sum" });
 /** Contour a grouped two-dimensional Gaussian KDE. */
 export const geomDensity2d = (opts: GeomOpts = {}): SpecPart =>
-  geom("segment", "density2d", opts);
+  geom("segment", { ...opts, stat: opts.stat ?? "density2d" });
 /** Render filled bands from a grouped two-dimensional Gaussian KDE. */
 export const geomDensity2dFilled = (opts: GeomOpts = {}): SpecPart =>
-  geom("tile", "density2dfilled", opts);
+  geom("tile", { ...opts, stat: opts.stat ?? "density2dfilled" });
 export const statDensity2d = (opts: GeomOpts = {}): SpecPart =>
-  geom("segment", "density2d", opts);
+  geom("segment", { ...opts, stat: opts.stat ?? "density2d" });
 export const statDensity2dFilled = (opts: GeomOpts = {}): SpecPart =>
-  geom("tile", "density2dfilled", opts);
+  geom("tile", { ...opts, stat: opts.stat ?? "density2dfilled" });
 export const geomQuantile = (opts: GeomOpts = {}): SpecPart =>
-  geom("line", "quantile", {
+  geom("line", {
     ...opts,
     mapping: opts.mapping?.color
       ? opts.mapping
       : { ...opts.mapping, color: "quantile" },
+    stat: opts.stat ?? "quantile",
   });
 export const statQuantile = (opts: GeomOpts = {}): SpecPart =>
-  geom("line", "quantile", opts);
+  geom("line", { ...opts, stat: opts.stat ?? "quantile" });
 /** Empirical cumulative distribution rendered as an hv step function. */
 export const geomEcdf = (opts: GeomOpts = {}): SpecPart =>
-  geom("step", "ecdf", { direction: "hv", ...opts });
+  geom("step", { direction: "hv", ...opts, stat: opts.stat ?? "ecdf" });
 export const statEcdf = (opts: GeomOpts = {}): SpecPart =>
-  geom("step", "ecdf", opts);
+  geom("step", { ...opts, stat: opts.stat ?? "ecdf" });
 /** Stable all-column row deduplication with the selected geom (point by default). */
 export const statUnique = (opts: GeomOpts = {}): SpecPart =>
-  geom("point", "unique", opts);
+  geom("point", { ...opts, stat: opts.stat ?? "unique" });
 
 // --- annotations -----------------------------------------------------------
 //

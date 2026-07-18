@@ -1,6 +1,9 @@
 import type { DocPage } from "./types.ts";
+import { geomReferenceEntries } from "./geom_reference.ts";
 import {
+  alignedStackedArea,
   areaAndRibbon,
+  boxplotReference,
   bumpChart,
   connectedGeomVariants,
   contourBands,
@@ -21,10 +24,12 @@ import {
   quantileRegression,
   rasterGrid,
   rectangularAndHexBins,
+  stackedArea,
   streamgraph,
   summaryHexCells,
   uniqueRows,
   violinAndDots,
+  violinReference,
   waffleChart,
 } from "./geom_examples.tsx";
 import {
@@ -45,6 +50,7 @@ import {
   mtcarsLineStyles,
   polarBars,
   polarThetaY,
+  residentCategoricalCount,
   scaledAesthetics,
   scaleTransforms,
   scatterLine,
@@ -107,9 +113,13 @@ export const docPages: DocPage[] = [
       empiricalCdf,
       density2dContours,
       violinAndDots,
+      violinReference,
+      boxplotReference,
       rectangularAndHexBins,
       summaryHexCells,
       streamgraph,
+      stackedArea,
+      alignedStackedArea,
       bumpChart,
       waffleChart,
       qqDiagnostics,
@@ -222,6 +232,28 @@ export const docPages: DocPage[] = [
     title: "Annotations",
     summary:
       "Literal non-inherited layers and reference lines are compiled alongside data-driven marks.",
+    narrative: [
+      {
+        heading: 'annotate("segment")',
+        body:
+          'annotate("segment", { x: 1, y: 1, xend: 4, yend: 3, color: "#ef4444" }) draws a literal endpoint segment.',
+      },
+      {
+        heading: 'annotate("rect")',
+        body:
+          'annotate("rect", { xmin: 1, xmax: 2, ymin: 0, ymax: 4, fill: "#bfdbfe" }) draws a literal bounded rectangle.',
+      },
+      {
+        heading: 'annotate("text")',
+        body:
+          'annotate("text", { x: 2, y: 4, label: "peak" }) places a literal label.',
+      },
+      {
+        heading: 'annotate("point")',
+        body:
+          'annotate("point", { x: 2, y: 4, size: 8, color: "#2563eb" }) places a literal point.',
+      },
+    ],
     examples: [annotationComposite],
   },
   {
@@ -242,7 +274,7 @@ export const docPages: DocPage[] = [
       {
         heading: "Resident execution boundary",
         body:
-          "A direct mark can consume typed columns without a reducer. Resident histogram products stay on the GPU only when their source, count grid, bounded scale metadata, and mark consumer all support that path. Other stats are named CPU-reference fallbacks; the site never labels them GPU-native merely because their final mark renders with WebGPU.",
+          "A direct mark can consume typed columns without a reducer. Resident histogram and categorical stat_count products stay on the GPU only when their source, count grid, bounded scale metadata, and mark consumer all support that path. Weighted or mapped-fill counts remain named CPU-reference fallbacks; the site never labels a stat GPU-native merely because its final mark renders with WebGPU.",
       },
       {
         heading: "Adding a geom or stat",
@@ -250,7 +282,12 @@ export const docPages: DocPage[] = [
           "Define the semantic IR and product shape first, implement the CPU reference behavior, then add a resident executor only when it has explicit source handles, bounded metadata, and a direct mark consumer. Every public geom constructor must also be entered in geomExampleCoverage with a discoverable DocExample; the coverage test rejects missing or stale entries.",
       },
     ],
-    examples: [histogramStatBin, groupedHistogram, smoothLm],
+    examples: [
+      histogramStatBin,
+      residentCategoricalCount,
+      groupedHistogram,
+      smoothLm,
+    ],
   },
   {
     slug: "faq",
@@ -275,6 +312,15 @@ export const docPages: DocPage[] = [
       },
     ],
     examples: [mtcarsLineStyles, histogramStatBin],
+  },
+  {
+    slug: "geom-reference",
+    section: "reference",
+    title: "Geom reference",
+    summary:
+      "Generated constructor defaults, aesthetics, parameters, residency, and live-example links from the core geom registry.",
+    geomReferences: geomReferenceEntries,
+    examples: [boxplotReference],
   },
 ];
 

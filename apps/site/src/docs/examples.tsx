@@ -395,6 +395,27 @@ export const countStackedBar: DocExample = {
   spec: countStackedBarSpec,
 };
 
+const residentCountData = {
+  category: Array.from(
+    { length: 20_000 },
+    (_, i) => ["alpha", "beta", "gamma", "delta"][i % 4],
+  ),
+};
+export const residentCategoricalCount: DocExample = {
+  id: "ResidentCategoricalCount",
+  title: "GPU-resident categorical counts",
+  description:
+    "Twenty thousand factor ids are counted into a compact GPU grid and consumed directly by bar topology.",
+  whatChanged:
+    "stat_count keeps its u32 count grid resident; only bounded y-domain metadata crosses back for the standalone view.",
+  dslSource: `ggplot(data, { x: "category" })
+  .add(geomBar({ fill: "#2563eb" }))
+  .build();`,
+  spec: ggplot(residentCountData, { x: "category" })
+    .add(geomBar({ fill: "#2563eb" }))
+    .build(),
+};
+
 const summaryMeanSpec = ggplot(summaryData, { x: "day", y: "score" })
   .add(geomPoint({ stat: "summary", size: 9, color: "#0f766e" }))
   .build();
@@ -642,6 +663,7 @@ export const allDocExamples = [
   discreteX,
   histogramStatBin,
   groupedHistogram,
+  residentCategoricalCount,
   colorMapped,
   flippedBars,
   polarBars,

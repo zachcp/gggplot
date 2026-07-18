@@ -8,7 +8,7 @@ import {
   scaleSizeValue,
   type TrainedScale,
 } from "../scale/mod.ts";
-import { colorWithAlpha, normalizeFontface } from "./lowering.ts";
+import { colorWithAlpha, normalizeFontface } from "../geom/shared.ts";
 import { linspace } from "./coordinates.ts";
 
 export function labelFor(

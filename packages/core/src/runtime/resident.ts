@@ -1,6 +1,8 @@
 import {
+  createResidentCount1DFromSources,
   createResidentDomain1D,
   createResidentHistogram1DFromSources,
+  type ResidentCount1D,
   type ResidentDomain1D,
   type ResidentHistogram1D,
   type ResidentHistogram1DSourceInput,
@@ -15,6 +17,33 @@ export interface MountedHistogramSourceOptions {
   /** Declared GPU bar-grid layout; no CPU count-row materialization. */
   position?: "identity" | "stack" | "dodge" | "fill";
   groupsCount?: number;
+}
+
+export interface MountedCountSourceOptions {
+  valuesCount: number;
+  groupsCount: number;
+  position: "identity" | "stack" | "dodge" | "fill";
+}
+
+export function createMountedResidentCount1D(
+  device: GPUDevice,
+  x: GPUStorageSource,
+  group: GPUStorageSource | undefined,
+  options: MountedCountSourceOptions,
+): ResidentCount1D {
+  requireStorage(x, "x", "u32");
+  if (group) {
+    requireStorage(group, "group", "u32");
+    if (group.length !== x.length) {
+      throw new Error("group source length must match x source length");
+    }
+  }
+  return createResidentCount1DFromSources(device, {
+    valueIds: x.buffer,
+    rows: x.length,
+    groupIds: group?.buffer,
+    ...options,
+  });
 }
 
 function requireStorage(

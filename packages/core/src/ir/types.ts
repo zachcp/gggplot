@@ -109,6 +109,7 @@ export type StatKind =
   | "ecdf"
   | "unique"
   | "connect"
+  | "align"
   | "waffle";
 
 export type PositionKind =

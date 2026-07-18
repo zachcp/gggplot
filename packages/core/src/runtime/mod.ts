@@ -41,3 +41,9 @@ export {
   ResidentHistogramView,
   type ResidentHistogramViewProps,
 } from "./resident_view.tsx";
+export {
+  type LiveComponent,
+  RESIDENT_PRODUCT_REGISTRY,
+  type ResidentProductComponents,
+  resolveResidentProduct,
+} from "./resident_registry.ts";

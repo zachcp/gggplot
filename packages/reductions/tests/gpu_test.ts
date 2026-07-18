@@ -1,9 +1,12 @@
 import { assertEquals, assertExists } from "@std/assert";
 import {
   benchmarkResidentHistogram,
+  createResidentCount1DFromSources,
   createResidentDomain1D,
   createResidentHistogram1D,
   createResidentHistogram1DFromSources,
+  groupedCount1d,
+  groupedCount1dGpu,
   groupedHistogram1d,
   groupedHistogram1dGpu,
   groupedHistogram2d,
@@ -109,6 +112,49 @@ Deno.test("packHistogram2dParams matches WGSL uniform layout", () => {
   assertEquals(packed.countsLength, 40);
 });
 
+Deno.test("grouped count GPU and resident paths are bit-exact", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+  const input = {
+    valueIds: Uint32Array.from({ length: 1025 }, (_, i) => (i * 193) % 513),
+    valuesCount: 513,
+    groupIds: Uint32Array.from({ length: 1025 }, (_, i) => i % 3),
+    groupsCount: 5,
+  };
+  const cpu = groupedCount1d(input);
+  const gpu = await groupedCount1dGpu(device, input);
+  assertEquals([...gpu.counts], [...cpu.counts]);
+
+  const usage = 0x0080 | 0x0008;
+  const values = device.createBuffer({
+    size: input.valueIds.byteLength,
+    usage,
+  });
+  const groups = device.createBuffer({
+    size: input.groupIds.byteLength,
+    usage,
+  });
+  device.queue.writeBuffer(values, 0, input.valueIds);
+  device.queue.writeBuffer(groups, 0, input.groupIds);
+  const resident = createResidentCount1DFromSources(device, {
+    valueIds: values,
+    rows: input.valueIds.length,
+    groupIds: groups,
+    valuesCount: input.valuesCount,
+    groupsCount: input.groupsCount,
+    position: "stack",
+  });
+  resident.dispatch();
+  assertEquals([...await resident.readback()], [...cpu.counts]);
+  const summary = await resident.readbackSummary();
+  assertEquals([...summary.groupTotals], [342, 342, 341, 0, 0]);
+  assertEquals(summary.byteLength, 24);
+  resident.destroy();
+  values.destroy();
+  groups.destroy();
+  device.destroy();
+});
+
 Deno.test("groupedHistogram1dGpu matches CPU counts when WebGPU is available", async () => {
   const device = await requestTestDevice();
   if (!device) return;
@@ -127,6 +173,34 @@ Deno.test("groupedHistogram1dGpu matches CPU counts when WebGPU is available", a
   assertEquals([...gpuResult.counts], [...cpu.counts]);
   assertEquals([...gpuResult.totals], [...cpu.totals]);
   assertEquals(gpuResult.backend, "webgpu");
+  device.destroy();
+});
+
+Deno.test("groupedCount1dGpu is bit-exact across grouped and wide categorical inputs", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+  const cases = [
+    { valueIds: new Uint32Array([0, 0, 0]), valuesCount: 1 },
+    {
+      valueIds: new Uint32Array([3, 0, 3, 1, 2, 0, 999, 1]),
+      valuesCount: 4,
+      groupIds: new Uint32Array([1, 0, 0, 2, 1, 2, 0, 9]),
+      groupsCount: 4,
+    },
+    {
+      valueIds: Uint32Array.from({ length: 1025 }, (_, i) => (i * 193) % 513),
+      valuesCount: 513,
+      groupIds: Uint32Array.from({ length: 1025 }, (_, i) => i % 3),
+      groupsCount: 5,
+    },
+  ];
+  for (const input of cases) {
+    const cpu = groupedCount1d(input);
+    const gpu = await groupedCount1dGpu(device, input);
+    assertEquals([...gpu.counts], [...cpu.counts]);
+    assertEquals(gpu.shape, cpu.shape);
+    assertEquals(gpu.backend, "webgpu");
+  }
   device.destroy();
 });
 

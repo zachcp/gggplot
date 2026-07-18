@@ -10,7 +10,12 @@ export interface GroupedCount1DResult {
   valuesCount: number;
   groupsCount: number;
   shape: [number, number];
-  backend: "cpu";
+  backend: "cpu" | "webgpu";
+}
+
+export interface GpuGroupedCount1DResult extends GroupedCount1DResult {
+  backend: "webgpu";
+  timings: GpuReductionTimings;
 }
 
 export interface GroupedHistogram1DInput {

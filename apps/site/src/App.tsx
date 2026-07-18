@@ -123,6 +123,87 @@ export function App() {
             </section>
           ))}
 
+          {activePage.geomReferences?.map((reference) => (
+            <section
+              id={reference.constructor}
+              key={reference.constructor}
+              style={styles.referenceCard}
+            >
+              <div style={styles.referenceHeading}>
+                <div>
+                  <h3 style={styles.exampleTitle}>{reference.constructor}</h3>
+                  <code style={styles.referenceCode}>
+                    {`${reference.constructor}({ … })`}
+                  </code>
+                </div>
+                <span style={styles.referenceBadge}>{reference.residency}</span>
+              </div>
+              <p style={styles.bodyCopy}>{reference.summary}</p>
+              <table style={styles.referenceTable}>
+                <tbody>
+                  <tr>
+                    <th style={styles.referenceKey}>Core geom</th>
+                    <td>{reference.geom}</td>
+                  </tr>
+                  <tr>
+                    <th style={styles.referenceKey}>Default stat</th>
+                    <td>{reference.defaultStat}</td>
+                  </tr>
+                  <tr>
+                    <th style={styles.referenceKey}>Default position</th>
+                    <td>{reference.defaultPosition}</td>
+                  </tr>
+                  <tr>
+                    <th style={styles.referenceKey}>Required aesthetics</th>
+                    <td>{reference.requiredAesthetics.join(", ") || "none"}</td>
+                  </tr>
+                  <tr>
+                    <th style={styles.referenceKey}>Optional aesthetics</th>
+                    <td>{reference.optionalAesthetics.join(", ") || "none"}</td>
+                  </tr>
+                </tbody>
+              </table>
+              {Object.keys(reference.params).length > 0 && (
+                <table style={styles.referenceTable}>
+                  <thead>
+                    <tr>
+                      <th style={styles.referenceKey}>Parameter</th>
+                      <th>Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(reference.params).map((
+                      [name, description],
+                    ) => (
+                      <tr key={name}>
+                        <td>
+                          <code>{name}</code>
+                        </td>
+                        <td>{description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <div style={styles.referenceLinks}>
+                Examples: {reference.exampleIds.map((id) => {
+                  const page = docPages.find((candidate) =>
+                    candidate.examples.some((example) => example.id === id)
+                  );
+                  return (
+                    <a
+                      key={id}
+                      href={`#${page?.slug ?? "start"}`}
+                      style={styles.referenceLink}
+                    >
+                      {id}
+                    </a>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+
           {activePage.examples.map((example, i) => (
             <ExampleSection
               key={example.id}
@@ -469,6 +550,46 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 15,
     marginBottom: 7,
   },
+  referenceCard: {
+    background: "#10141e",
+    border: "1px solid #242938",
+    borderRadius: 8,
+    padding: "16px",
+    marginBottom: 18,
+  },
+  referenceHeading: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 16,
+    alignItems: "start",
+  },
+  referenceCode: { color: "#93c5fd", fontSize: 12 },
+  referenceBadge: {
+    maxWidth: 360,
+    color: "#a7f3d0",
+    background: "#10251f",
+    border: "1px solid #245c4c",
+    borderRadius: 999,
+    padding: "5px 9px",
+    fontSize: 11,
+    lineHeight: 1.35,
+  },
+  referenceTable: {
+    width: "100%",
+    borderCollapse: "collapse",
+    marginTop: 12,
+    color: "#cbd5e1",
+    fontSize: 12,
+    textAlign: "left",
+  },
+  referenceKey: {
+    width: 170,
+    color: "#93c5fd",
+    padding: "5px 10px 5px 0",
+    textAlign: "left",
+  },
+  referenceLinks: { marginTop: 12, color: "#94a3b8", fontSize: 12 },
+  referenceLink: { color: "#7dd3fc", marginLeft: 9 },
   example: {
     paddingBottom: 34,
     marginBottom: 36,

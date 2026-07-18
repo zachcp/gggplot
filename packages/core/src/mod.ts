@@ -30,6 +30,11 @@ export {
   groupKeyAt,
   splitByEffectiveGroup,
 } from "./group/mod.ts";
+export {
+  GEOM_REGISTRY,
+  type GeomDefinition,
+  type GeomDocMeta,
+} from "./geom/mod.ts";
 
 // Backends
 export { emitSource } from "./emit/mod.ts";
@@ -67,7 +72,9 @@ export {
 export {
   applyStat,
   createStatBinProductPlan,
+  createStatCountProductPlan,
   type StatBinPlanOptions,
+  type StatCountPlanOptions,
   type StatFn,
   type StatResult,
 } from "./stat/mod.ts";
@@ -102,4 +109,4 @@ export {
 export {
   createHistogramBarTopologyPlan,
   type HistogramBarTopologyOptions,
-} from "./geom/bar_grid.ts";
+} from "./geom/bar.ts";

@@ -2,18 +2,16 @@
 import type { GGSpec } from "../ir/types.ts";
 import { node, type RenderNode } from "./rendertree.ts";
 import { applyStat } from "../stat/mod.ts";
-import { scalePosition, trainScales } from "../scale/mod.ts";
-import { residentHistogramProps } from "./resident.ts";
+import { trainScales } from "../scale/mod.ts";
 import { facetCellLayouts } from "./facet_layout.ts";
 
-import { lowerLayer, resolutionOf, valuesOf } from "./lowering.ts";
+import { GEOM_REGISTRY, lowerLayer } from "../geom/mod.ts";
+import type { LayerContext } from "../geom/mod.ts";
 import {
   munchPolygonNode,
   numericRange,
   polarGridLines,
   polarizeNode,
-  widenForStackedBars,
-  widenForTileAxis,
 } from "./coordinates.ts";
 import {
   axisGuideOverlay,
@@ -27,7 +25,7 @@ import { buildFacetPanels } from "./facets.ts";
 
 export * from "./rendertree.ts";
 export * from "./guides.ts";
-export { lowerLayer } from "./lowering.ts";
+export { type LayerContext, lowerLayer } from "../geom/mod.ts";
 export { buildFacetPanels } from "./facets.ts";
 
 export interface CompileOptions {
@@ -66,12 +64,12 @@ export function compile(
         : { ...spec.mapping, ...layer.mapping };
       const data = layer.data ?? panel.data;
       const resident = options.resident
-        ? residentHistogramProps(
+        ? GEOM_REGISTRY[layer.geom].residentPlan?.(
           spec,
           layer,
           mapping,
           data,
-          !faceted && spec.layers.length === 1,
+          { standalone: !faceted && spec.layers.length === 1 },
         )
         : undefined;
       if (resident) return { layer, data, mapping, resident };
@@ -98,53 +96,14 @@ export function compile(
   let xDomain = numericRange(xScale) ?? [0, 1];
   let yDomain = numericRange(yScale) ?? [0, 1];
   for (const { layer, data, mapping } of allPerLayer) {
-    yDomain = widenForStackedBars(
-      yDomain,
+    const contrib = GEOM_REGISTRY[layer.geom].domainContribution?.(
       layer,
       mapping,
       data,
-      xScale,
-      yScale,
+      { xScale, yScale, xDomain, yDomain },
     );
-    if (
-      layer.geom === "area" && layer.position === "stack" &&
-      layer.params.offset === "silhouette" && mapping.x && mapping.y
-    ) {
-      const xs = valuesOf(data, mapping.x) ?? [];
-      const ys = valuesOf(data, mapping.y) ?? [];
-      const totals = new Map<string, number>();
-      for (let row = 0; row < Math.min(xs.length, ys.length); row++) {
-        const y = Number(ys[row]);
-        if (!Number.isFinite(y)) continue;
-        const key = String(xs[row]);
-        totals.set(key, (totals.get(key) ?? 0) + y);
-      }
-      const half = Math.max(0, ...totals.values()) / 2;
-      yDomain = [Math.min(yDomain[0], -half), Math.max(yDomain[1], half)];
-    }
-
-    if ((layer.geom === "bar" || layer.geom === "col") && mapping.x) {
-      const scaledX = (valuesOf(data, mapping.x) ?? []).map((v) =>
-        scalePosition(xScale, v)
-      );
-      const width = resolutionOf(xScale, scaledX) * 0.9;
-      xDomain = widenForTileAxis(xDomain, scaledX, width);
-    }
-
-    if (layer.geom === "tile" && mapping.x && mapping.y) {
-      const scaledX = (valuesOf(data, mapping.x) ?? []).map((v) =>
-        scalePosition(xScale, v)
-      );
-      const scaledY = (valuesOf(data, mapping.y) ?? []).map((v) =>
-        scalePosition(yScale, v)
-      );
-      const width = (layer.params.width as number) ??
-        resolutionOf(xScale, scaledX);
-      const height = (layer.params.height as number) ??
-        resolutionOf(yScale, scaledY);
-      xDomain = widenForTileAxis(xDomain, scaledX, width);
-      yDomain = widenForTileAxis(yDomain, scaledY, height);
-    }
+    if (contrib?.x) xDomain = contrib.x;
+    if (contrib?.y) yDomain = contrib.y;
   }
   const xGuideScale = xScale?.kind === "continuous"
     ? { ...xScale, domain: xDomain }
@@ -201,58 +160,63 @@ export function compile(
       ? numericRange(panelYScale) ?? yDomain
       : yDomain;
     for (const { layer, data, mapping } of perLayer) {
-      panelYDomain = widenForStackedBars(
-        panelYDomain,
+      const contrib = GEOM_REGISTRY[layer.geom].domainContribution?.(
         layer,
         mapping,
         data,
-        panelXScale,
-        panelYScale,
-      );
-      if ((layer.geom === "bar" || layer.geom === "col") && mapping.x) {
-        const values = (valuesOf(data, mapping.x) ?? []).map((value) =>
-          scalePosition(panelXScale, value)
-        );
-        panelXDomain = widenForTileAxis(
-          panelXDomain,
-          values,
-          resolutionOf(panelXScale, values) * 0.9,
-        );
-      }
-    }
-    // ⑤ geoms → marks
-    const marks = perLayer.flatMap(({ layer, data, mapping, resident }) =>
-      resident ? [node("ResidentHistogram", { ...resident })] : lowerLayer(
-        layer,
-        mapping,
-        data,
-        panelXScale,
-        panelYScale,
-        colorScale,
-        fillScale,
-        sizeScale,
-        alphaScale,
-        shapeScale,
-        linetypeScale,
-        linewidthScale,
-        strokeScale,
-        theme,
-        panelXDomain,
-        panelYDomain,
         {
-          width: Math.max(
-            1,
-            (options.layout?.width ?? 800) *
-              (panelBounds[2] - panelBounds[0]) / 2,
-          ),
-          height: Math.max(
-            1,
-            (options.layout?.height ?? 600) *
-              (panelBounds[3] - panelBounds[1]) / 2,
-          ),
+          xScale: panelXScale,
+          yScale: panelYScale,
+          xDomain: panelXDomain,
+          yDomain: panelYDomain,
         },
-        options.layout?.measureText,
-      )
+      );
+      if (contrib?.x) panelXDomain = contrib.x;
+      if (contrib?.y) panelYDomain = contrib.y;
+    }
+    // ⑤ geoms → marks. One LayerContext per panel replaces the former
+    // 19-positional-parameter lowerLayer signature: the x/y scales are the
+    // panel's (possibly free-scaled) scales, the other aesthetic scales are the
+    // plot-wide trained scales, and the domains/panel pixels are this panel's.
+    const ctx: LayerContext = {
+      scales: {
+        x: panelXScale,
+        y: panelYScale,
+        color: colorScale,
+        fill: fillScale,
+        size: sizeScale,
+        alpha: alphaScale,
+        shape: shapeScale,
+        linetype: linetypeScale,
+        linewidth: linewidthScale,
+        stroke: strokeScale,
+      },
+      theme,
+      xDomain: panelXDomain,
+      yDomain: panelYDomain,
+      panelPixels: {
+        width: Math.max(
+          1,
+          (options.layout?.width ?? 800) *
+            (panelBounds[2] - panelBounds[0]) / 2,
+        ),
+        height: Math.max(
+          1,
+          (options.layout?.height ?? 600) *
+            (panelBounds[3] - panelBounds[1]) / 2,
+        ),
+      },
+      measureText: options.layout?.measureText,
+    };
+    const marks = perLayer.flatMap(({ layer, data, mapping, resident }) =>
+      resident
+        ? [
+          node("ResidentProduct", {
+            product: resident.product,
+            ...resident.props,
+          }),
+        ]
+        : lowerLayer(layer, mapping, data, ctx)
     );
     const thetaAxis: 0 | 1 = project[0] === "x" ? 0 : 1;
     const thetaDomain = thetaAxis === 0 ? panelXDomain : panelYDomain;
@@ -362,10 +326,16 @@ export function compile(
     const standaloneResident = panelLayers[0].length === 1
       ? panelLayers[0][0].resident
       : undefined;
-    if (standaloneResident?.autoYDomain) {
+    if (standaloneResident?.standaloneView) {
       return node("Embedded", { normalize: true }, [
         node("PanelViewport", { bounds: panelBounds }, [
-          node("ResidentHistogramView", { ...standaloneResident, axes, theme }),
+          node("ResidentProduct", {
+            product: standaloneResident.product,
+            view: true,
+            ...standaloneResident.props,
+            axes,
+            theme,
+          }),
         ]),
         axisGuideOverlay(
           labels,

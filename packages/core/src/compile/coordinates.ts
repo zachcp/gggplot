@@ -1,7 +1,7 @@
 import type { Aes, GGSpec, Layer, Theme } from "../ir/types.ts";
 import { node, type RenderNode } from "./rendertree.ts";
 import { expandRange, scalePosition, type TrainedScale } from "../scale/mod.ts";
-import { valuesOf } from "./lowering.ts";
+import { valuesOf } from "../geom/shared.ts";
 
 /**
  * The true y-extent of a stacked/filled bar layer is the summed height per x,

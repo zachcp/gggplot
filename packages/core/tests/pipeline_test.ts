@@ -71,6 +71,7 @@ import {
   scaleXLog10,
   scaleXSqrt,
   scaleYContinuous,
+  statAlign,
   statConnect,
   statEcdf,
   statEllipse,
@@ -898,7 +899,7 @@ Deno.test("2D summary binwidth precedence, boundaries, constants, empties, and r
   assertEquals(values(result.data, "x"), [0.5, 1.5]);
   assertEquals(values(result.data, "value"), [3, 3]);
   assertEquals(
-    findNodes(compile(spec, { resident: true }), "ResidentHistogram").length,
+    findNodes(compile(spec, { resident: true }), "ResidentProduct").length,
     0,
   );
 
@@ -1659,6 +1660,130 @@ Deno.test("geom_area fills a closed band from a 0 baseline to y", () => {
   ]);
 });
 
+Deno.test("stacked geom_area cumulatively positions bands and widens y domain", () => {
+  const spec = ggplot({
+    x: [0, 1, 2, 0, 1, 2],
+    y: [2, 1, 2, 4, 3, 2],
+    group: ["a", "a", "a", "b", "b", "b"],
+  }, { x: "x", y: "y", fill: "group" }).add(
+    geomArea({ position: "stack" }),
+  ).build();
+  const panel = plotPanel(compile(spec));
+  const bands = panel.children.filter((node) => node.component === "Polygon");
+  assertEquals(bands.length, 2);
+  assertEquals(bands[0].props.positions, [
+    [0, 2],
+    [1, 1],
+    [2, 2],
+    [2, 0],
+    [1, 0],
+    [0, 0],
+  ]);
+  assertEquals(bands[1].props.positions, [
+    [0, 6],
+    [1, 4],
+    [2, 4],
+    [2, 2],
+    [1, 1],
+    [0, 2],
+  ]);
+  assertEquals((panel.props.range as [number[], number[]])[1], [0, 6]);
+});
+
+Deno.test("stacked geom_area separates negative and positive baselines", () => {
+  const spec = ggplot({
+    x: [0, 1, 0, 1],
+    y: [-2, 3, -4, 5],
+    group: ["a", "a", "b", "b"],
+  }, { x: "x", y: "y", fill: "group" }).add(geomArea({ position: "stack" }))
+    .build();
+  const panel = plotPanel(compile(spec));
+  const bands = panel.children.filter((node) => node.component === "Polygon");
+  assertEquals(bands[1].props.positions, [
+    [0, -6],
+    [1, 8],
+    [1, 3],
+    [0, -2],
+  ]);
+  assertEquals((panel.props.range as [number[], number[]])[1], [-6, 8]);
+});
+
+Deno.test("stat_align resamples mismatched groups onto a deterministic union grid", () => {
+  const spec = ggplot({
+    x: [0, 2, 1, 3],
+    y: [0, 2, 10, 30],
+    group: ["a", "a", "b", "b"],
+  }, { x: "x", y: "y", fill: "group" }).add(statAlign()).build();
+  const result = applyStat(spec.layers[0], spec.mapping, spec.data);
+  assertEquals(columnValues(result.data, "x"), [0, 1, 2, 3, 0, 1, 2, 3]);
+  assertEquals(columnValues(result.data, "y"), [0, 1, 2, 0, 0, 10, 20, 30]);
+  assertEquals(columnValues(result.data, "group"), [
+    "a",
+    "a",
+    "a",
+    "a",
+    "b",
+    "b",
+    "b",
+    "b",
+  ]);
+
+  const tree = compile(spec);
+  const bands = findNodes(tree, "Polygon").filter((node) =>
+    (node.props.positions as unknown[])?.length === 8
+  );
+  assertEquals(bands.length, 2);
+  assertStringIncludes(emitSource(tree, "AlignedAreaChart"), "positions");
+});
+
+Deno.test("stat_align handles missing rows, duplicate policies, and explicit grids", () => {
+  const spec = ggplot({
+    x: [0, 0, 2, null],
+    y: [1, 3, 5, 9],
+    group: ["a", "a", "a", "a"],
+  }, { x: "x", y: "y", group: "group" }).add(statAlign({ grid: [0, 1, 2] }))
+    .build();
+  const summed = applyStat(spec.layers[0], spec.mapping, spec.data);
+  assertEquals(columnValues(summed.data, "y"), [4, 4.5, 5]);
+  const meanLayer = {
+    ...spec.layers[0],
+    params: {
+      ...spec.layers[0].params,
+      duplicate: "mean",
+      interpolation: "step",
+    },
+  };
+  const mean = applyStat(meanLayer, spec.mapping, spec.data);
+  assertEquals(columnValues(mean.data, "y"), [2, 2, 5]);
+  assertThrows(
+    () =>
+      applyStat(
+        { ...meanLayer, params: { grid: [0, Number.NaN] } },
+        spec.mapping,
+        spec.data,
+      ),
+    TypeError,
+  );
+});
+
+Deno.test("stat_align isolates facet grids before interpolation", () => {
+  const spec = ggplot({
+    x: [0, 2, 1, 10, 12, 11],
+    y: [1, 2, 3, 4, 5, 6],
+    group: ["a", "a", "b", "a", "a", "b"],
+    panel: ["p", "p", "p", "q", "q", "q"],
+  }, { x: "x", y: "y", fill: "group" }).add(statAlign(), facetWrap(["panel"]))
+    .build();
+  const panels = facetGridNode(compile(spec)).children;
+  const xs = panels.map((panel) =>
+    findNodes(panel, "Polygon").flatMap((node) =>
+      ((node.props.positions as [number, number][]) ?? []).map(([x]) => x)
+    )
+  );
+  assertEquals(Math.max(...xs[0]) <= 2, true);
+  assertEquals(Math.min(...xs[1]) >= 10, true);
+});
+
 Deno.test("geom_ribbon fills a closed band between ymin and ymax", () => {
   const ribbonData = { x: [0, 1, 2], lo: [5, 8, 6], hi: [10, 20, 15] };
   const spec = ggplot(ribbonData, { x: "x", ymin: "lo", ymax: "hi" })
@@ -2185,9 +2310,10 @@ Deno.test("resident compile lowers an eligible histogram without stat rows", () 
     .add(scaleYContinuous({ domain: [0, 4] }))
     .build();
   const tree = compile(spec, { resident: true });
-  const resident = findNodes(tree, "ResidentHistogram");
+  const resident = findNodes(tree, "ResidentProduct");
 
   assertEquals(resident.length, 1);
+  assertEquals(resident[0].props.product, "@gggplot/core:stat_bin@1");
   assertEquals(resident[0].props.x, "x");
   assertEquals(resident[0].props.group, undefined);
   assertEquals((resident[0].props.options as { binwidth: number }).binwidth, 2);
@@ -2211,7 +2337,7 @@ Deno.test("resident compile preserves declared dodge and fill grid layouts", () 
     ).build();
     const resident = findNodes(
       compile(spec, { resident: true }),
-      "ResidentHistogram",
+      "ResidentProduct",
     );
     assertEquals(resident.length, 1);
     assertEquals(
@@ -2227,7 +2353,10 @@ Deno.test("resident compile uses a bounded-summary view for automatic y domains"
     .build();
   const tree = compile(spec, { resident: true });
 
-  assertEquals(findNodes(tree, "ResidentHistogramView").length, 1);
+  const view = findNodes(tree, "ResidentProduct").filter((n) =>
+    n.props.view === true
+  );
+  assertEquals(view.length, 1);
   assertEquals(findNodes(tree, "Polygon").length, 0);
 });
 
@@ -2238,8 +2367,7 @@ Deno.test("resident compile preserves CPU fallback outside the standalone cartes
     .build();
   const tree = compile(spec, { resident: true });
 
-  assertEquals(findNodes(tree, "ResidentHistogram").length, 0);
-  assertEquals(findNodes(tree, "ResidentHistogramView").length, 0);
+  assertEquals(findNodes(tree, "ResidentProduct").length, 0);
   assertEquals(findNodes(tree, "Polygon").length > 0, true);
 });
 
@@ -2250,7 +2378,7 @@ Deno.test("mapped histogram fills stay on the documented CPU-reference path", ()
   ).add(geomHistogram({ binwidth: 2 })).build();
   const tree = compile(spec, { resident: true });
 
-  assertEquals(findNodes(tree, "ResidentHistogram").length, 0);
+  assertEquals(findNodes(tree, "ResidentProduct").length, 0);
   assertEquals(findNodes(tree, "Polygon").length > 0, true);
 });
 

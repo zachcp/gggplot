@@ -24,6 +24,13 @@ executable tests. Treating it as a position was rejected because it changes row
 cardinality before stacking; making it an extension was rejected because the
 primitive is broadly reusable.
 
+Implementation note (2026-07-18): the CPU contract uses a sorted union grid by
+default, linear or step interpolation, configurable duplicate reduction, and
+zero or nearest behavior outside group support. A future GPU executor can map
+one invocation to each `(group, grid-index)` cell and binary-search sorted group
+offsets; duplicate reduction requires a preceding segmented reduction. The
+output schema and parameter values need no change for that executor.
+
 ## `stat-connect`: alias existing topology, accept sigmoid only
 
 The source inserts vertices between consecutive points. `hv`, `vh`, and `mid`

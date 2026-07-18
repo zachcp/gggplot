@@ -37,10 +37,7 @@ import {
 } from "@use-gpu/workbench";
 import { RangeContext } from "@use-gpu/plot/mjs/providers/range-provider.mjs";
 import { mat4 } from "gl-matrix";
-import {
-  ResidentHistogramMark,
-  ResidentHistogramView,
-} from "../runtime/mod.ts";
+import { resolveResidentProduct } from "../runtime/mod.ts";
 import type { ComponentName, RenderNode } from "../compile/rendertree.ts";
 import type { GGSpec } from "../ir/types.ts";
 import { compile } from "../compile/mod.ts";
@@ -268,8 +265,15 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
     typeof props.angle === "number" && props.angle !== 0
       ? createElement(RotatedLabel, props)
       : createElement(Label, props),
-  ResidentHistogram: ResidentHistogramMark,
-  ResidentHistogramView,
+  // Generic resident node: resolve product id → live component through the
+  // runtime registry, then mount it with the node's remaining (serializable)
+  // props. `view` selects the standalone auto-domain form.
+  ResidentProduct: (props: Record<string, unknown>) => {
+    const { product, view, ...rest } = props;
+    const component = resolveResidentProduct(product as string, view === true);
+    // deno-lint-ignore no-explicit-any
+    return createElement(component as any, rest);
+  },
   FacetGrid,
   // FacetGrid consumes this transparent grouping and mounts a normalized
   // PanelViewport around each group inside the outer Embedded.

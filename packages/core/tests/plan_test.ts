@@ -7,8 +7,14 @@ import {
   validateParameters,
   validateProductPlan,
 } from "../src/plan/mod.ts";
-import { createStatBinProductPlan } from "../src/stat/mod.ts";
-import { createHistogramBarTopologyPlan } from "../src/geom/bar_grid.ts";
+import {
+  createStatBinProductPlan,
+  createStatCountProductPlan,
+} from "../src/stat/mod.ts";
+import {
+  createCountBarTopologyPlan,
+  createHistogramBarTopologyPlan,
+} from "../src/geom/bar.ts";
 
 Deno.test("portable extension definitions validate versioned metadata and mappings", () => {
   const definition: ExtensionDefinition = {
@@ -199,6 +205,25 @@ Deno.test("stat_bin declares a GPU-native grid rather than row-shaped output", (
     role: "output",
   });
   assertEquals(validateProductPlan(plan), []);
+});
+
+Deno.test("stat_count and categorical bars share a resident grid contract", () => {
+  const stat = createStatCountProductPlan({
+    x: "category",
+    group: "cohort",
+    valuesCount: 8,
+    groupsCount: 3,
+  });
+  assertEquals(stat.id, "@gggplot/core:stat_count@1");
+  assertEquals(stat.outputs[0].dimensions, ["group", "category"]);
+  assertEquals(validateProductPlan(stat), []);
+  const geom = createCountBarTopologyPlan({ position: "dodge" });
+  assertEquals(geom.inputs, [{ field: "count", access: "read" }]);
+  assertEquals(geom.dependencies, [
+    "@gggplot/core:stat_count@1",
+    "position:dodge",
+  ]);
+  assertEquals(validateProductPlan(geom), []);
 });
 
 Deno.test("histogram bar topology consumes the resident grid without row materialization", () => {
