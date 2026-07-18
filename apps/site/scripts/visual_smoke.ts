@@ -30,7 +30,17 @@ interface RouteResult {
 
 await Deno.mkdir(output, { recursive: true });
 const server = new Deno.Command(Deno.execPath(), {
-  args: ["run", "-A", "npm:vite", "preview", "--host", host, "--port", String(port), "--strictPort"],
+  args: [
+    "run",
+    "-A",
+    "npm:vite",
+    "preview",
+    "--host",
+    host,
+    "--port",
+    String(port),
+    "--strictPort",
+  ],
   cwd: new URL("../", import.meta.url).pathname,
   stdout: "inherit",
   stderr: "inherit",
@@ -43,18 +53,29 @@ try {
     args: ["--enable-unsafe-webgpu", "--enable-webgpu-developer-features"],
   });
   try {
+    if (!requestedRoute) await verifyPngExport(browser);
     const discoveryPage = await browser.newPage({ viewport });
     const discovered = await discoverRoutes(discoveryPage);
     await discoveryPage.close();
-    const routes = requestedRoute ? discovered.filter((route) => route === requestedRoute) : discovered;
-    if (!routes.length) throw new Error(`Unknown documentation route: ${requestedRoute}`);
+    const routes = requestedRoute
+      ? discovered.filter((route) => route === requestedRoute)
+      : discovered;
+    if (!routes.length) {
+      throw new Error(`Unknown documentation route: ${requestedRoute}`);
+    }
     const results: RouteResult[] = [];
     // A page owns a WebGPU canvas context. Isolating routes prevents a failed
     // mount from exhausting contexts and hiding later route-specific evidence.
-    for (const route of routes) results.push(await inspectRoute(browser, route));
+    for (const route of routes) {
+      results.push(await inspectRoute(browser, route));
+    }
     await Deno.writeTextFile(
       new URL("report.json", output),
-      JSON.stringify({ baseUrl, viewport, generatedAt: new Date().toISOString(), results }, null, 2),
+      JSON.stringify(
+        { baseUrl, viewport, generatedAt: new Date().toISOString(), results },
+        null,
+        2,
+      ),
     );
     if (!requestedRoute) {
       await verifyForcedFailure(browser);
@@ -66,17 +87,29 @@ try {
       if (result.accessibleLabels !== result.chartCount) {
         problems.push("chart surface is missing an accessible visual summary");
       }
-      if (result.surfaceBounds.some(({ width, height }) => width < 160 || height < 160)) {
+      if (
+        result.surfaceBounds.some(({ width, height }) =>
+          width < 160 || height < 160
+        )
+      ) {
         problems.push("chart surface has an implausible layout bound");
       }
-      if (result.opaquePixels.some((count) => count === 0)) problems.push("chart canvas has no backing buffer");
-      if (!result.screenshot) problems.push("could not capture route screenshot");
+      if (result.opaquePixels.some((count) => count === 0)) {
+        problems.push("chart canvas has no backing buffer");
+      }
+      if (!result.screenshot) {
+        problems.push("could not capture route screenshot");
+      }
       if (result.console.length) problems.push(result.console.join(" | "));
-      return problems.length ? [`#${result.route}: ${problems.join("; ")}`] : [];
+      return problems.length
+        ? [`#${result.route}: ${problems.join("; ")}`]
+        : [];
     });
     if (failures.length) {
       throw new Error(
-        `Visual route-health failures (${failures.length}). See ${new URL("report.json", output).pathname}\n${failures.join("\n")}`,
+        `Visual route-health failures (${failures.length}). See ${
+          new URL("report.json", output).pathname
+        }\n${failures.join("\n")}`,
       );
     }
     console.log(`Visual route-health gate passed for ${routes.length} routes.`);
@@ -90,6 +123,54 @@ try {
     // A startup failure has already terminated the child; preserve its cause.
   }
   await server.status;
+}
+
+/** Exact-pixel export must leave every interactive canvas and temp host intact. */
+async function verifyPngExport(browser: import("npm:playwright").Browser) {
+  // Exercise the extension first, before the route-health pass has submitted
+  // dozens of canvases to the shared browser GPU process.
+  for (const mode of ["3d", "1"]) {
+    const page = await browser.newPage({ viewport });
+    try {
+      await page.goto(`${baseUrl}/?export-probe=${mode}#faq`, {
+        waitUntil: "networkidle",
+      });
+      const trigger = page.locator("#gggplot-export-probe");
+      await trigger.click();
+      await page.waitForFunction(
+        () => {
+          const node = document.querySelector("#gggplot-export-probe") as
+            | HTMLElement
+            | null;
+          return Boolean(node?.dataset.result || node?.dataset.error);
+        },
+        null,
+        { timeout: 35_000 },
+      );
+      const error = await trigger.getAttribute("data-error");
+      if (error) throw new Error(`PNG export probe (${mode}) failed: ${error}`);
+      const raw = await trigger.getAttribute("data-result");
+      const result = JSON.parse(raw ?? "null") as {
+        type: string;
+        dimensions: [number, number];
+        signature: number[];
+        before: number[][];
+        after: number[][];
+        leakedHosts: number;
+      } | null;
+      if (
+        !result || result.type !== "image/png" ||
+        result.dimensions[0] !== 320 || result.dimensions[1] !== 200 ||
+        result.signature.join(",") !== "137,80,78,71,13,10,26,10" ||
+        JSON.stringify(result.before) !== JSON.stringify(result.after) ||
+        result.leakedHosts !== 0
+      ) {
+        throw new Error(`Invalid PNG export probe (${mode}) result: ${raw}`);
+      }
+    } finally {
+      await page.close();
+    }
+  }
 }
 
 /** A deliberately thrown chart error must not remove the surrounding docs UI. */
@@ -130,7 +211,8 @@ async function verifyRouteLifecycle(browser: import("npm:playwright").Browser) {
       await page.waitForTimeout(300);
       const { surfaces, canvases } = await page.evaluate(() => ({
         surfaces: document.querySelectorAll("[data-chart-surface]").length,
-        canvases: document.querySelectorAll("[data-chart-surface] canvas").length,
+        canvases:
+          document.querySelectorAll("[data-chart-surface] canvas").length,
       }));
       if (!surfaces || canvases !== surfaces) {
         throw new Error(
@@ -141,7 +223,9 @@ async function verifyRouteLifecycle(browser: import("npm:playwright").Browser) {
     const fatal = console.filter((message) =>
       /Cannot get WebGPU Canvas context|device lost|createBuffer/i.test(message)
     );
-    if (fatal.length) throw new Error(`Route lifecycle WebGPU errors: ${fatal.join(" | ")}`);
+    if (fatal.length) {
+      throw new Error(`Route lifecycle WebGPU errors: ${fatal.join(" | ")}`);
+    }
   } finally {
     page.off("console", onConsole);
     await page.close();
@@ -161,12 +245,18 @@ async function waitForServer() {
   throw new Error("Timed out waiting for the Vite preview server.");
 }
 
-async function discoverRoutes(page: import("npm:playwright").Page): Promise<string[]> {
+async function discoverRoutes(
+  page: import("npm:playwright").Page,
+): Promise<string[]> {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   // Hash slugs are declared by the app and represent every docs route. Read
   // them from its route-link contract instead of maintaining a second list.
-  const slugs = await page.locator("[data-doc-route-link]").evaluateAll((buttons) =>
-    buttons.map((button) => button.getAttribute("data-doc-route-link")).filter(Boolean)
+  const slugs = await page.locator("[data-doc-route-link]").evaluateAll((
+    buttons,
+  ) =>
+    buttons.map((button) => button.getAttribute("data-doc-route-link")).filter(
+      Boolean,
+    )
   ) as string[];
   if (!slugs.length || new Set(slugs).size !== slugs.length) {
     throw new Error("Could not enumerate unique documentation hash routes.");
@@ -174,38 +264,50 @@ async function discoverRoutes(page: import("npm:playwright").Page): Promise<stri
   return slugs;
 }
 
-async function inspectRoute(browser: import("npm:playwright").Browser, route: string): Promise<RouteResult> {
+async function inspectRoute(
+  browser: import("npm:playwright").Browser,
+  route: string,
+): Promise<RouteResult> {
   const page = await browser.newPage({ viewport });
   const console: string[] = [];
   const onConsole = (message: import("npm:playwright").ConsoleMessage) => {
-    if (message.type() === "error" || message.type() === "warning") console.push(message.text());
+    if (message.type() === "error" || message.type() === "warning") {
+      console.push(message.text());
+    }
   };
   page.on("console", onConsole);
   try {
     await page.goto(`${baseUrl}/#${route}`, { waitUntil: "networkidle" });
     await page.waitForTimeout(750);
-    const surfaceState = await page.locator("[data-chart-surface]").evaluateAll((surfaces) =>
-      surfaces.map((surface) => {
-        const box = surface.getBoundingClientRect();
-        return {
-          width: Math.round(box.width),
-          height: Math.round(box.height),
-          accessible: surface.getAttribute("role") === "img" &&
-            Boolean(surface.getAttribute("aria-label")?.trim()),
-        };
-      })
+    const surfaceState = await page.locator("[data-chart-surface]").evaluateAll(
+      (surfaces) =>
+        surfaces.map((surface) => {
+          const box = surface.getBoundingClientRect();
+          return {
+            width: Math.round(box.width),
+            height: Math.round(box.height),
+            accessible: surface.getAttribute("role") === "img" &&
+              Boolean(surface.getAttribute("aria-label")?.trim()),
+          };
+        }),
     );
-    const surfaceBounds = surfaceState.map(({ width, height }) => ({ width, height }));
-    const accessibleLabels = surfaceState.filter(({ accessible }) => accessible).length;
+    const surfaceBounds = surfaceState.map(({ width, height }) => ({
+      width,
+      height,
+    }));
+    const accessibleLabels = surfaceState.filter(({ accessible }) =>
+      accessible
+    ).length;
     // A WebGPU canvas deliberately refuses a 2D context, so getImageData()
     // reports a false transparent surface. Its backing-buffer dimensions are
     // the portable route-health signal; screenshots remain the visual artifact.
-    const opaquePixels = await page.locator("[data-chart-surface] canvas").evaluateAll((canvases) =>
-      canvases.map((node) => {
-        const canvas = node as HTMLCanvasElement;
-        return canvas.width * canvas.height;
-      })
-    );
+    const opaquePixels = await page.locator("[data-chart-surface] canvas")
+      .evaluateAll((canvases) =>
+        canvases.map((node) => {
+          const canvas = node as HTMLCanvasElement;
+          return canvas.width * canvas.height;
+        })
+      );
     const screenshotPath = new URL(`${route}.png`, output).pathname;
     let screenshot: string | null = screenshotPath;
     let screenshotError: unknown;
@@ -238,7 +340,9 @@ async function inspectRoute(browser: import("npm:playwright").Browser, route: st
     }
     if (screenshotError) {
       screenshot = null;
-      console.push(`Screenshot capture failed after retry: ${String(screenshotError)}`);
+      console.push(
+        `Screenshot capture failed after retry: ${String(screenshotError)}`,
+      );
     }
     return {
       route,

@@ -29,12 +29,16 @@ export type AesName =
   | "z"
   | "group"
   | "label"
+  | "family"
+  | "fontface"
   | "xmin"
   | "xmax"
   | "ymin"
   | "ymax"
   | "xend"
   | "yend"
+  | "angle"
+  | "radius"
   | "lower"
   | "middle"
   | "upper";
@@ -56,8 +60,12 @@ export type GeomKind =
   | "polygon"
   | "tile"
   | "text"
+  | "label"
   | "boxplot"
   | "errorbar"
+  | "linerange"
+  | "pointrange"
+  | "crossbar"
   | "smooth"
   | "violin"
   | "dotplot"
@@ -66,7 +74,12 @@ export type GeomKind =
   | "rect"
   | "hline"
   | "vline"
-  | "abline";
+  | "abline"
+  | "blank"
+  | "step"
+  | "curve"
+  | "spoke"
+  | "rug";
 
 export type StatKind =
   | "identity"
@@ -80,12 +93,23 @@ export type StatKind =
   | "dotplot"
   | "bin2d"
   | "binhex"
+  | "summary2d"
+  | "summaryhex"
+  | "summarybin"
   | "qq"
   | "qqline"
   | "ellipse"
   | "function"
+  | "sum"
   | "contour"
-  | "contourfilled";
+  | "contourfilled"
+  | "density2d"
+  | "density2dfilled"
+  | "quantile"
+  | "ecdf"
+  | "unique"
+  | "connect"
+  | "waffle";
 
 export type PositionKind =
   | "identity"
@@ -197,9 +221,16 @@ export interface Theme {
   gridWidth?: number;
   axisColor?: string;
   axisWidth?: number;
+  /** CSS-pixel gap between facet cells. */
+  panelSpacing?: number;
+  /** CSS-pixel height reserved for each facet strip. */
+  stripHeight?: number;
   /** Defaults for geom_text/geom_label's Label nodes, used unless a layer sets its own size/color param. */
   fontFamily?: string;
+  fontWeight?: number | "normal" | "bold";
+  fontStyle?: "normal" | "italic" | "oblique";
   fontSize?: number;
+  lineHeight?: number;
   textColor?: string;
   /** Tick/title rotation in degrees. */
   axisTextXAngle?: number;

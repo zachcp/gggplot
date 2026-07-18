@@ -1,6 +1,7 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertThrows } from "@std/assert";
 import {
   type ExtensionDefinition,
+  ExtensionRegistry,
   type ProductPlan,
   validateExtension,
   validateParameters,
@@ -43,6 +44,114 @@ Deno.test("portable extension definitions validate versioned metadata and mappin
       "parameter closed must be one of its declared values",
       "unknown parameter: extra",
     ],
+  );
+});
+
+Deno.test("static extension registry resolves one definition for Live and emitted backends", () => {
+  const definition: ExtensionDefinition = {
+    id: "@gggplot/example:geom_cloud@1",
+    kind: "geom",
+    requiredAes: ["x", "y", "z"],
+    missingValues: "drop",
+    scope: "panel",
+    capabilities: ["live", "emit"],
+  };
+  const liveValue = Symbol("PointCloud");
+  const registry = new ExtensionRegistry().register(definition, {
+    live: { value: liveValue },
+    emit: { importFrom: "@gggplot/example", exportName: "PointCloud" },
+  });
+
+  const live = registry.resolveLive(definition.id);
+  const emitted = registry.resolveEmit(definition.id);
+  assertEquals(live.definition, emitted.definition);
+  assertEquals(live.adapters.live.value, liveValue);
+  assertEquals(emitted.adapters.emit, {
+    importFrom: "@gggplot/example",
+    exportName: "PointCloud",
+  });
+  assertEquals(JSON.parse(JSON.stringify(registry.manifest())), [definition]);
+  definition.requiredAes?.push("color");
+  assertEquals(registry.resolve(definition.id).definition.requiredAes, [
+    "x",
+    "y",
+    "z",
+  ]);
+});
+
+Deno.test("extension registry rejects duplicates, incompatible versions, and missing ids", () => {
+  const definition: ExtensionDefinition = {
+    id: "@gggplot/example:stat_cluster@1",
+    kind: "stat",
+    missingValues: "drop",
+    scope: "panel",
+    capabilities: ["cpu"],
+  };
+  const registry = new ExtensionRegistry().register(definition, {
+    cpu: (input) => input,
+  });
+  assertThrows(
+    () => registry.register(definition, { cpu: (input) => input }),
+    Error,
+    "Duplicate extension id",
+  );
+  assertThrows(
+    () => registry.resolve("@gggplot/example:stat_cluster@2"),
+    Error,
+    "Incompatible extension version",
+  );
+  assertThrows(
+    () => registry.resolve("@gggplot/example:stat_other@1"),
+    Error,
+    "Missing extension",
+  );
+});
+
+Deno.test("extension registry enforces adapter metadata and JSON-only contracts", () => {
+  const definition: ExtensionDefinition = {
+    id: "@gggplot/example:geom_surface@1",
+    kind: "geom",
+    missingValues: "drop",
+    scope: "panel",
+    capabilities: ["live", "emit"],
+  };
+  assertThrows(
+    () => new ExtensionRegistry().register(definition, { live: { value: {} } }),
+    Error,
+    "adapter mismatch",
+  );
+  assertThrows(
+    () =>
+      new ExtensionRegistry().register(definition, {
+        live: { value: {} },
+        emit: { importFrom: "", exportName: "Surface" },
+      }),
+    Error,
+    "emit adapter requires importFrom and exportName",
+  );
+  assertThrows(
+    () =>
+      new ExtensionRegistry().register(
+        {
+          ...definition,
+          parameters: {
+            unsafe: {
+              type: "string",
+              default: (() => "not portable") as never,
+            },
+          },
+        },
+        {
+          live: { value: {} },
+          emit: { importFrom: "@gggplot/example", exportName: "Surface" },
+        },
+      ),
+    Error,
+    "non-JSON value function",
+  );
+  assertEquals(
+    validateExtension({ ...definition, capabilities: ["live"] }),
+    ["render extensions must declare both live and emit capabilities"],
   );
 });
 

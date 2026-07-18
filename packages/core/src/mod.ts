@@ -33,6 +33,14 @@ export {
 
 // Backends
 export { emitSource } from "./emit/mod.ts";
+export { ggsave, type GgSaveOptions, saveLivePng } from "./export/png.ts";
+export {
+  type ExportUnit,
+  pngDimensions,
+  type ResolvedExportSize,
+  resolveExportSize,
+  validateExportDimensions,
+} from "./export/utils.ts";
 export {
   FacetGrid,
   type FacetGridProps,
@@ -42,6 +50,18 @@ export {
   type GGPlotProps,
   renderTree,
 } from "./render/GGPlot.tsx";
+export {
+  approximateTextMeasurer,
+  createFontResources,
+  createGlyphTextMeasurer,
+  type FontFaceResource,
+  type FontResources,
+  validateFontRequests,
+} from "./render/font_resources.ts";
+export {
+  type FacetCellLayout,
+  facetCellLayouts,
+} from "./compile/facet_layout.ts";
 
 // Pipeline stages (exposed for testing/extension)
 export {

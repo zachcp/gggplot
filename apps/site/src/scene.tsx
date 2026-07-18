@@ -8,7 +8,7 @@
 import { createElement, Fragment } from "@use-gpu/live";
 import { AutoCanvas, WebGPU } from "@use-gpu/webgpu";
 import { FlatCamera, Pass } from "@use-gpu/workbench";
-import { GGPlot } from "@gggplot/core";
+import { createFontResources, GGPlot } from "@gggplot/core";
 import type { GGSpec } from "@gggplot/core";
 import { withSiteChartTheme } from "./chart_theme.ts";
 
@@ -17,22 +17,30 @@ interface Props {
   spec: GGSpec;
 }
 
-const fonts = [
+const fontResources = createFontResources([
   {
-    family: "sans-serif",
+    family: "Basic",
     weight: 400,
     style: "normal",
-    src: "/fonts/SFNS.ttf",
+    src: "/fonts/Basic-Regular.ttf",
   },
-  { family: "Georgia", weight: 400, style: "normal", src: "/fonts/SFNS.ttf" },
-];
+  {
+    family: "Lato",
+    weight: 400,
+    style: "normal",
+    src: "/fonts/Lato-Regular.ttf",
+  },
+]);
 
 export const Scene = ({ canvas, spec }: Props) => (
   <WebGPU fallback={null}>
     <AutoCanvas canvas={canvas} backgroundColor={[0.05, 0.05, 0.07, 1]}>
       <FlatCamera>
         <Pass>
-          <GGPlot spec={withSiteChartTheme(spec)} fonts={fonts} />
+          <GGPlot
+            spec={withSiteChartTheme(spec)}
+            fontResources={fontResources}
+          />
         </Pass>
       </FlatCamera>
     </AutoCanvas>

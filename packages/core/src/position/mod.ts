@@ -26,7 +26,7 @@ export interface PlacedBar extends PositionedBar {
 export function stackBars(
   bars: PositionedBar[],
   width: number,
-  mode: "stack" | "fill" | "identity" = "stack",
+  mode: "stack" | "fill" | "identity" | "silhouette" = "stack",
 ): PlacedBar[] {
   if (mode === "identity") {
     return bars.map((b) => ({ ...b, y0: 0, y1: b.y, xOffset: 0, width }));
@@ -41,7 +41,7 @@ export function stackBars(
   const out = new Array<PlacedBar>(bars.length);
   for (const indices of byX.values()) {
     const total = indices.reduce((sum, i) => sum + bars[i].y, 0);
-    let cum = 0;
+    let cum = mode === "silhouette" ? -total / 2 : 0;
     for (const i of indices) {
       const b = bars[i];
       const y0 = cum;

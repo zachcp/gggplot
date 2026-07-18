@@ -1,11 +1,17 @@
 {
-  "workspace": ["packages/core", "packages/reductions", "apps/site"],
+  "workspace": [
+    "packages/core",
+    "packages/reductions",
+    "packages/3d",
+    "packages/mark",
+    "apps/site"
+  ],
   "nodeModulesDir": "auto",
   "tasks": {
     "dev": "deno task --cwd apps/site dev",
     "build": "deno task --cwd apps/site build",
     "preview": "deno task --cwd apps/site preview",
-    "check": "deno check packages/core/src/mod.ts && deno task --cwd apps/site check",
+    "check": "deno check packages/core/src/mod.ts && deno check packages/3d/src/mod.ts && deno check packages/mark/src/mod.ts && deno task --cwd apps/site check",
     "check:core": "deno check packages/core/src/mod.ts",
     "check:site": "deno task --cwd apps/site check",
     "demo": "deno run packages/core/examples/emit-demo.ts",

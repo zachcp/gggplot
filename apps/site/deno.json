@@ -12,6 +12,7 @@
     "react-dom": "npm:react-dom@^18.3.1",
     "react-dom/client": "npm:react-dom@^18.3.1/client",
     "@gggplot/core": "../../packages/core/src/mod.ts",
+    "@gggplot/3d": "../../packages/3d/src/mod.ts",
     "@use-gpu/core": "npm:@use-gpu/core@^0.19.0",
     "@use-gpu/react": "npm:@use-gpu/react@^0.19.0",
     "@use-gpu/live": "npm:@use-gpu/live@^0.19.0",

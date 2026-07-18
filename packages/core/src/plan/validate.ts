@@ -62,6 +62,15 @@ export function validateExtension(definition: ExtensionDefinition): string[] {
   for (const mapping of Object.values(definition.computedAes ?? {})) {
     errors.push(...validateMapping(mapping));
   }
+  const capabilities = definition.capabilities ?? [];
+  if (new Set(capabilities).size !== capabilities.length) {
+    errors.push("extension capabilities must be unique");
+  }
+  if (capabilities.includes("live") !== capabilities.includes("emit")) {
+    errors.push(
+      "render extensions must declare both live and emit capabilities",
+    );
+  }
   return errors;
 }
 

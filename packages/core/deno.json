@@ -1,17 +1,26 @@
 {
   "name": "@gggplot/core",
   "version": "0.0.1",
-  "exports": "./src/mod.ts",
+  "exports": {
+    ".": "./src/mod.ts",
+    "./plan": "./src/plan/mod.ts",
+    "./export": "./src/export/png.ts"
+  },
   "imports": {
     "@gggplot/reductions": "../reductions/src/mod.ts",
     "@std/assert": "jsr:@std/assert@1",
     "gl-matrix": "npm:gl-matrix@^3.4.4",
     "@use-gpu/live": "npm:@use-gpu/live@^0.19.0",
+    "@use-gpu/glyph": "npm:@use-gpu/glyph@^0.19.0",
+    "@use-gpu/react": "npm:@use-gpu/react@^0.19.0",
     "@use-gpu/plot": "npm:@use-gpu/plot@^0.19.0",
     "@use-gpu/workbench": "npm:@use-gpu/workbench@^0.19.0",
     "@use-gpu/webgpu": "npm:@use-gpu/webgpu@^0.19.0",
     "@use-gpu/scene": "npm:@use-gpu/scene@^0.19.0",
-    "@use-gpu/shader/wgsl": "npm:@use-gpu/shader@^0.19.0/wgsl"
+    "@use-gpu/shader/wgsl": "npm:@use-gpu/shader@^0.19.0/wgsl",
+    "@use-gpu/wgsl/use/view.wgsl": "npm:@use-gpu/wgsl@^0.19.0/use/view.wgsl",
+    "react": "npm:react@^18.3.1",
+    "react-dom/client": "npm:react-dom@^18.3.1/client"
   },
   "tasks": {
     "test": "deno test --allow-read --allow-write tests/"

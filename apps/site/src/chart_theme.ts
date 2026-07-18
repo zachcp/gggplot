@@ -5,7 +5,7 @@ export function withSiteChartTheme(spec: GGSpec): GGSpec {
   return {
     ...spec,
     theme: {
-      fontFamily: "sans-serif",
+      fontFamily: "Basic",
       textColor: "#e5e7eb",
       axisColor: "#a8adbd",
       gridColor: "#343447",

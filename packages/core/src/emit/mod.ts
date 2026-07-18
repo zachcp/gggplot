@@ -23,29 +23,37 @@ const PLOT_IMPORTS: ComponentName[] = [
 // extra imports so the generated module is still standalone.
 const FACET_GRID_SOURCE = `
 // Not a real @use-gpu/plot export -- divides the ambient LayoutContext pixel
-// rect into an nrow x ncol grid and mounts each child in an explicit-layout
-// Embedded, giving facet_wrap/facet_grid their panel layout.
+// rect into an nrow x ncol grid and applies a normalized PanelViewport matrix
+// while all panels share the outer Embedded/Plot reconciler.
 const FacetPanel = ({ children }) => createElement(Fragment, {}, children);
-const FacetGrid = ({ nrow, ncol, gap = 0, children }) => {
+const FacetGrid = ({ nrow, ncol, gap = 24, stripHeight = 24, bounds = [-1, -1, 1, 1], children }) => {
   const kids = Array.isArray(children) ? children : children != null ? [children] : [];
   const [left, top, right, bottom] = useContext(LayoutContext);
-  const cellW = (right - left) / ncol;
-  const cellH = (bottom - top) / nrow;
-  return createElement(
+  const hostWidth = Math.max(right - left, 1);
+  const hostHeight = Math.max(bottom - top, 1);
+  const width = hostWidth * (bounds[2] - bounds[0]) / 2;
+  const height = hostHeight * (bounds[3] - bounds[1]) / 2;
+  const cellWidth = Math.max(0, (width - gap * (ncol - 1)) / ncol);
+  const cellHeight = Math.max(0, (height - gap * (nrow - 1)) / nrow);
+  const strip = Math.min(Math.max(0, stripHeight), cellHeight);
+  const cells = createElement(
     Fragment,
     {},
     ...kids.map((child, i) => {
       const row = Math.floor(i / ncol);
       const col = i % ncol;
-      const cell = [
-        left + col * cellW + gap / 2,
-        top + row * cellH + gap / 2,
-        left + (col + 1) * cellW - gap / 2,
-        top + (row + 1) * cellH - gap / 2,
+      const x0 = col * (cellWidth + gap);
+      const y0 = row * (cellHeight + gap) + strip;
+      const cellBounds = [
+        bounds[0] + x0 / width * (bounds[2] - bounds[0]),
+        bounds[1] + y0 / height * (bounds[3] - bounds[1]),
+        bounds[0] + (x0 + cellWidth) / width * (bounds[2] - bounds[0]),
+        bounds[1] + (row * (cellHeight + gap) + cellHeight) / height * (bounds[3] - bounds[1]),
       ];
-      return createElement(Embedded, { layout: cell, normalize: true }, child);
+      return createElement(PanelViewport, { bounds: cellBounds }, child);
     }),
   );
+  return cells;
 };
 `;
 
@@ -80,6 +88,25 @@ const PanelViewport = ({ bounds, children }) => {
 };
 `;
 
+const FONT_HOST_SOURCE = `
+// Font URLs and readiness remain host-owned; the generated chart accepts the
+// same FontResources shape as GGPlot without embedding resources in its spec.
+const EmittedFontHost = ({ fontResources, children }) => {
+  const [ready, error] = useAwait(
+    fontResources ? async () => {
+      await fontResources.ready();
+      return true;
+    } : null,
+    [fontResources],
+  );
+  if (error) throw error;
+  if (fontResources && !ready) return null;
+  return fontResources
+    ? createElement(FontLoader, { fonts: fontResources.faces }, children)
+    : children;
+};
+`;
+
 function formatProp(key: string, value: unknown): string {
   if (typeof value === "string") return `${key}=${JSON.stringify(value)}`;
   return `${key}={${JSON.stringify(value)}}`;
@@ -109,18 +136,27 @@ function usedComponents(
 
 /** Emit a complete, self-contained UseGPU Live component module. */
 export function emitSource(root: RenderNode, name = "GGChart"): string {
+  const nonSerializable = (current: RenderNode): boolean =>
+    current.props.nonSerializable === true ||
+    current.children.some(nonSerializable);
+  if (nonSerializable(root)) {
+    throw new TypeError(
+      "[gggplot] emitted source cannot serialize a custom 2D summary reducer; use a built-in reducer",
+    );
+  }
   const all = usedComponents(root);
   const used = PLOT_IMPORTS.filter((c) => all.has(c));
   const faceted = all.has("FacetGrid");
   const radial = all.has("RadialViewport");
-  const panelViewport = all.has("PanelViewport");
+  const panelViewport = faceted || all.has("PanelViewport");
 
   const liveImports = faceted || radial || panelViewport
     ? radial || panelViewport
-      ? "createElement, Fragment, provide, useContext, useMemo"
-      : "createElement, Fragment, useContext"
-    : "createElement, Fragment";
+      ? "createElement, Fragment, provide, useAwait, useContext, useMemo"
+      : "createElement, Fragment, useAwait, useContext"
+    : "createElement, Fragment, useAwait";
   const workbenchImports = [
+    "FontLoader",
     ...(faceted || radial ? ["LayoutContext"] : []),
     ...(radial || panelViewport
       ? ["MatrixContext", "TransformContext", "useCombinedMatrixTransform"]
@@ -138,10 +174,12 @@ export function emitSource(root: RenderNode, name = "GGChart"): string {
 /** @jsxFrag Fragment */
 import { ${liveImports} } from "@use-gpu/live";
 import { ${used.join(", ")} } from "@use-gpu/plot";${workbenchImport}
-${facetGridDef}${radialViewportDef}${panelViewportDef}
+${FONT_HOST_SOURCE}${facetGridDef}${radialViewportDef}${panelViewportDef}
 // Generated by @gggplot/core. Do not edit by hand.
-export const ${name} = () => (
-${emitNode(root, "  ")}
+export const ${name} = ({ fontResources } = {}) => (
+  <EmittedFontHost fontResources={fontResources}>
+${emitNode(root, "    ")}
+  </EmittedFontHost>
 );
 `;
 }

@@ -55,6 +55,7 @@ export type ExtensionKind =
   | "facet";
 export type ExecutionScope = "plot" | "panel" | "group" | "row";
 export type MissingValuePolicy = "drop" | "propagate" | "zero" | "error";
+export type ExtensionCapability = "cpu" | "gpu" | "live" | "emit";
 
 export interface ParameterSpec {
   type: "number" | "string" | "boolean" | "enum";
@@ -78,4 +79,6 @@ export interface ExtensionDefinition {
   outputFields?: FieldSpec[];
   computedAes?: SemanticMapping;
   showLegend?: boolean | "auto";
+  /** Host adapters required to mount this portable definition. */
+  capabilities?: ExtensionCapability[];
 }

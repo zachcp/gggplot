@@ -11,6 +11,7 @@ import {
   createElement,
   Fragment,
   provide,
+  useAwait,
   useContext,
   useMemo,
 } from "@use-gpu/live";
@@ -32,6 +33,7 @@ import {
   MatrixContext,
   TransformContext,
   useCombinedMatrixTransform,
+  useFontContext,
 } from "@use-gpu/workbench";
 import { RangeContext } from "@use-gpu/plot/mjs/providers/range-provider.mjs";
 import { mat4 } from "gl-matrix";
@@ -43,39 +45,24 @@ import type { ComponentName, RenderNode } from "../compile/rendertree.ts";
 import type { GGSpec } from "../ir/types.ts";
 import { compile } from "../compile/mod.ts";
 import { RotatedLabel } from "./rotated_label.tsx";
-
-interface TextMeasurementContext {
-  font: string;
-  measureText(text: string): TextMetrics;
-}
-
-let measurementContext: TextMeasurementContext | null | undefined;
-
-function measureText(text: string, size: number, family = "sans-serif") {
-  if (measurementContext === undefined) {
-    const canvas = typeof OffscreenCanvas !== "undefined"
-      ? new OffscreenCanvas(1, 1)
-      : typeof document !== "undefined"
-      ? document.createElement("canvas")
-      : null;
-    measurementContext = canvas?.getContext("2d") ?? null;
-  }
-  const context = measurementContext;
-  if (!context) return { width: text.length * size * 0.6, height: size };
-  context.font = `${size}px ${family}`;
-  const metrics = context.measureText(text);
-  return {
-    width: metrics.width,
-    height:
-      metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent ||
-      size,
-  };
-}
+import {
+  createFontResources,
+  createGlyphTextMeasurer,
+  type FontFaceResource,
+  type FontResources,
+  validateFontRequests,
+} from "./font_resources.ts";
+import { facetCellLayouts } from "../compile/facet_layout.ts";
 
 export interface FacetGridProps {
   nrow: number;
   ncol: number;
   gap?: number;
+  stripHeight?: number;
+  /** Documents shared versus panel-local axis semantics for backend parity. */
+  axisPolicy?: "fixed" | "free" | "free_x" | "free_y";
+  /** Normalized guide-layout bounds occupied by the complete facet grid. */
+  bounds?: [number, number, number, number];
   // Live's createElement collapses a single child to a bare value instead of
   // a 1-element array (see jsx.mjs's toChildren), so this may arrive as
   // either shape.
@@ -214,11 +201,20 @@ export const RadialViewport = (
 /**
  * Not a real @use-gpu/plot export (see rendertree.ts) — divides the ambient
  * ancestor LayoutContext pixel rect ([left, top, right, bottom]) into an
- * nrow x ncol grid with `gap` px between cells and passes each concrete cell
- * rectangle to a FacetPanel child in row-major order.
+ * nrow x ncol grid with `gap` px between cells. All cells remain inside the
+ * one outer Embedded/Plot reconciler; each child gets a normalized
+ * PanelViewport matrix so its marks participate in the same virtual-layer
+ * submission while rendering into a distinct rectangle.
  */
 export const FacetGrid = (props: FacetGridProps) => {
-  const { nrow, ncol, gap = 0, children } = props;
+  const {
+    nrow,
+    ncol,
+    gap = 24,
+    stripHeight = 24,
+    bounds = [-1, -1, 1, 1],
+    children,
+  } = props;
   const kids = Array.isArray(children)
     ? children
     : children != null
@@ -230,24 +226,31 @@ export const FacetGrid = (props: FacetGridProps) => {
     number,
     number,
   ];
-  const cellW = (right - left) / ncol;
-  const cellH = (bottom - top) / nrow;
+  const hostWidth = Math.max(right - left, 1);
+  const hostHeight = Math.max(bottom - top, 1);
+  const width = hostWidth * (bounds[2] - bounds[0]) / 2;
+  const height = hostHeight * (bounds[3] - bounds[1]) / 2;
+  const layouts = facetCellLayouts(width, height, nrow, ncol, gap, stripHeight);
 
-  return createElement(
+  const cells = createElement(
     Fragment,
     {},
     ...kids.map((child, i) => {
-      const row = Math.floor(i / ncol);
-      const col = i % ncol;
-      const cell: [number, number, number, number] = [
-        left + col * cellW + gap / 2,
-        top + row * cellH + gap / 2,
-        left + (col + 1) * cellW - gap / 2,
-        top + (row + 1) * cellH - gap / 2,
+      const panel = layouts[i].panel;
+      const cellBounds: [number, number, number, number] = [
+        bounds[0] + panel[0] / width * (bounds[2] - bounds[0]),
+        bounds[1] + panel[1] / height * (bounds[3] - bounds[1]),
+        bounds[0] + panel[2] / width * (bounds[2] - bounds[0]),
+        bounds[1] + panel[3] / height * (bounds[3] - bounds[1]),
       ];
-      return createElement(FacetPanel, { layout: cell }, child as never);
+      return createElement(
+        PanelViewport,
+        { bounds: cellBounds },
+        child as never,
+      );
     }),
   );
+  return cells;
 };
 
 // deno-lint-ignore no-explicit-any
@@ -268,8 +271,8 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
   ResidentHistogram: ResidentHistogramMark,
   ResidentHistogramView,
   FacetGrid,
-  // FacetGrid consumes this transparent tree grouping and mounts its own
-  // layout-bearing FacetPanel around each group.
+  // FacetGrid consumes this transparent grouping and mounts a normalized
+  // PanelViewport around each group inside the outer Embedded.
   FacetPanel: Fragment,
   PanelViewport,
   RadialViewport,
@@ -288,25 +291,17 @@ export function renderTree(n: RenderNode): unknown {
 
 export interface GGPlotProps {
   spec: GGSpec;
-  fonts?: {
-    family: string;
-    weight: string | number;
-    style: string;
-    src?: string;
-  }[];
+  /** Compatibility shorthand; prefer fontResources for readiness/validation. */
+  fonts?: FontFaceResource[];
+  fontResources?: FontResources;
 }
 
-/**
- * <GGPlot spec={...} /> — compile a spec and render it as a Live subtree.
- * Mount inside a UseGPU <WebGPU><AutoCanvas><FlatCamera><Pass> host (see
- * apps/site): FlatCamera supplies the pixel-space layout that compile()'s
- * root <Embedded normalize> bridges into Cartesian's normalized coordinates.
- * Wrapped in a host-configurable FontLoader: @use-gpu/plot's <Plot>
- * (established internally by Embedded) always wraps its children in an
- * SDFFontProvider, which throws if no FontContext ancestor exists. Text
- * renders visibly when the host supplies real font sources.
- */
-export const GGPlot = ({ spec, fonts }: GGPlotProps) => {
+const GlyphMeasuredPlot = ({ spec }: { spec: GGSpec }) => {
+  const rustText = useFontContext();
+  const measureText = useMemo(
+    () => createGlyphTextMeasurer(rustText),
+    [rustText],
+  );
   const [left, top, right, bottom] = useContext(LayoutContext) as [
     number,
     number,
@@ -322,5 +317,40 @@ export const GGPlot = ({ spec, fonts }: GGPlotProps) => {
     },
   });
   // deno-lint-ignore no-explicit-any
-  return createElement(FontLoader, { fonts }, renderTree(tree) as any);
+  return renderTree(tree) as any;
+};
+
+/**
+ * <GGPlot spec={...} /> — compile a spec and render it as a Live subtree.
+ * Mount inside a UseGPU <WebGPU><AutoCanvas><FlatCamera><Pass> host (see
+ * apps/site): FlatCamera supplies the pixel-space layout that compile()'s
+ * root <Embedded normalize> bridges into Cartesian's normalized coordinates.
+ * Wrapped in a host-configurable FontLoader: @use-gpu/plot's <Plot>
+ * (established internally by Embedded) always wraps its children in an
+ * SDFFontProvider, which throws if no FontContext ancestor exists. Text
+ * renders visibly when the host supplies real font sources.
+ */
+export const GGPlot = ({ spec, fonts, fontResources }: GGPlotProps) => {
+  const resources = useMemo(
+    () => fontResources ?? (fonts?.length ? createFontResources(fonts) : null),
+    [fontResources, fonts],
+  );
+  const [ready, error] = useAwait(
+    resources
+      ? async () => {
+        await resources.ready();
+        validateFontRequests(spec, resources);
+        return true;
+      }
+      : null,
+    [resources, spec],
+  );
+  if (error) throw error;
+  if (resources && !ready) return null;
+  // deno-lint-ignore no-explicit-any
+  return createElement(
+    FontLoader,
+    { fonts: resources?.faces ?? fonts },
+    createElement(GlyphMeasuredPlot, { spec }) as any,
+  );
 };

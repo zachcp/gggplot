@@ -1,6 +1,7 @@
 import {
   annotate,
   applyStat,
+  coordFixed,
   coordFlip,
   coordPolar,
   facetGrid,
@@ -32,6 +33,7 @@ import {
 } from "@gggplot/core";
 import type { Aes, DataFrame, GGSpec } from "@gggplot/core";
 import type { DocExample } from "./types.ts";
+import { geomDocExamples } from "./geom_examples.tsx";
 import {
   countData,
   facetedData,
@@ -273,20 +275,26 @@ export const themedChart: DocExample = {
   whatChanged:
     "Theme defaults flow into grid, axis, and Label nodes unless a layer overrides them.",
   dataPreview: groupedData,
-  dslSource: `ggplot(data, { x: "wt", y: "mpg", label: "cyl" })
+  dslSource:
+    `ggplot(data, { x: "wt", y: "mpg", label: "cyl", family: "family" })
   .add(geomPoint({ size: 8, color: "#1a1a2e" }))
-  .add(geomText({ size: 14, angle: -25 }))
-  .add(theme({ background: "#241f45", gridColor: "#a78bfa", axisColor: "#4a3aa7", fontFamily: "Georgia" }))
+  .add(geomText({ size: 14, angle: -25, color: "#f8fafc" }))
+  .add(theme({ background: "#241f45", gridColor: "#a78bfa", axisColor: "#4a3aa7", fontFamily: "Basic" }))
   .build();`,
-  spec: ggplot(groupedData, { x: "wt", y: "mpg", label: "cyl" })
+  spec: ggplot(groupedData, {
+    x: "wt",
+    y: "mpg",
+    label: "cyl",
+    family: "family",
+  })
     .add(geomPoint({ size: 8, color: "#1a1a2e" }))
-    .add(geomText({ size: 14, angle: -25 }))
+    .add(geomText({ size: 14, angle: -25, color: "#f8fafc" }))
     .add(
       theme({
         background: "#241f45",
         gridColor: "#a78bfa",
         axisColor: "#4a3aa7",
-        fontFamily: "Georgia",
+        fontFamily: "Basic",
       }),
     )
     .build(),
@@ -305,6 +313,66 @@ export const facetedScatter: DocExample = {
   .build();`,
   spec: ggplot(facetedData, { x: "wt", y: "mpg" })
     .add(geomPoint({ size: 8, color: "#3b82f6" }), facetWrap(["cyl"]))
+    .build(),
+};
+
+const freeFacetData = {
+  group: ["small", "small", "large", "large"],
+  x: [0, 1, 100, 200],
+  y: [0, 10, 1000, 2000],
+};
+
+const freeFacetExample = (
+  id: string,
+  scales: "free" | "free_x" | "free_y",
+): DocExample => ({
+  id,
+  title: `Facet wrap with ${scales} scales`,
+  description:
+    `Visible fixture for panel-local ${scales} domain training and axis policy.`,
+  whatChanged:
+    "The same rows are partitioned into two panels while only the requested position domains train locally.",
+  dataPreview: freeFacetData,
+  dslSource: `ggplot(data, { x: "x", y: "y" })
+  .add(geomPoint({ size: 8 }), facetWrap(["group"], 2, "${scales}"))
+  .build();`,
+  spec: ggplot(freeFacetData, { x: "x", y: "y" })
+    .add(geomPoint({ size: 8 }), facetWrap(["group"], 2, scales))
+    .build(),
+});
+
+export const facetFree = freeFacetExample("FacetFree", "free");
+export const facetFreeX = freeFacetExample("FacetFreeX", "free_x");
+export const facetFreeY = freeFacetExample("FacetFreeY", "free_y");
+
+export const facetCoordFlip: DocExample = {
+  id: "FacetCoordFlip",
+  title: "Facets with flipped coordinates",
+  description: "Facet rectangles remain stable while displayed axes swap.",
+  whatChanged:
+    "coordFlip projects y horizontally and x vertically inside each panel.",
+  dataPreview: facetedData,
+  dslSource: `ggplot(data, { x: "wt", y: "mpg" })
+  .add(geomPoint(), facetWrap(["cyl"]), coordFlip())
+  .build();`,
+  spec: ggplot(facetedData, { x: "wt", y: "mpg" })
+    .add(geomPoint(), facetWrap(["cyl"]), coordFlip())
+    .build(),
+};
+
+export const facetCoordFixed: DocExample = {
+  id: "FacetCoordFixed",
+  title: "Facets with fixed aspect",
+  description:
+    "A fixed unit ratio applies independently inside every responsive panel.",
+  whatChanged:
+    "coordFixed locks the Cartesian ratio without changing facet membership.",
+  dataPreview: facetedData,
+  dslSource: `ggplot(data, { x: "wt", y: "mpg" })
+  .add(geomPoint(), facetWrap(["cyl"]), coordFixed())
+  .build();`,
+  spec: ggplot(facetedData, { x: "wt", y: "mpg" })
+    .add(geomPoint(), facetWrap(["cyl"]), coordFixed())
     .build(),
 };
 
@@ -348,21 +416,21 @@ export const summaryMean: DocExample = {
 
 export const smoothLm: DocExample = {
   id: "SmoothLm",
-  title: "Grouped linear smooth",
+  title: "Grouped local smooth",
   description:
-    "geomSmooth fits drivetrain-specific trends across all 234 mpg vehicles.",
+    "geomSmooth fits robust loess curves for each drivetrain across all 234 mpg vehicles.",
   whatChanged:
-    "The discrete drivetrain color groups feed groupedLinearRegression1d; 80 fitted samples per group produce visibly smooth GPU lines over the real scatter.",
+    "Core smoothing supports lm, robust local-quadratic loess, and binomial-logit glm with serializable controls. GAM solvers attach through the extension registry rather than silently falling back.",
   dslSource: `const data = await loadStaticDataset("mpg");
 ggplot(data, { x: "displ", y: "hwy", color: "drv" })
   .add(geomPoint({ size: 3, opacity: 0.55 }))
-  .add(geomSmooth({ method: "lm", se: false, n: 80 }))
+  .add(geomSmooth({ method: "loess", span: 0.75, se: false, n: 80 }))
   .build();`,
   dataSource: { id: "mpg" },
   buildSpec: (data) =>
     ggplot(data, { x: "displ", y: "hwy", color: "drv" })
       .add(geomPoint({ size: 3, opacity: 0.55 }))
-      .add(geomSmooth({ method: "lm", se: false, n: 80 }))
+      .add(geomSmooth({ method: "loess", span: 0.75, se: false, n: 80 }))
       .build(),
 };
 
@@ -579,6 +647,11 @@ export const allDocExamples = [
   polarBars,
   themedChart,
   facetedScatter,
+  facetFree,
+  facetFreeX,
+  facetFreeY,
+  facetCoordFlip,
+  facetCoordFixed,
   countStackedBar,
   summaryMean,
   smoothLm,
@@ -592,4 +665,5 @@ export const allDocExamples = [
   classicTheme,
   sqrtScale,
   filledTiles,
+  ...geomDocExamples,
 ];

@@ -1,0 +1,20 @@
+{
+  "name": "@gggplot/3d",
+  "version": "0.0.1",
+  "exports": "./src/mod.ts",
+  "imports": {
+    "@gggplot/core": "../core/src/mod.ts",
+    "@gggplot/core/export": "../core/src/export/png.ts",
+    "@gggplot/core/plan": "../core/src/plan/mod.ts",
+    "@std/assert": "jsr:@std/assert@1",
+    "@use-gpu/live": "npm:@use-gpu/live@^0.19.0",
+    "@use-gpu/plot": "npm:@use-gpu/plot@^0.19.0",
+    "@use-gpu/workbench": "npm:@use-gpu/workbench@^0.19.0"
+  },
+  "tasks": {
+    "test": "deno test -A tests/"
+  },
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "esnext", "deno.ns"]
+  }
+}

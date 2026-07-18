@@ -12,7 +12,16 @@ const wgslPlugin = wgslRollup as unknown as () => PluginOption;
 export default defineConfig({
   resolve: {
     alias: {
+      "@gggplot/core/export": resolve(
+        __dirname,
+        "../../packages/core/src/export/png.ts",
+      ),
+      "@gggplot/core/plan": resolve(
+        __dirname,
+        "../../packages/core/src/plan/mod.ts",
+      ),
       "@gggplot/core": resolve(__dirname, "../../packages/core/src/mod.ts"),
+      "@gggplot/3d": resolve(__dirname, "../../packages/3d/src/mod.ts"),
       "@gggplot/reductions": resolve(
         __dirname,
         "../../packages/reductions/src/mod.ts",

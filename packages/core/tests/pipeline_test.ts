@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 // Headless pipeline: DSL → compile → emit, no UseGPU runtime import.
 import {
   annotate,
@@ -12,28 +12,47 @@ import {
   geomArea,
   geomBar,
   geomBin2d,
+  geomBlank,
   geomBoxplot,
   geomCol,
   geomContour,
   geomContourFilled,
+  geomCount,
+  geomCrossbar,
+  geomCurve,
   geomDensity,
+  geomDensity2d,
+  geomDensity2dFilled,
   geomDotplot,
+  geomEcdf,
   geomErrorbar,
+  geomErrorbarh,
+  geomFreqpoly,
+  geomFunction,
   geomHex,
   geomHistogram,
   geomHline,
+  geomJitter,
+  geomLabel,
   geomLine,
+  geomLinerange,
   geomPath,
   geomPoint,
+  geomPointrange,
   geomPolygon,
   geomQq,
   geomQqLine,
+  geomQuantile,
   geomRibbon,
+  geomRug,
   geomSmooth,
+  geomSpoke,
+  geomStep,
   geomText,
   geomTile,
   geomViolin,
   geomVline,
+  geomWaffle,
   ggplot,
   guideBins,
   guideColourbar,
@@ -52,8 +71,16 @@ import {
   scaleXLog10,
   scaleXSqrt,
   scaleYContinuous,
+  statConnect,
+  statEcdf,
   statEllipse,
   statFunction,
+  statSum,
+  statSummary2d,
+  statSummaryBin,
+  statSummaryHex,
+  statUnique,
+  statWaffle,
   theme,
   themeBw,
   themeClassic,
@@ -65,8 +92,10 @@ import {
   themeVoid,
 } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
+import { facetCellLayouts } from "../src/compile/facet_layout.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import { emitSource } from "../src/emit/mod.ts";
+import { approximateTextMeasurer } from "../src/render/font_resources.ts";
 import { asFactor, asNumeric, columnValues, ingest } from "../src/data/mod.ts";
 import { applyStat } from "../src/stat/mod.ts";
 import { groupColumnsOf, groupKeyAt, sliceRows } from "../src/group/mod.ts";
@@ -367,6 +396,49 @@ Deno.test("stackBars identity mode leaves bars unstacked at a shared 0 baseline"
   ]]);
 });
 
+Deno.test("silhouette stacking centers bars and area bands around zero", () => {
+  const bars = [
+    { x: 0, y: 2, groupKey: "a" },
+    { x: 0, y: 4, groupKey: "b" },
+    { x: 1, y: 1, groupKey: "a" },
+    { x: 1, y: 3, groupKey: "b" },
+  ];
+  assertEquals(
+    stackBars(bars, 1, "silhouette").map(({ y0, y1 }) => [y0, y1]),
+    [[-3, -1], [-1, 3], [-2, -1], [-1, 2]],
+  );
+
+  const spec = ggplot({
+    x: [0, 1, 2, 0, 1, 2],
+    y: [2, 1, 2, 4, 3, 2],
+    group: ["a", "a", "a", "b", "b", "b"],
+  }, { x: "x", y: "y", fill: "group" }).add(
+    geomArea({ position: "stack", offset: "silhouette" }),
+  ).build();
+  const tree = compile(spec);
+  const bands = findNodes(tree, "Polygon").filter((node) =>
+    (node.props.positions as unknown[])?.length === 6
+  );
+  assertEquals(bands.length, 2);
+  assertEquals(bands[0].props.positions, [
+    [0, -1],
+    [1, -1],
+    [2, 0],
+    [2, -2],
+    [1, -2],
+    [0, -3],
+  ]);
+  assertEquals(bands[1].props.positions, [
+    [0, 3],
+    [1, 2],
+    [2, 2],
+    [2, 0],
+    [1, -1],
+    [0, -1],
+  ]);
+  assertStringIncludes(emitSource(tree, "StreamgraphChart"), "<Polygon");
+});
+
 Deno.test("dodgeBars keeps a group's slot stable across different x values", () => {
   const bars = [
     { x: 0, y: 1, groupKey: "p" },
@@ -401,6 +473,125 @@ Deno.test("geom_text renders a Label with per-point positions and text", () => {
   const src = emitSource(tree, "LabeledChart");
   assertStringIncludes(src, "Label");
   assertStringIncludes(src, "Alice");
+});
+
+Deno.test("geom_label emits measured backgrounds, borders, and text in z order", () => {
+  const tree = compile(
+    ggplot(
+      { x: [0, 1, 2], y: [0, 1, 2], label: ["wide", null, "two\nlines"] },
+      { x: "x", y: "y", label: "label" },
+    ).add(geomLabel({
+      size: 10,
+      lineHeight: 12,
+      labelPadding: 3,
+      labelR: 2,
+      fill: "#fef3c7",
+      color: "#78350f",
+      borderWidth: 2,
+      alpha: 0.75,
+    })).build(),
+    {
+      layout: {
+        width: 200,
+        height: 100,
+        measureText: (text) => ({ width: text.length * 5, height: 10 }),
+      },
+    },
+  );
+  const box = findNodes(tree, "Polygon").find((node) =>
+    node.props.fill === "#fef3c7"
+  )!;
+  const border = findNodes(tree, "Line").find((node) =>
+    node.props.color === "#78350f"
+  )!;
+  const labels = findNodes(tree, "Label").find((node) =>
+    (node.props.labels as unknown[])?.includes("wide")
+  )!;
+  assertEquals([box.props.zBias, border.props.zBias, labels.props.zBias], [
+    0,
+    1,
+    2,
+  ]);
+  assertEquals(
+    [box.props.opacity, border.props.opacity, labels.props.opacity],
+    [0.75, 0.75, 0.75],
+  );
+  assertEquals(border.props.width, 2);
+  assertEquals((box.props.positions as unknown[][]).length, 2);
+  assertEquals(labels.props.labels, ["wide", "two\nlines"]);
+  const loops = box.props.positions as [number, number][][];
+  const height = (loop: [number, number][]) =>
+    Math.max(...loop.map(([, y]) => y)) - Math.min(...loop.map(([, y]) => y));
+  assertEquals(height(loops[1]) > height(loops[0]), true);
+  assertStringIncludes(emitSource(tree, "LabelBoxChart"), "#fef3c7");
+});
+
+Deno.test("geom_label rotates its boxes and retains mapped styling after missing labels", () => {
+  const data = {
+    x: [0, 1, 2],
+    y: [0, 1, 2],
+    label: ["a", null, "ccc"],
+    fill: ["first", "missing", "third"],
+    color: ["one", "missing", "three"],
+  };
+  const make = (angle: number) =>
+    compile(
+      ggplot(data, {
+        x: "x",
+        y: "y",
+        label: "label",
+        fill: "fill",
+        color: "color",
+      }).add(geomLabel({ angle, size: 10, labelPadding: 0, labelR: 0 }))
+        .build(),
+      {
+        layout: {
+          width: 100,
+          height: 100,
+          measureText: (text) => ({ width: text.length * 10, height: 10 }),
+        },
+      },
+    );
+  const baseNode = findNodes(make(0), "Polygon")[0];
+  const turnedNode = findNodes(make(90), "Polygon")[0];
+  assertEquals((baseNode.props.positions as unknown[][]).length, 2);
+  assertEquals((baseNode.props.fills as unknown[]).length, 2);
+  const base = (baseNode.props.positions as [number, number][][])[0];
+  const turned = (turnedNode.props.positions as [number, number][][])[0];
+  const span = (loop: [number, number][], axis: 0 | 1) =>
+    Math.max(...loop.map((point) => point[axis])) -
+    Math.min(...loop.map((point) => point[axis]));
+  assertEquals(
+    Math.round(span(base, 0) * 1e6),
+    Math.round(span(turned, 1) * 1e6),
+  );
+  assertEquals(
+    Math.round(span(base, 1) * 1e6),
+    Math.round(span(turned, 0) * 1e6),
+  );
+  assertEquals(
+    findNodes(make(45), "Label").filter((node) => node.props.angle === 45)
+      .flatMap((node) => node.props.labels as string[]),
+    ["a", "ccc"],
+  );
+});
+
+Deno.test("geom_label validates box sizes while geom_text remains text-only", () => {
+  const data = { x: [0], y: [0], label: ["a"] };
+  assertThrows(
+    () =>
+      compile(
+        ggplot(data, { x: "x", y: "y", label: "label" }).add(
+          geomLabel({ labelPadding: -1 }),
+        ).build(),
+      ),
+    TypeError,
+    "non-negative CSS-pixel",
+  );
+  const textTree = compile(
+    ggplot(data, { x: "x", y: "y", label: "label" }).add(geomText()).build(),
+  );
+  assertEquals(findNodes(textTree, "Polygon").length, 0);
 });
 
 Deno.test("geom_text and axis guides preserve GPU-native text rotation", () => {
@@ -438,12 +629,12 @@ Deno.test("geom_errorbar renders a stem plus top/bottom caps per row", () => {
   const panel = plotPanel(tree);
   const line = panel.children.find((c) => c.component === "Line");
   assertEquals(line?.props.positions, [
-    [[-0.9, 5], [0.9, 5]],
+    [[-0.5, 5], [0.5, 5]],
     [[0, 5], [0, 1]],
-    [[-0.9, 1], [0.9, 1]],
-    [[1.1, 9], [2.9, 9]],
+    [[-0.5, 1], [0.5, 1]],
+    [[1.5, 9], [2.5, 9]],
     [[2, 9], [2, 3]],
-    [[1.1, 3], [2.9, 3]],
+    [[1.5, 3], [2.5, 3]],
   ]);
 });
 
@@ -573,6 +764,176 @@ Deno.test("2D bin and hex products count observed cells and lower distinct topol
   ).filter((node) => !node.props.guideKind);
   assertEquals(hexes.length, 2);
   assertEquals((hexes[0].props.positions as unknown[]).length, 6);
+});
+
+Deno.test("2D summary stats reduce z in rectangular and hex cells", () => {
+  const data = {
+    x: [0, 0.1, 0.9, 1, 1],
+    y: [0, 0.1, 0.9, 1, 1],
+    z: [1, 3, 10, 20, null],
+  };
+  const spec = ggplot(data, { x: "x", y: "y", z: "z" }).add(
+    statSummary2d({ bins: 2, fun: "mean" }),
+  ).build();
+  const result = applyStat(spec.layers[0], spec.mapping, spec.data);
+  assertEquals(values(result.data, "value"), [2, 15]);
+  assertEquals(values(result.data, "count"), [2, 2]);
+  assertEquals(result.mapping.fill, "value");
+  assertEquals(
+    findNodes(compile(spec), "Polygon").filter((node) => !node.props.guideKind)
+      .length,
+    2,
+  );
+
+  for (
+    const part of [
+      statSummaryHex({ bins: 2, fun: "sum" }),
+      statSummaryBin({ bins: 2, fun: "max" }),
+    ]
+  ) {
+    const tree = compile(
+      ggplot(data, { x: "x", y: "y", z: "z" }).add(part).build(),
+    );
+    assertEquals(
+      findNodes(tree, "Polygon").filter((node) => !node.props.guideKind).length,
+      2,
+    );
+    assertStringIncludes(emitSource(tree, "Summary2dChart"), "Polygon");
+  }
+});
+
+Deno.test("2D summary stats support built-ins, grouping, custom reducers, and validation", () => {
+  const data = ingest({
+    x: [0, 0, 0, 0],
+    y: [0, 0, 0, 0],
+    z: [1, 2, 3, 4],
+    group: ["a", "a", "b", "b"],
+  });
+  for (
+    const [fun, expected] of [
+      ["mean", [1.5, 3.5]],
+      ["median", [1.5, 3.5]],
+      ["sum", [3, 7]],
+      ["min", [1, 3]],
+      ["max", [2, 4]],
+    ] as const
+  ) {
+    const layer = ggplot(data, { x: "x", y: "y", z: "z", fill: "group" }).add(
+      statSummary2d({ bins: 1, fun }),
+    ).build().layers[0];
+    const result = applyStat(
+      layer,
+      { x: "x", y: "y", z: "z", fill: "group" },
+      data,
+    );
+    assertEquals(values(result.data, "value"), [...expected]);
+    assertEquals(result.mapping.fill, "group");
+  }
+  const custom = ggplot(data, { x: "x", y: "y", z: "z" }).add(
+    statSummary2d({ bins: 1, fun: (items: number[]) => items.length }),
+  ).build();
+  assertEquals(
+    values(
+      applyStat(custom.layers[0], custom.mapping, custom.data).data,
+      "value",
+    ),
+    [4],
+  );
+  assertThrows(
+    () => emitSource(compile(custom), "CustomSummary"),
+    TypeError,
+    "cannot serialize a custom 2D summary reducer",
+  );
+  const literalFill = ggplot(data, { x: "x", y: "y", z: "z" }).add(
+    statSummary2d({ bins: 1, fill: "#ef4444" }),
+  ).build();
+  const literalResult = applyStat(
+    literalFill.layers[0],
+    literalFill.mapping,
+    literalFill.data,
+  );
+  assertEquals(literalResult.mapping.fill, undefined);
+  assertEquals(
+    findNodes(compile(literalFill), "Polygon")[0].props.fill,
+    "#ef4444",
+  );
+
+  const boundary = ggplot(
+    { x: [0.1, 0.9, 1.1], y: [0.1, 0.9, 1.1], z: [1, 2, 3] },
+    { x: "x", y: "y", z: "z" },
+  ).add(statSummary2d({ bins: 99, binwidth: [1, 1], boundary: [0, 0] }))
+    .build();
+  const boundaryResult = applyStat(
+    boundary.layers[0],
+    boundary.mapping,
+    boundary.data,
+  );
+  assertEquals(values(boundaryResult.data, "x"), [0.5, 1.5]);
+  assertEquals(values(boundaryResult.data, "count"), [2, 1]);
+
+  const hex = ggplot(
+    { x: [0.1, 1.1], y: [0.6, 0.6], z: [1, 2] },
+    { x: "x", y: "y", z: "z" },
+  ).add(statSummaryHex({ binwidth: [1, 1], boundary: [0, 0] })).build();
+  const hexResult = applyStat(hex.layers[0], hex.mapping, hex.data);
+  assertEquals(values(hexResult.data, "y"), [0.5, 1]);
+  assertThrows(
+    () =>
+      compile(
+        ggplot(data, { x: "x", y: "y", z: "z" }).add(
+          statSummary2d({ fun: "mode" }),
+        ).build(),
+      ),
+    TypeError,
+    "unsupported 2D summary reducer",
+  );
+});
+
+Deno.test("2D summary binwidth precedence, boundaries, constants, empties, and resident fallback are deliberate", () => {
+  const data = { x: [0.2, 0.8, 1.2], y: [0.2, 0.8, 1.2], z: [1, 2, 3] };
+  const spec = ggplot(data, { x: "x", y: "y", z: "z" }).add(
+    statSummary2d({ bins: 99, binwidth: [1, 1], boundary: [0, 0], fun: "sum" }),
+  ).build();
+  const result = applyStat(spec.layers[0], spec.mapping, spec.data);
+  assertEquals(values(result.data, "x"), [0.5, 1.5]);
+  assertEquals(values(result.data, "value"), [3, 3]);
+  assertEquals(
+    findNodes(compile(spec, { resident: true }), "ResidentHistogram").length,
+    0,
+  );
+
+  const constant = ggplot({ x: [2, 2], y: [3, 3], z: [4, 6] }, {
+    x: "x",
+    y: "y",
+    z: "z",
+  }).add(statSummary2d({ fun: "mean" })).build();
+  assertEquals(
+    values(
+      applyStat(constant.layers[0], constant.mapping, constant.data).data,
+      "value",
+    ),
+    [5],
+  );
+
+  const empty = ggplot({ x: [0], y: [0], z: [Number.NaN] }, {
+    x: "x",
+    y: "y",
+    z: "z",
+  }).add(statSummary2d()).build();
+  assertEquals(
+    values(applyStat(empty.layers[0], empty.mapping, empty.data).data, "value"),
+    [],
+  );
+  assertThrows(
+    () =>
+      compile(
+        ggplot(data, { x: "x", y: "y", z: "z" }).add(
+          statSummary2d({ weight: 1 }),
+        ).build(),
+      ),
+    TypeError,
+    "do not support weights",
+  );
 });
 
 Deno.test("QQ, ellipse, and function stats emit deterministic line/point products", () => {
@@ -1394,7 +1755,7 @@ Deno.test("continuous size scale maps mark radius via a mapped size column", () 
   const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
   // default size range [1,6] over domain [0,10]: 0->1, 5->3.5, 10->6
-  assertEquals(point?.props.sizes, [1, 3.5, 6]);
+  assertEquals(point?.props.sizes, [1, 1 + 5 / Math.sqrt(2), 6]);
 });
 
 Deno.test("scaleSizeValue/scaleAlphaValue interpolate across their default and custom ranges", () => {
@@ -1409,7 +1770,7 @@ Deno.test("scaleSizeValue/scaleAlphaValue interpolate across their default and c
   assertEquals(scaleAlphaValue(scale, 10), 1);
 
   const customRange = { ...scale, range: [10, 20] as [number, number] };
-  assertEquals(scaleSizeValue(customRange, 5), 15);
+  assertEquals(scaleSizeValue(customRange, 5), 10 + 10 / Math.sqrt(2));
 });
 
 Deno.test("linetype and linewidth scales train, map, and expose custom ranges", () => {
@@ -1480,7 +1841,7 @@ Deno.test("continuous size mapping emits a legend guide with scaled swatches", (
     c.component === "Point" && Array.isArray(c.props.sizes) &&
     (c.props.sizes as unknown[]).length === 3
   );
-  assertEquals(legendSwatch?.props.sizes, [1, 3.5, 6]);
+  assertEquals(legendSwatch?.props.sizes, [1, 1 + 5 / Math.sqrt(2), 6]);
 
   const labels = tree.children.filter((c) => c.component === "Label").map((c) =>
     c.props.labels
@@ -1940,6 +2301,39 @@ Deno.test("discrete color mapping emits a legend guide with swatches and labels"
   assertEquals(labels, [["color"], ["a", "b"]]);
 });
 
+Deno.test("legend key boxes reserve pixel-stable space before labels", () => {
+  const grouped = {
+    x: [0, 1, 2],
+    y: [1, 2, 3],
+    grp: ["cyl 4", "cyl 6", "cyl 8"],
+  };
+  const width = 471;
+  const tree = compile(
+    ggplot(grouped, { x: "x", y: "y", color: "grp" }).add(geomPoint())
+      .build(),
+    {
+      layout: {
+        width,
+        height: 360,
+        measureText: (text, size) => ({
+          width: text.length * size * 0.6,
+          height: size,
+        }),
+      },
+    },
+  );
+  const swatch = tree.children.find((node) =>
+    node.component === "Point" && node.props.size === 7
+  )!;
+  const label = tree.children.find((node) =>
+    node.component === "Label" &&
+    (node.props.labels as string[])[0] === "cyl 4"
+  )!;
+  const swatchX = (swatch.props.positions as [number, number][])[0][0];
+  const labelX = (label.props.positions as [number, number][])[0][0];
+  assertEquals(Math.round((labelX - swatchX) * width / 2), 16);
+});
+
 Deno.test("continuous color scale interpolates the sequential ramp across the domain", () => {
   const data2 = { x: [0, 1], y: [0, 1], val: [0, 10] };
   const perLayer = [{
@@ -2119,10 +2513,8 @@ Deno.test("labels() renames facet strip variables", () => {
     .build();
   const tree = compile(spec);
 
-  const facet = facetGridNode(tree);
-  const stripLabels = facet.children.map((embed) =>
-    embed.children.find((c) => c.component === "Label")?.props.labels
-  );
+  const stripLabels = tree.children.filter((node) => node.component === "Label")
+    .map((node) => node.props.labels);
   assertEquals(stripLabels, [["Cylinders: 4"], ["Cylinders: 6"]]);
 });
 
@@ -2160,6 +2552,106 @@ Deno.test("stat_smooth se:false omits the CI band columns/mapping", () => {
   assertEquals(values(result.data, "y"), [1, 5, 9]);
   assertEquals(result.data.ymin, undefined);
   assertEquals(result.mapping.ymin, undefined);
+});
+
+Deno.test("stat_smooth loess reproduces curvature and honors span, level, and se", () => {
+  const data = { x: [-2, -1, 0, 1, 2], y: [4, 1, 0, 1, 4] };
+  const layer = (params: Record<string, unknown>): Layer => ({
+    geom: "smooth",
+    stat: "smooth",
+    position: "identity",
+    params: { method: "loess", span: 1, robustIterations: 0, n: 5, ...params },
+  });
+  const fitted = applyStat(layer({}), { x: "x", y: "y" }, data);
+  assertEquals(
+    values(fitted.data, "y").map((value) =>
+      Math.round(Number(value) * 1e9) / 1e9
+    ),
+    [4, 1, 0, 1, 4],
+  );
+  assertEquals(values(fitted.data, "ymin").length, 5);
+  const narrow = applyStat(layer({ level: 0.5 }), { x: "x", y: "y" }, {
+    x: [-2, -1, 0, 1, 2],
+    y: [4.2, 0.8, 0.1, 1.1, 3.9],
+  });
+  const wide = applyStat(layer({ level: 0.99 }), { x: "x", y: "y" }, {
+    x: [-2, -1, 0, 1, 2],
+    y: [4.2, 0.8, 0.1, 1.1, 3.9],
+  });
+  assertEquals(
+    Number(values(wide.data, "ymax")[2]) >
+      Number(values(narrow.data, "ymax")[2]),
+    true,
+  );
+  const noSe = applyStat(layer({ se: false }), { x: "x", y: "y" }, data);
+  assertEquals(noSe.data.ymin, undefined);
+});
+
+Deno.test("stat_smooth binomial glm is deterministic, bounded, and grouped", () => {
+  const data = {
+    x: [-2, -2, -1, -1, 0, 0, 1, 1, 2, 2],
+    y: [0, 0, 0, 1, 0, 1, 0, 1, 1, 1],
+  };
+  const layer: Layer = {
+    geom: "smooth",
+    stat: "smooth",
+    position: "identity",
+    params: {
+      method: "glm",
+      family: "binomial",
+      link: "logit",
+      n: 5,
+      se: false,
+    },
+  };
+  const fitted = applyStat(layer, { x: "x", y: "y" }, data);
+  assertEquals(
+    values(fitted.data, "y").map((value) =>
+      Math.round(Number(value) * 1e6) / 1e6
+    ),
+    [0.116706, 0.266588, 0.5, 0.733412, 0.883294],
+  );
+  assertEquals(
+    values(fitted.data, "y").every((value) =>
+      Number(value) >= 0 && Number(value) <= 1
+    ),
+    true,
+  );
+});
+
+Deno.test("stat_smooth methods reject invalid and unavailable contracts", () => {
+  const data = { x: [0, 1, 2], y: [0, 1, 1] };
+  const run = (params: Record<string, unknown>) => () =>
+    applyStat(
+      { geom: "smooth", stat: "smooth", position: "identity", params },
+      {
+        x: "x",
+        y: "y",
+      },
+      data,
+    );
+  assertThrows(
+    run({ method: "loess", span: 0 }),
+    TypeError,
+    "span must be inside",
+  );
+  assertThrows(
+    run({ method: "glm", family: "gaussian" }),
+    TypeError,
+    "only family",
+  );
+  assertThrows(
+    run({ method: "glm", maxIterations: 1 }),
+    TypeError,
+    "failed to converge",
+  );
+  assertThrows(run({ method: "gam" }), TypeError, "extension-registry adapter");
+  assertThrows(run({ method: "mystery" }), TypeError, "unsupported");
+  assertThrows(
+    run({ method: "lm", formula: "y~poly(x,2)" }),
+    TypeError,
+    'formula "y~x"',
+  );
 });
 
 Deno.test("geom_smooth renders a Line plus a CI Ribbon Polygon", () => {
@@ -2456,6 +2948,75 @@ Deno.test("theme fontFamily/fontSize/textColor style geom_text's Label unless th
   assertEquals(overriddenLabel?.props.color, "#000000");
 });
 
+Deno.test("text face semantics normalize theme and layer fontface fields", () => {
+  const labelData = { x: [0], y: [0], name: ["Hi"] };
+  const themed = ggplot(labelData, { x: "x", y: "y", label: "name" })
+    .add(
+      geomText(),
+      theme({
+        fontFamily: "Basic",
+        fontWeight: "bold",
+        fontStyle: "oblique",
+        lineHeight: 18,
+      }),
+    )
+    .build();
+  const themedLabel = plotPanel(compile(themed)).children.find((node) =>
+    node.component === "Label"
+  );
+  assertEquals(themedLabel?.props.family, "Basic");
+  assertEquals(themedLabel?.props.weight, "bold");
+  assertEquals(themedLabel?.props.style, "oblique");
+  assertEquals(themedLabel?.props.lineHeight, 18);
+
+  const overridden = ggplot(labelData, { x: "x", y: "y", label: "name" })
+    .add(geomText({ fontface: "bold.italic", lineheight: 22 }))
+    .build();
+  const overriddenLabel = plotPanel(compile(overridden)).children.find((node) =>
+    node.component === "Label"
+  );
+  assertEquals(overriddenLabel?.props.weight, "bold");
+  assertEquals(overriddenLabel?.props.style, "italic");
+  assertEquals(overriddenLabel?.props.lineHeight, 22);
+});
+
+Deno.test("mapped family and fontface split text into semantic face batches", () => {
+  const labelData = {
+    x: [0, 1, 2],
+    y: [0, 1, 2],
+    name: ["plain", "bold", "other"],
+    face: ["plain", "bold", "bold"],
+    typeface: ["Basic", "Basic", "Second"],
+  };
+  const tree = compile(
+    ggplot(labelData, {
+      x: "x",
+      y: "y",
+      label: "name",
+      family: "typeface",
+      fontface: "face",
+    }).add(geomText({ family: "ignored", fontface: "italic" })).build(),
+  );
+  const labels = plotPanel(tree).children.filter((node) =>
+    node.component === "Label"
+  );
+  assertEquals(labels.length, 3);
+  assertEquals(
+    labels.map((node) => [
+      node.props.family,
+      node.props.weight,
+      node.props.style,
+      node.props.labels,
+    ]),
+    [
+      ["Basic", "normal", "normal", ["plain"]],
+      ["Basic", "bold", "normal", ["bold"]],
+      ["Second", "bold", "normal", ["other"]],
+    ],
+  );
+  assertStringIncludes(emitSource(tree, "TextFaces"), 'family="Second"');
+});
+
 Deno.test("emitSource produces UseGPU Live source with a classic pragma", () => {
   const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint()).build();
   const src = emitSource(compile(spec), "MyChart");
@@ -2499,9 +3060,7 @@ Deno.test("facet_wrap partitions data into panels laid out in an auto-sized grid
   assertEquals(points[1]?.props.positions, [[2, 20], [5, 50]]); // cyl: 6 (rows 1, 4)
   assertEquals(points[2]?.props.positions, [[3, 30]]); // cyl: 8 (row 2)
 
-  const labels = facet.children.map((embed) =>
-    embed.children.find((c) => c.component === "Label")
-  );
+  const labels = tree.children.filter((c) => c.component === "Label");
   assertEquals(labels.map((l) => l?.props.labels), [["cyl: 4"], ["cyl: 6"], [
     "cyl: 8",
   ]]);
@@ -2528,6 +3087,62 @@ Deno.test("facet_wrap honors an explicit ncol", () => {
     "FacetPanel",
     "FacetPanel",
   ]);
+});
+
+Deno.test("facets occupy guide panel bounds and center strips in reserved CSS-pixel rectangles", () => {
+  const facetData = {
+    grp: ["a", "b", "c", "d"],
+    x: [1, 2, 3, 4],
+    y: [1, 2, 3, 4],
+  };
+  const width = 640;
+  const height = 400;
+  const tree = compile(
+    ggplot(facetData, { x: "x", y: "y" }).add(
+      geomPoint(),
+      facetWrap(["grp"], 2),
+      theme({ panelSpacing: 20, stripHeight: 30 }),
+      labels({ title: "Facets" }),
+    ).build(),
+    {
+      layout: {
+        width,
+        height,
+        measureText: (text, size) => ({
+          width: text.length * size * 0.5,
+          height: size,
+        }),
+      },
+    },
+  );
+  const facet = facetGridNode(tree);
+  const bounds = facet.props.bounds as [number, number, number, number];
+  assertEquals(bounds[0] > -1, true);
+  assertEquals(bounds[1] > -1, true);
+  assertEquals(bounds[2] < 1, true);
+  assertEquals(bounds[3] < 1, true);
+  assertEquals(facet.props.gap, 20);
+  assertEquals(facet.props.stripHeight, 30);
+
+  const facetWidth = width * (bounds[2] - bounds[0]) / 2;
+  const facetHeight = height * (bounds[3] - bounds[1]) / 2;
+  const cells = facetCellLayouts(facetWidth, facetHeight, 2, 2, 20, 30);
+  const stripNodes = findNodes(tree, "Label").filter((node) =>
+    String((node.props.labels as string[] | undefined)?.[0]).startsWith("grp:")
+  );
+  assertEquals(stripNodes.length, 4);
+  assertEquals(
+    stripNodes.map((node) => node.props.positions),
+    cells.map((cell) => {
+      const strip = cell.strip;
+      return [[
+        bounds[0] + (strip[0] + strip[2]) / 2 / facetWidth *
+          (bounds[2] - bounds[0]),
+        bounds[1] + (strip[1] + strip[3]) / 2 / facetHeight *
+          (bounds[3] - bounds[1]),
+      ]];
+    }),
+  );
 });
 
 Deno.test("facet_wrap free scale modes train independent panel domains", () => {
@@ -2583,7 +3198,12 @@ Deno.test("faceted plots keep plot-level color legends outside FacetGrid", () =>
 
   const plotLevelLabels = tree.children.filter((c) => c.component === "Label")
     .map((c) => c.props.labels);
-  assertEquals(plotLevelLabels, [["Class"], ["x", "y"]]);
+  assertEquals(plotLevelLabels, [
+    ["grp: a"],
+    ["grp: b"],
+    ["Class"],
+    ["x", "y"],
+  ]);
 });
 
 Deno.test("facet_grid crosses row and column variables into a full panel grid, including empty combinations", () => {
@@ -2604,14 +3224,13 @@ Deno.test("facet_grid crosses row and column variables into a full panel grid, i
   assertEquals(facet.props.ncol, 2); // c: L, R
   assertEquals(facet.children.length, 4);
 
-  const labels = facet.children.map((embed) =>
-    embed.children.find((c) => c.component === "Label")?.props.labels
-  );
+  const labels = tree.children.filter((node) => node.component === "Label")
+    .map((node) => node.props.labels);
   assertEquals(labels, [
-    ["r: hi, c: L"],
-    ["r: hi, c: R"],
-    ["r: lo, c: L"],
-    ["r: lo, c: R"],
+    ["hi · L"],
+    ["hi · R"],
+    ["lo · L"],
+    ["lo · R"],
   ]);
 
   const points = facet.children.map((embed) =>
@@ -2680,7 +3299,991 @@ Deno.test("emitSource inlines a standalone FacetGrid definition for faceted spec
   assertStringIncludes(src, "const FacetGrid = (");
   assertStringIncludes(
     src,
-    'import { LayoutContext } from "@use-gpu/workbench"',
+    "LayoutContext, MatrixContext, TransformContext",
   );
-  assertStringIncludes(src, "createElement, Fragment, useContext");
+  assertStringIncludes(
+    src,
+    "createElement, Fragment, provide, useAwait, useContext",
+  );
+  assertStringIncludes(src, "const EmittedFontHost =");
+  assertStringIncludes(src, "({ fontResources } = {})");
+});
+
+Deno.test("simple geom aliases expose their exact IR defaults", () => {
+  const functionFn = (x: number) => x * x;
+  const spec = ggplot(data, { x: "x", y: "y" }).add(
+    geomFreqpoly(),
+    geomBlank(),
+    geomStep(),
+    geomCurve(),
+    geomSpoke(),
+    geomRug(),
+    geomFunction(functionFn),
+    geomJitter(),
+  ).build();
+  assertEquals(
+    spec.layers.map(({ geom, stat, position }) => ({ geom, stat, position })),
+    [
+      { geom: "line", stat: "bin", position: "identity" },
+      { geom: "blank", stat: "identity", position: "identity" },
+      { geom: "step", stat: "identity", position: "identity" },
+      { geom: "curve", stat: "identity", position: "identity" },
+      { geom: "spoke", stat: "identity", position: "identity" },
+      { geom: "rug", stat: "identity", position: "identity" },
+      { geom: "line", stat: "function", position: "identity" },
+      { geom: "point", stat: "identity", position: "jitter" },
+    ],
+  );
+  assertEquals(spec.layers[6].params.fun, functionFn);
+  assertEquals(spec.layers[7].params, {});
+  assertEquals(
+    ggplot(data, { x: "x", y: "y" }).add(statSum()).build().layers[0].stat,
+    "sum",
+  );
+});
+
+Deno.test("geomBlank trains scales but emits no marks or legend keys", () => {
+  const spec = ggplot({ x: [0], y: [0] }, { x: "x", y: "y" }).add(
+    geomPoint(),
+    geomBlank({
+      data: { bx: [10], by: [20] },
+      mapping: { x: "bx", y: "by" },
+      inheritAes: false,
+    }),
+  ).build();
+  const tree = compile(spec);
+  assertEquals(plotPanel(tree).props.range, [[0, 10], [0, 20]]);
+  assertEquals(findNodes(tree, "Point").length, 1);
+  assertEquals(findNodes(tree, "Line").length, 0);
+  assertEquals(findNodes(tree, "Polygon").length, 0);
+});
+
+Deno.test("geomStep expands sorted groups for hv, vh, and mid directions", () => {
+  const stepData = { x: [2, 0, 1], y: [20, 0, 10] };
+  const positions = (direction: "hv" | "vh" | "mid") => {
+    const tree = compile(
+      ggplot(stepData, { x: "x", y: "y" }).add(geomStep({ direction }))
+        .build(),
+    );
+    return findNodes(tree, "Line").find((line) => line.props.width === 2)
+      ?.props.positions;
+  };
+  assertEquals(positions("hv"), [[0, 0], [1, 0], [1, 10], [2, 10], [2, 20]]);
+  assertEquals(positions("vh"), [[0, 0], [0, 10], [1, 10], [1, 20], [2, 20]]);
+  assertEquals(positions("mid"), [
+    [0, 0],
+    [0.5, 0],
+    [0.5, 10],
+    [1, 10],
+    [1.5, 10],
+    [1.5, 20],
+    [2, 20],
+  ]);
+  assertThrows(
+    () =>
+      compile(
+        ggplot(stepData, { x: "x", y: "y" }).add(
+          geomStep({ direction: "diagonal" }),
+        ).build(),
+      ),
+    TypeError,
+    "direction",
+  );
+});
+
+Deno.test("statConnect emits deterministic grouped sigmoid vertices", () => {
+  const data = {
+    round: [1, 2, 1, 2],
+    rank: [3, 1, 1, 2],
+    team: ["a", "a", "b", "b"],
+  };
+  const spec = ggplot(data, { x: "round", y: "rank", color: "team" }).add(
+    statConnect({ connection: "sigmoid", samples: 4, steepness: 8 }),
+  ).build();
+  const result = applyStat(spec.layers[0], spec.mapping, spec.data);
+  assertEquals(values(result.data, "round"), [
+    1,
+    1.25,
+    1.5,
+    1.75,
+    2,
+    1,
+    1.25,
+    1.5,
+    1.75,
+    2,
+  ]);
+  const ranks = values(result.data, "rank").map(Number);
+  assertEquals(ranks[0], 3);
+  assertEquals(ranks[2], 2);
+  assertEquals(ranks[4], 1);
+  assertEquals(values(result.data, "team"), [
+    "a",
+    "a",
+    "a",
+    "a",
+    "a",
+    "b",
+    "b",
+    "b",
+    "b",
+    "b",
+  ]);
+  const tree = compile(spec);
+  assertEquals(
+    findNodes(tree, "Line").filter((node) => node.props.width === 2).length,
+    2,
+  );
+  assertStringIncludes(emitSource(tree, "BumpChart"), "<Line");
+
+  for (const connection of ["linear", "hv", "vh", "mid"] as const) {
+    const layer = ggplot({ x: [0, 1], y: [0, 1] }, { x: "x", y: "y" }).add(
+      statConnect({ connection, samples: 2 }),
+    ).build().layers[0];
+    assertEquals(
+      values(
+        applyStat(layer, { x: "x", y: "y" }, { x: [0, 1], y: [0, 1] }).data,
+        "x",
+      ).length > 2,
+      true,
+    );
+  }
+  assertThrows(
+    () =>
+      compile(
+        ggplot(data, { x: "round", y: "rank" }).add(
+          statConnect({ connection: "arc" }),
+        ).build(),
+      ),
+    TypeError,
+    "unsupported connection",
+  );
+});
+
+Deno.test("geomCurve and geomSpoke lower deterministic endpoint topology", () => {
+  const curveTree = compile(
+    ggplot(
+      { x: [0], y: [0], xend: [2], yend: [0] },
+      { x: "x", y: "y", xend: "xend", yend: "yend" },
+    ).add(geomCurve()).build(),
+  );
+  const curve = findNodes(curveTree, "Line").find((line) =>
+    Array.isArray((line.props.positions as unknown[][])?.[0]?.[0])
+  )?.props.positions as [number, number][][];
+  assertEquals(curve.length, 1);
+  assertEquals(curve[0].length, 33);
+  assertEquals(curve[0][0], [0, 0]);
+  assertEquals(curve[0][32], [2, 0]);
+  assertEquals(curve[0][16], [1, 0.5]);
+
+  const spokeTree = compile(
+    ggplot(
+      { x: [1], y: [2], angle: [Math.PI / 2], radius: [3] },
+      { x: "x", y: "y", angle: "angle", radius: "radius" },
+    ).add(geomSpoke()).build(),
+  );
+  const spoke = findNodes(spokeTree, "Line").find((line) =>
+    Array.isArray((line.props.positions as unknown[][])?.[0]?.[0])
+  )?.props.positions as [number, number][][];
+  assertEquals(spoke[0][0], [1, 2]);
+  assertEquals(Math.round(spoke[0][1][0] * 1e12) / 1e12, 1);
+  assertEquals(spoke[0][1][1], 5);
+});
+
+Deno.test("geomRug places CSS-pixel ticks on requested panel sides", () => {
+  const tree = compile(
+    ggplot({ x: [0, 10], y: [0, 20] }, { x: "x", y: "y" }).add(
+      geomRug({ sides: "tr", length: 10 }),
+    ).build(),
+    {
+      layout: {
+        width: 100,
+        height: 100,
+        measureText: approximateTextMeasurer,
+      },
+    },
+  );
+  const rug = findNodes(tree, "Line").find((line) =>
+    Array.isArray((line.props.positions as unknown[][])?.[0]?.[0])
+  )?.props.positions as [number, number][][];
+  assertEquals(rug.length, 4);
+  assertEquals(rug[0][0], [0, 20]);
+  assertEquals(rug[0][1][0], 0);
+  assertEquals(rug[2][0], [10, 0]);
+  assertEquals(rug[2][1][1], 0);
+  assertThrows(
+    () =>
+      compile(
+        ggplot(data, { x: "x", y: "y" }).add(geomRug({ sides: "bb" }))
+          .build(),
+      ),
+    TypeError,
+    "sides",
+  );
+});
+
+Deno.test("freqpoly, function, and jitter aliases compile and emit source", () => {
+  const freq = compile(
+    ggplot({ x: [0, 0, 1, 2, 2, 2], g: ["a", "a", "a", "b", "b", "b"] }, {
+      x: "x",
+      color: "g",
+    }).add(geomFreqpoly({ bins: 3 })).build(),
+  );
+  assertEquals(
+    findNodes(freq, "Line").filter((line) => line.props.width === 2).length,
+    2,
+  );
+  const fnTree = compile(
+    ggplot({ x: [-1, 1] }, { x: "x" }).add(geomFunction((x) => x * x, { n: 5 }))
+      .build(),
+  );
+  assertEquals(
+    (findNodes(fnTree, "Line").find((line) => line.props.width === 2)?.props
+      .positions as unknown[]).length,
+    5,
+  );
+  const jitterSpec = ggplot(data, { x: "x", y: "y" }).add(geomJitter()).build();
+  assertEquals(findNodes(compile(jitterSpec), "Point").length, 1);
+  assertStringIncludes(
+    emitSource(compile(jitterSpec), "JitterChart"),
+    "<Point",
+  );
+});
+
+Deno.test("stat_sum aggregates complete tuples with weighted group-local proportions", () => {
+  const sumData = ingest({
+    x: [1, 1, 1, 2, 2],
+    y: [3, 3, 3, 4, 4],
+    group: ["a", "a", "b", "a", "a"],
+    weight: [0.5, 1.5, 4, 2, Number.NaN],
+  });
+  const layer = ggplot(sumData, { x: "x", y: "y", color: "group" }).add(
+    geomCount({ weight: "weight" }),
+  ).build().layers[0];
+  const result = applyStat(
+    layer,
+    { x: "x", y: "y", color: "group", ...layer.mapping },
+    sumData,
+  );
+  assertEquals(values(result.data, "n"), [2, 4, 2]);
+  assertEquals(values(result.data, "prop"), [0.5, 1, 0.5]);
+  assertEquals(values(result.data, "group"), ["a", "b", "a"]);
+  assertEquals(result.mapping.size, "n");
+});
+
+Deno.test("geomCount uses area-scaled counts, supports literal size, facets, and source emission", () => {
+  const countData = {
+    x: [1, 1, 1, 2],
+    y: [2, 2, 2, 3],
+    panel: ["a", "a", "a", "b"],
+  };
+  const spec = ggplot(countData, { x: "x", y: "y" }).add(geomCount()).build();
+  const point = findNodes(compile(spec), "Point")[0];
+  assertEquals(point.props.sizes, [6, 1]);
+  assertStringIncludes(emitSource(compile(spec), "CountChart"), "sizes=");
+
+  const literal = compile(
+    ggplot(countData, { x: "x", y: "y" }).add(geomCount({ size: 9 })).build(),
+  );
+  assertEquals(findNodes(literal, "Point")[0].props.size, 9);
+
+  const faceted = compile(
+    ggplot(countData, { x: "x", y: "y" }).add(
+      geomCount(),
+      facetWrap(["panel"]),
+    ).build(),
+  );
+  assertEquals(findNodes(faceted, "Point").length, 3); // two panels plus size legend
+
+  const empty = applyStat(
+    ggplot({ x: [], y: [] }, { x: "x", y: "y" }).add(geomCount()).build()
+      .layers[0],
+    { x: "x", y: "y", size: "n" },
+    ingest({ x: [], y: [] }),
+  );
+  assertEquals(values(empty.data, "n"), []);
+});
+
+Deno.test("density2d KDE normalizes, preserves groups, and exposes computed columns", () => {
+  const cloud = ingest({
+    x: [-1, -0.5, 0, 2, 2.5, 3, Number.NaN],
+    y: [-1, 0.2, 0.8, 2, 2.2, 3, 1],
+    group: ["a", "a", "a", "b", "b", "b", "a"],
+  });
+  const layer = ggplot(cloud, { x: "x", y: "y", color: "group" }).add(
+    geomDensity2dFilled({ n: 25, h: [0.5, 0.5], breaks: [0.02, 0.08] }),
+  ).build().layers[0];
+  const result = applyStat(
+    layer,
+    { x: "x", y: "y", color: "group" },
+    cloud,
+  );
+  const densities = values(result.data, "density") as number[];
+  const normalized = values(result.data, "ndensity") as number[];
+  const counts = values(result.data, "count") as number[];
+  const ns = values(result.data, "n") as number[];
+  const groups = values(result.data, "group") as string[];
+  assertEquals(Math.max(...normalized), 1);
+  assertEquals(new Set(groups), new Set(["a", "b"]));
+  assertEquals(new Set(ns), new Set([3]));
+  assertEquals(
+    counts.every((value, i) => Math.abs(value - 3 * densities[i]) < 1e-12),
+    true,
+  );
+  for (const group of ["a", "b"]) {
+    const indices = groups.flatMap((value, i) => value === group ? [i] : []);
+    const xs = indices.map((i) => Number(values(result.data, "densityx")[i]));
+    const ys = indices.map((i) => Number(values(result.data, "densityy")[i]));
+    const dx = (Math.max(...xs) - Math.min(...xs)) / 24;
+    const dy = (Math.max(...ys) - Math.min(...ys)) / 24;
+    const integral = indices.reduce(
+      (sum, i) => sum + densities[i] * dx * dy,
+      0,
+    );
+    assertEquals(Math.abs(integral - 1) < 0.03, true);
+  }
+});
+
+Deno.test("density2d line/filled constructors contour and reject invalid controls", () => {
+  const cloud = { x: [-1, 0, 0.5, 1], y: [0, 1, -0.5, 0.2] };
+  const lineTree = compile(
+    ggplot(cloud, { x: "x", y: "y" }).add(
+      geomDensity2d({ n: 16, bins: 5, contourVar: "count" }),
+    ).build(),
+  );
+  assertEquals(findNodes(lineTree, "Line").length > 0, true);
+  const filledTree = compile(
+    ggplot(cloud, { x: "x", y: "y" }).add(
+      geomDensity2dFilled({ n: 12, bins: 5 }),
+    ).build(),
+  );
+  assertEquals(findNodes(filledTree, "Polygon").length > 0, true);
+  assertStringIncludes(emitSource(lineTree, "Density2dChart"), "<Line");
+  for (
+    const opts of [{ n: 1 }, { h: [0, 1] }, { adjust: [1] }, {
+      contourVar: "bad",
+    }]
+  ) {
+    assertThrows(
+      () =>
+        compile(
+          ggplot(cloud, { x: "x", y: "y" }).add(geomDensity2d(opts)).build(),
+        ),
+      TypeError,
+      "density2d",
+    );
+  }
+});
+
+Deno.test("interval family shares orientation-aware stem, cap, box, and point topology", () => {
+  const verticalData = { x: [1], y: [3], lo: [1], hi: [5] };
+  const vertical = (geom: ReturnType<typeof geomLinerange>) =>
+    compile(
+      ggplot(verticalData, { x: "x", y: "y", ymin: "lo", ymax: "hi" }).add(geom)
+        .build(),
+    );
+  const linerange = findNodes(vertical(geomLinerange()), "Line").find((node) =>
+    node.props.width === 2
+  )!;
+  assertEquals(linerange.props.positions, [[[1, 1], [1, 5]]]);
+  const pointrange = vertical(geomPointrange({ size: 7 }));
+  assertEquals(findNodes(pointrange, "Point")[0].props.positions, [[1, 3]]);
+  assertEquals(findNodes(pointrange, "Point")[0].props.size, 7);
+  const crossbar = vertical(geomCrossbar({ width: 0.8 }));
+  assertEquals(findNodes(crossbar, "Polygon")[0].props.positions, [[
+    [0.6, 1],
+    [0.6, 5],
+    [1.4, 5],
+    [1.4, 1],
+  ]]);
+
+  const horizontalData = { y: [2], x: [4], lo: [1], hi: [7] };
+  const horizontal = compile(
+    ggplot(horizontalData, { y: "y", x: "x", xmin: "lo", xmax: "hi" }).add(
+      geomErrorbarh({ width: 1 }),
+    ).build(),
+  );
+  const hline = findNodes(horizontal, "Line").find((node) =>
+    Array.isArray((node.props.positions as unknown[][])?.[0]?.[0])
+  )!;
+  assertEquals(hline.props.positions, [
+    [[7, 1.5], [7, 2.5]],
+    [[7, 2], [1, 2]],
+    [[1, 1.5], [1, 2.5]],
+  ]);
+  assertEquals(
+    ggplot(horizontalData, { y: "y", xmin: "lo", xmax: "hi" }).add(
+      geomErrorbarh(),
+    ).build().layers[0].params.orientation,
+    "y",
+  );
+  assertStringIncludes(emitSource(horizontal, "HorizontalIntervals"), "<Line");
+});
+
+Deno.test("interval family rejects incomplete and ambiguous orientation mappings", () => {
+  assertThrows(
+    () =>
+      compile(
+        ggplot({ x: [1], lo: [0] }, { x: "x", ymin: "lo" }).add(geomLinerange())
+          .build(),
+      ),
+    TypeError,
+    "incomplete or ambiguous",
+  );
+  assertThrows(
+    () =>
+      compile(
+        ggplot(
+          { x: [1], y: [2], xmin: [0], xmax: [2], ymin: [1], ymax: [3] },
+          {
+            x: "x",
+            y: "y",
+            xmin: "xmin",
+            xmax: "xmax",
+            ymin: "ymin",
+            ymax: "ymax",
+          },
+        ).add(geomCrossbar()).build(),
+      ),
+    TypeError,
+    "ambiguous",
+  );
+});
+
+Deno.test("interval family preserves mapped styling, dodge, missing rows, domains, facets, and coord flip", () => {
+  const intervalData = {
+    x: [1, 1, null],
+    y: [2, 3, 4],
+    lo: [-5, -2, null],
+    hi: [6, 8, 10],
+    group: ["a", "b", "a"],
+    width: [1, 3, 2],
+    panel: ["one", "one", "two"],
+  };
+  const mapping = {
+    x: "x",
+    y: "y",
+    ymin: "lo",
+    ymax: "hi",
+    color: "group",
+    linetype: "group",
+    linewidth: "width",
+  } as const;
+  const tree = compile(
+    ggplot(intervalData, mapping).add(
+      geomPointrange({ position: "dodge", dodgeWidth: 0.8, size: 6 }),
+    ).build(),
+  );
+  const intervalLines = findNodes(tree, "Line").filter((node) =>
+    Array.isArray((node.props.positions as unknown[][])?.[0]?.[0]) &&
+    node.props.color !== undefined
+  );
+  assertEquals(intervalLines.length, 2);
+  const centers = intervalLines.map((node) =>
+    Number((node.props.positions as number[][][])[0][0][0])
+  );
+  assertEquals(centers[0] < 1 && centers[1] > 1, true);
+  assertEquals(new Set(intervalLines.map((node) => node.props.color)).size, 2);
+  assertEquals(new Set(intervalLines.map((node) => node.props.width)).size, 2);
+  assertEquals((plotPanel(tree).props.range as number[][])[1], [-5, 10]);
+
+  const facetedFlipped = compile(
+    ggplot(intervalData, mapping).add(
+      geomLinerange(),
+      facetWrap(["panel"]),
+      coordFlip(),
+    ).build(),
+  );
+  assertEquals(
+    findNodes(facetedFlipped, "Cartesian").every((node) =>
+      node.props.axes === "yx"
+    ),
+    true,
+  );
+  assertEquals(
+    findNodes(facetedFlipped, "Line").some((node) =>
+      Array.isArray((node.props.positions as unknown[][])?.[0]?.[0])
+    ),
+    true,
+  );
+});
+
+Deno.test("stat quantile fits deterministic grouped pinball-optimal endpoints", () => {
+  const quantileData = ingest({
+    x: [0, 1, 2, 0, 1, 2],
+    y: [0, 1, 2, 2, 3, 4],
+    group: ["a", "a", "a", "b", "b", "b"],
+  });
+  const layer = ggplot(quantileData, { x: "x", y: "y", color: "group" }).add(
+    geomQuantile({ quantiles: [0.25, 0.5, 0.75] }),
+  ).build().layers[0];
+  const result = applyStat(
+    layer,
+    { x: "x", y: "y", color: "group" },
+    quantileData,
+  );
+  assertEquals(values(result.data, "quantile"), [
+    0.25,
+    0.25,
+    0.5,
+    0.5,
+    0.75,
+    0.75,
+    0.25,
+    0.25,
+    0.5,
+    0.5,
+    0.75,
+    0.75,
+  ]);
+  assertEquals(values(result.data, "quantiley"), [
+    0,
+    2,
+    0,
+    2,
+    0,
+    2,
+    2,
+    4,
+    2,
+    4,
+    2,
+    4,
+  ]);
+  assertEquals(result.mapping.group, "quantileGroup");
+});
+
+Deno.test("geomQuantile handles degenerate x, emits source, and validates V1 contract", () => {
+  const degenerate = { x: [1, 1, 1, 1], y: [0, 1, 2, 10] };
+  const tree = compile(
+    ggplot(degenerate, { x: "x", y: "y" }).add(
+      geomQuantile({ quantiles: [0.5] }),
+    ).build(),
+  );
+  const fitted = findNodes(tree, "Line").find((node) =>
+    node.props.width === 2
+  )!;
+  assertEquals(fitted.props.positions, [[1, 1.5], [1, 1.5]]);
+  assertStringIncludes(emitSource(tree, "QuantileChart"), "<Line");
+  for (
+    const opts of [{ method: "loess" }, { quantiles: [] }, {
+      quantiles: [0, 0.5],
+    }, { quantiles: [0.7, 0.4] }]
+  ) {
+    assertThrows(
+      () =>
+        compile(
+          ggplot(degenerate, { x: "x", y: "y" }).add(geomQuantile(opts))
+            .build(),
+        ),
+      TypeError,
+    );
+  }
+  assertThrows(
+    () =>
+      compile(
+        ggplot({ x: [1], y: [2] }, { x: "x", y: "y" }).add(geomQuantile())
+          .build(),
+      ),
+    TypeError,
+    "two finite rows",
+  );
+});
+
+Deno.test("stat_smooth loess follows local quadratic curvature and preserves groups", () => {
+  const curved = ingest({
+    x: [-2, -1, 0, 1, 2, -2, -1, 0, 1, 2],
+    y: [4, 1, 0, 1, 4, 5, 2, 1, 2, 5],
+    group: ["a", "a", "a", "a", "a", "b", "b", "b", "b", "b"],
+  });
+  const layer = ggplot(curved, { x: "x", y: "y", color: "group" }).add(
+    geomSmooth({
+      method: "loess",
+      span: 1,
+      n: 5,
+      robustIterations: 0,
+      se: false,
+    }),
+  ).build().layers[0];
+  const result = applyStat(layer, { x: "x", y: "y", color: "group" }, curved);
+  assertEquals(
+    values(result.data, "y").map((value) =>
+      Math.round(Number(value) * 1e9) / 1e9
+    ),
+    [4, 1, 0, 1, 4, 5, 2, 1, 2, 5],
+  );
+  assertEquals(values(result.data, "group"), [
+    "a",
+    "a",
+    "a",
+    "a",
+    "a",
+    "b",
+    "b",
+    "b",
+    "b",
+    "b",
+  ]);
+  assertEquals(result.mapping.ymin, undefined);
+});
+
+Deno.test("stat_smooth glm fits bounded logistic probabilities and validates capabilities", () => {
+  const binary = { x: [-2, -2, 0, 0, 2, 2], y: [0, 1, 0, 1, 0, 1] };
+  const spec = ggplot(binary, { x: "x", y: "y" }).add(
+    geomSmooth({ method: "glm", family: "binomial", link: "logit", n: 5 }),
+  ).build();
+  const tree = compile(spec);
+  const smoothLine = findNodes(tree, "Line").find((node) =>
+    node.props.width === 2
+  )!;
+  assertEquals(
+    (smoothLine.props.positions as [number, number][]).map(([, y]) => y),
+    [0.5, 0.5, 0.5, 0.5, 0.5],
+  );
+  assertEquals(findNodes(tree, "Polygon").length > 0, true);
+  assertStringIncludes(emitSource(tree, "GlmSmooth"), "<Line");
+
+  const invalid = [
+    { method: "gam" },
+    { method: "glm", family: "gaussian" },
+    { method: "glm", link: "probit" },
+    { method: "loess", span: 0 },
+    { method: "lm", formula: "y~poly(x,2)" },
+  ];
+  for (const opts of invalid) {
+    assertThrows(
+      () =>
+        compile(
+          ggplot(binary, { x: "x", y: "y" }).add(geomSmooth(opts)).build(),
+        ),
+      TypeError,
+    );
+  }
+  assertThrows(
+    () =>
+      compile(
+        ggplot({ x: [0, 1, 2], y: [0, 0.5, 1] }, { x: "x", y: "y" }).add(
+          geomSmooth({ method: "glm" }),
+        ).build(),
+      ),
+    TypeError,
+    "0 or 1",
+  );
+});
+
+Deno.test("geomLabel measures padded multiline boxes and preserves box-border-text z order", () => {
+  const calls: unknown[][] = [];
+  const measure = (
+    text: string,
+    size: number,
+    family?: string,
+    weight?: number | string,
+    style?: string,
+  ) => {
+    calls.push([text, size, family, weight, style]);
+    return { width: text.length * 10, height: 12 };
+  };
+  const spec = ggplot(
+    { x: [5], y: [5], label: ["ab\nc"], family: ["Demo"], face: ["bold"] },
+    { x: "x", y: "y", label: "label", family: "family", fontface: "face" },
+  ).add(geomLabel({ size: 20, labelPadding: 4, labelR: 3, borderWidth: 2 }))
+    .build();
+  const tree = compile(spec, {
+    layout: { width: 400, height: 400, measureText: measure },
+  });
+  const panel = plotPanel(tree);
+  const boxIndex = panel.children.findIndex((node) =>
+    node.component === "Polygon" && node.props.radius === 3
+  );
+  const borderIndex = panel.children.findIndex((node) =>
+    node.component === "Line" && node.props.zBias === 1
+  );
+  const textIndex = panel.children.findIndex((node) =>
+    node.component === "Label" && node.props.zBias === 2
+  );
+  assertEquals(
+    boxIndex >= 0 && boxIndex < borderIndex && borderIndex < textIndex,
+    true,
+  );
+  const box = panel.children[boxIndex];
+  assertEquals((box.props.positions as unknown[][][])[0].length, 16);
+  assertEquals(box.props.fill, "#ffffff");
+  assertEquals(panel.children[borderIndex].props.width, 2);
+  assertEquals(
+    calls.some((call) =>
+      call[0] === "ab" && call[1] === 20 && call[2] === "Demo" &&
+      call[3] === "bold"
+    ),
+    true,
+  );
+  assertEquals(calls.some((call) => call[0] === "c"), true);
+});
+
+Deno.test("geomLabel rotates boxes, aligns mapped fills after missing rows, and leaves geomText unchanged", () => {
+  const labelData = {
+    x: [0, 1, 2],
+    y: [0, 1, 2],
+    label: ["one", null, "three"],
+    fill: ["a", "b", "c"],
+  };
+  const compileAngle = (angle: number) =>
+    compile(
+      ggplot(labelData, { x: "x", y: "y", label: "label", fill: "fill" }).add(
+        geomLabel({ angle, alpha: 0.6, borderColor: "#111111" }),
+      ).build(),
+      {
+        layout: {
+          width: 400,
+          height: 400,
+          measureText: (text, size) => ({
+            width: text.length * size,
+            height: size,
+          }),
+        },
+      },
+    );
+  const unrotated = findNodes(compileAngle(0), "Polygon").find((node) =>
+    node.props.radius === 2
+  )!;
+  const rotated45 = findNodes(compileAngle(45), "Polygon").find((node) =>
+    node.props.radius === 2
+  )!;
+  const rotated90 = findNodes(compileAngle(90), "Polygon").find((node) =>
+    node.props.radius === 2
+  )!;
+  assertEquals((unrotated.props.positions as unknown[][][]).length, 2);
+  assertEquals((unrotated.props.fills as string[]).length, 2);
+  assertEquals(unrotated.props.opacity, 0.6);
+  assertEquals(rotated45.props.positions === unrotated.props.positions, false);
+  assertEquals(rotated90.props.positions === unrotated.props.positions, false);
+  const labels = findNodes(compileAngle(45), "Label").filter((node) =>
+    node.props.angle === 45
+  );
+  assertEquals(labels.flatMap((node) => node.props.labels as string[]), [
+    "one",
+    "three",
+  ]);
+
+  const textTree = compile(
+    ggplot({ x: [0], y: [0], label: ["plain"] }, {
+      x: "x",
+      y: "y",
+      label: "label",
+    }).add(geomText()).build(),
+  );
+  assertEquals(
+    findNodes(textTree, "Polygon").some((node) =>
+      node.props.radius !== undefined
+    ),
+    false,
+  );
+  assertEquals(
+    findNodes(textTree, "Label").some((node) =>
+      (node.props.labels as string[] | undefined)?.[0] === "plain"
+    ),
+    true,
+  );
+  assertStringIncludes(emitSource(compileAngle(45), "LabelChart"), "<Polygon");
+});
+
+Deno.test("statEcdf collapses ties, filters non-finite values, groups, and pads semantically", () => {
+  const ecdfData = ingest({
+    x: [2, 1, 1, Number.NaN, 3, 3, 4],
+    group: ["a", "a", "a", "a", "b", "b", "b"],
+  });
+  const layer =
+    ggplot(ecdfData, { x: "x", color: "group" }).add(statEcdf()).build()
+      .layers[0];
+  const result = applyStat(layer, { x: "x", color: "group" }, ecdfData);
+  assertEquals(values(result.data, "x"), [
+    -Infinity,
+    1,
+    2,
+    Infinity,
+    -Infinity,
+    3,
+    4,
+    Infinity,
+  ]);
+  assertEquals(values(result.data, "ecdf"), [0, 2 / 3, 1, 1, 0, 2 / 3, 1, 1]);
+  assertEquals(values(result.data, "group"), [
+    "a",
+    "a",
+    "a",
+    "a",
+    "b",
+    "b",
+    "b",
+    "b",
+  ]);
+  const unpadded = applyStat(
+    ggplot(ecdfData, { x: "x" }).add(statEcdf({ pad: false })).build()
+      .layers[0],
+    { x: "x" },
+    ecdfData,
+  );
+  assertEquals(values(unpadded.data, "x"), [1, 2, 3, 4]);
+  assertThrows(
+    () =>
+      applyStat(
+        ggplot(ecdfData, { x: "x" }).add(statEcdf({ weight: "w" })).build()
+          .layers[0],
+        { x: "x" },
+        ecdfData,
+      ),
+    TypeError,
+    "does not support weights",
+  );
+});
+
+Deno.test("geomEcdf clips padded endpoints to finite panel domains and emits monotone steps", () => {
+  const spec = ggplot({ x: [1, 1, 2, 4] }, { x: "x" }).add(geomEcdf()).build();
+  const tree = compile(spec);
+  assertEquals(plotPanel(tree).props.range, [[1, 4], [0, 1]]);
+  const line = findNodes(tree, "Line").find((node) => node.props.width === 2)!;
+  const positions = line.props.positions as [number, number][];
+  assertEquals(
+    positions.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y)),
+    true,
+  );
+  assertEquals(positions.at(-1), [4, 1]);
+  assertEquals(
+    positions.every((position, index) =>
+      index === 0 || position[1] >= positions[index - 1][1]
+    ),
+    true,
+  );
+  assertStringIncludes(emitSource(tree, "EcdfChart"), "<Line");
+});
+
+Deno.test("statUnique retains stable first exact rows and runs independently in facets", () => {
+  const uniqueData = ingest({
+    x: [1, 1, 1, 2, 2],
+    y: [3, 3, 4, null, null],
+    facet: ["a", "a", "a", "b", "b"],
+  });
+  const layer =
+    ggplot(uniqueData, { x: "x", y: "y" }).add(statUnique()).build().layers[0];
+  const result = applyStat(layer, { x: "x", y: "y" }, uniqueData);
+  assertEquals(values(result.data, "x"), [1, 1, 2]);
+  assertEquals(values(result.data, "y"), [3, 4, null]);
+  assertEquals(result.mapping, { x: "x", y: "y" });
+  const faceted = compile(
+    ggplot({ x: [1, 1, 1, 1], y: [2, 2, 2, 2], facet: ["a", "a", "b", "b"] }, {
+      x: "x",
+      y: "y",
+    })
+      .add(statUnique(), facetWrap(["facet"])).build(),
+  );
+  assertEquals(
+    findNodes(faceted, "Point").filter((node) => node.props.size === 5).length,
+    2,
+  );
+});
+
+Deno.test("geomWaffle expands weighted groups into core tiles with ordinary fill guides", () => {
+  const waffleData = {
+    status: ["resolved", "progress", "blocked", "new"],
+    count: [58, 27, 9, 6],
+  };
+  const spec = ggplot(waffleData, { fill: "status" }).add(
+    geomWaffle({ weight: "count", rows: 10, maxCells: 100 }),
+  ).build();
+  const result = applyStat(spec.layers[0], spec.mapping, spec.data);
+  assertEquals(values(result.data, "waffleX").slice(0, 12), [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+  ]);
+  assertEquals(values(result.data, "waffleY").slice(0, 12), [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    0,
+    1,
+  ]);
+  assertEquals(values(result.data, "status").length, 100);
+  assertEquals(values(result.data, "status").slice(56, 60), [
+    "resolved",
+    "resolved",
+    "progress",
+    "progress",
+  ]);
+  assertEquals(result.mapping.x, "waffleX");
+  assertEquals(result.mapping.y, "waffleY");
+
+  const tree = compile(spec);
+  const tiles = findNodes(tree, "Polygon").filter((node) =>
+    !node.props.guideKind && (node.props.positions as unknown[])?.length === 4
+  );
+  assertEquals(tiles.length, 100);
+  assertEquals(
+    new Set(tiles.map((tile) => tile.props.fill)).size,
+    4,
+  );
+  assertStringIncludes(emitSource(tree, "WaffleChart"), "<Polygon");
+});
+
+Deno.test("statWaffle supports unit rows, panel isolation, and bounded validation", () => {
+  const unitSpec = ggplot({ group: ["a", "a", "b"] }, { fill: "group" })
+    .add(statWaffle({ rows: 2 })).build();
+  const unit = applyStat(unitSpec.layers[0], unitSpec.mapping, unitSpec.data);
+  assertEquals(values(unit.data, "waffleX"), [0, 0, 1]);
+  assertEquals(values(unit.data, "waffleY"), [0, 1, 0]);
+
+  const faceted = compile(
+    ggplot({ facet: ["a", "b"], count: [2, 1] }, {})
+      .add(
+        geomWaffle({ weight: "count", rows: 10 }),
+        facetWrap(["facet"]),
+      ).build(),
+  );
+  assertEquals(
+    facetGridNode(faceted).children.slice(0, 2).map((embed) =>
+      embed.children.find((node) => node.component === "Cartesian")?.children
+        .filter((node) => node.component === "Polygon" && !node.props.guideKind)
+        .length ?? 0
+    ),
+    [1, 1],
+  );
+  for (const count of [2, 1]) {
+    const panel = ggplot({ count: [count] }, {}).add(
+      geomWaffle({ weight: "count", rows: 10 }),
+    ).build();
+    const result = applyStat(panel.layers[0], panel.mapping, panel.data);
+    assertEquals(values(result.data, "waffleX"), Array(count).fill(0));
+    assertEquals(
+      values(result.data, "waffleY"),
+      Array.from({ length: count }, (_, index) => index),
+    );
+  }
+
+  const run = (count: number, opts: Record<string, unknown> = {}) => {
+    const spec = ggplot({ count: [count] }, {}).add(
+      geomWaffle({ weight: "count", ...opts }),
+    ).build();
+    return () => applyStat(spec.layers[0], spec.mapping, spec.data);
+  };
+  assertThrows(run(-1), TypeError, "non-negative");
+  assertThrows(run(1.5), TypeError, "integers");
+  assertThrows(run(11, { maxCells: 10 }), RangeError, "exceeds");
+  assertThrows(run(1, { rows: 0 }), TypeError, "positive integer");
+  assertThrows(run(1, { direction: "row" }), TypeError, "direction");
+  assertEquals(values(run(0)().data, "waffleX"), []);
 });
