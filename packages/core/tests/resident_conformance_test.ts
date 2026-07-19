@@ -142,7 +142,8 @@ Deno.test("resident conformance: weighted histogram deliberately selects CPU", (
   const tree = compile(spec, { resident: true });
 
   assertEquals(residentNodes(tree).length, 0);
-  assertEquals(nodes(tree, "Polygon").length > 0, true);
+  // gggplot-tzc.4: geom_histogram's CPU-fallback bars are a ChunkedFace node.
+  assertEquals(nodes(tree, "ChunkedFace").length > 0, true);
 });
 
 Deno.test("resident conformance: unrelated layered marks preserve CPU render tree", () => {

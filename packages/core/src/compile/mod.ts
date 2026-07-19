@@ -7,12 +7,7 @@ import { facetCellLayouts } from "./facet_layout.ts";
 
 import { GEOM_REGISTRY, lowerLayer } from "../geom/mod.ts";
 import type { LayerContext } from "../geom/mod.ts";
-import {
-  munchPolygonNode,
-  numericRange,
-  polarGridLines,
-  polarizeNode,
-} from "./coordinates.ts";
+import { numericRange, polarGridLines } from "./coordinates.ts";
 import {
   axisGuideOverlay,
   guideLayout,
@@ -22,11 +17,18 @@ import {
   themeFaceProps,
 } from "./guides.ts";
 import { buildFacetPanels } from "./facets.ts";
+import {
+  PackCache,
+  stageAKey,
+  stageBTransformedMark,
+  UNCACHEABLE_GEOMS,
+} from "./pack_cache.ts";
 
 export * from "./rendertree.ts";
 export * from "./guides.ts";
 export { type LayerContext, lowerLayer } from "../geom/mod.ts";
 export { buildFacetPanels } from "./facets.ts";
+export { createPackCache, PackCache } from "./pack_cache.ts";
 
 export interface CompileOptions {
   /** Enable runtime-only GPU products; source emission keeps portable CPU nodes. */
@@ -37,6 +39,14 @@ export interface CompileOptions {
     height: number;
     measureText: TextMeasurer;
   };
+  /**
+   * Staged geometry cache (gggplot-tzc.5): when supplied, re-compiling an
+   * unchanged spec (or a DSL-rebuilt spec reusing the same data columns)
+   * reuses the same renderer-ready FlatTensor/MarkTopology objects instead
+   * of re-packing/re-transforming them. Absent -> uncached, byte-for-byte
+   * identical to pre-tzc.5 behavior. See compile/pack_cache.ts.
+   */
+  packCache?: PackCache;
 }
 
 export function compile(
@@ -144,7 +154,7 @@ export function compile(
   );
 
   /** Build one panel's Cartesian/Polar view node (guides + this panel's marks). */
-  function buildPanel(perLayer: typeof allPerLayer): RenderNode {
+  function buildPanel(perLayer: typeof allPerLayer, panelIndex = 0): RenderNode {
     const free = spec.facet.scales ?? "fixed";
     const panelScales = free === "fixed" ? scales : trainScales(spec, perLayer);
     const panelXScale = free === "free" || free === "free_x"
@@ -208,16 +218,40 @@ export function compile(
       },
       measureText: options.layout?.measureText,
     };
-    const marks = perLayer.flatMap(({ layer, data, mapping, resident }) =>
-      resident
-        ? [
+    // Stage A (gggplot-tzc.5): memoize each non-resident layer's lowerLayer
+    // output through options.packCache, keyed on its mapped columns'
+    // revisions + geometry params + panel membership (see pack_cache.ts).
+    // UNCACHEABLE_GEOMS (text/label/rug) read ctx.theme/xDomain/yDomain/
+    // panelPixels directly for packed output, so they're always lowered
+    // fresh rather than grow the key with those dependencies. Absent
+    // packCache -> byte-identical to the pre-tzc.5 uncached path.
+    const marks = perLayer.flatMap(({ layer, data, mapping, resident }, layerIndex) => {
+      if (resident) {
+        return [
           node("ResidentProduct", {
             product: resident.product,
             ...resident.props,
           }),
-        ]
-        : lowerLayer(layer, mapping, data, ctx)
-    );
+        ];
+      }
+      if (!options.packCache || UNCACHEABLE_GEOMS.has(layer.geom)) {
+        return lowerLayer(layer, mapping, data, ctx);
+      }
+      const { primary, key } = stageAKey(
+        options.packCache,
+        layer,
+        layerIndex,
+        panelIndex,
+        mapping,
+        data,
+        ctx.scales,
+      );
+      return options.packCache.stageA(
+        primary,
+        key,
+        () => lowerLayer(layer, mapping, data, ctx),
+      );
+    });
     const thetaAxis: 0 | 1 = project[0] === "x" ? 0 : 1;
     const thetaDomain = thetaAxis === 0 ? panelXDomain : panelYDomain;
     const coordParams = spec.coord.params ?? {};
@@ -233,10 +267,37 @@ export function compile(
     const thetaSpan = requestedEnd - requestedStart;
     const thetaStart = -thetaSpan / 2;
     const thetaEnd = thetaSpan / 2;
+    // LOWERING-ORDER CONTRACT (gggplot-tzc epic): geoms lower into
+    // component-tagged marks first (nested-array positions today; flat
+    // nodes carrying a FlatTensor 'positions' + MarkTopology 'topology'
+    // once tzc.3/tzc.4 convert point/line/rect/area/polygon families) with
+    // NO topology.indices attached yet. Only THEN does compile apply
+    // coordinate transforms — polarizeNode's pointwise theta/radius remap,
+    // followed by munching (munchPolygonNode for the legacy nested-array
+    // path keyed on component === 'Polygon'; munchFlatNode for any node
+    // shaped as FlatTensor + MarkTopology, dispatched on topology.kind
+    // instead of component name). Triangulated indices (tzc.4) are only
+    // ever attached AFTER this point — munchFlatNode throws if it ever sees
+    // topology.indices already present, since munching after triangulation
+    // would silently desync indices from the newly-inserted vertices.
+    //
+    // Stage B (gggplot-tzc.5): stageBTransformedMark memoizes this transform
+    // per mark through options.packCache, rooted on Stage A's OWN output
+    // positions array (see pack_cache.ts) — a Stage A cache hit upstream
+    // therefore also hits Stage B, so a genuinely unchanged polar/munched
+    // chart reuses its transformed tensors too, not just its packed ones.
+    // Cartesian views never reach this branch at all (`polarMarks = marks`
+    // below), which is exactly what makes "Cartesian reuses Stage A tensors
+    // unchanged" true by construction rather than by a caching decision.
     const polarMarks = view === "Polar"
       ? marks.map((mark) =>
-        munchPolygonNode(
-          polarizeNode(mark, thetaAxis, thetaDomain, thetaStart, thetaEnd),
+        stageBTransformedMark(
+          options.packCache,
+          mark,
+          thetaAxis,
+          thetaDomain,
+          thetaStart,
+          thetaEnd,
         )
       )
       : marks;
@@ -399,7 +460,7 @@ export function compile(
     // Empty crossed combinations still receive the same panel field, guides,
     // and axes; only their mark list is empty. This keeps the visual grid
     // legible without manufacturing data rows.
-    return node("FacetPanel", {}, [buildPanel(panelLayers[i])]);
+    return node("FacetPanel", {}, [buildPanel(panelLayers[i], i)]);
   });
   const facetGap = theme.panelSpacing ?? 24;
   const facetStripHeight = theme.stripHeight ?? 24;

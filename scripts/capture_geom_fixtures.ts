@@ -42,7 +42,7 @@ const layout = {
   measureText: approximateTextMeasurer,
 };
 
-const cases: Array<{ name: string; build: () => Spec }> = [
+export const cases: Array<{ name: string; build: () => Spec }> = [
   {
     name: "stacked_bar",
     build: () =>
@@ -206,7 +206,7 @@ const cases: Array<{ name: string; build: () => Spec }> = [
 // one eligible spec to the inline mark form (explicit y domain), and one gated
 // spec (mapped fill) must fall back to CPU Polygons. These pin the generic
 // ResidentProduct node produced by GeomDefinition.residentPlan going forward.
-const residentCases: Array<{ name: string; build: () => Spec }> = [
+export const residentCases: Array<{ name: string; build: () => Spec }> = [
   {
     name: "resident_histogram_view",
     build: () =>
@@ -239,6 +239,24 @@ const dir = new URL(
   import.meta.url,
 );
 
+// FlatTensor fixture encoding (gggplot-tzc.1). Nothing in the compiler emits
+// FlatTensor/MarkTopology onto a RenderTree node yet (that lands in
+// tzc.3/tzc.4), so this replacer is currently a no-op for every fixture
+// case below — it exists so later beads don't need to touch the fixture
+// harness or invalidate saved fixtures when they start emitting typed
+// arrays. Float32Array values are rounded to 6 decimal places (well past
+// float32 -> float64 round-trip noise, e.g. 0.1 -> 0.10000000149011612)
+// so fixture diffs stay readable; Uint32Array values are exact integers.
+export function serializeTypedArrays(_key: string, value: unknown): unknown {
+  if (value instanceof Float32Array) {
+    return { $f32: Array.from(value, (v) => Math.round(v * 1e6) / 1e6) };
+  }
+  if (value instanceof Uint32Array) {
+    return { $u32: Array.from(value) };
+  }
+  return value;
+}
+
 function treeFor(build: () => Spec): unknown {
   // Compile both with and without layout so text/label measured boxes and the
   // panel-pixel-dependent geoms (rug, label) are exercised deterministically.
@@ -255,38 +273,44 @@ function treeForResident(build: () => Spec): unknown {
   };
 }
 
-const check = Deno.args.includes("--check");
-if (!check) await Deno.mkdir(dir, { recursive: true });
+// Guarded behind import.meta.main so serializeTypedArrays (and the case
+// tables above) can be imported from tests without running the fixture
+// read/write/compare side effects — e.g. packages/core/tests/mark_tensor_test.ts
+// exercises the serializer in isolation.
+if (import.meta.main) {
+  const check = Deno.args.includes("--check");
+  if (!check) await Deno.mkdir(dir, { recursive: true });
 
-let failures = 0;
-const allCases: Array<{ name: string; json: string }> = [
-  ...cases.map(({ name, build }) => ({
-    name,
-    json: JSON.stringify(treeFor(build), null, 2),
-  })),
-  ...residentCases.map(({ name, build }) => ({
-    name,
-    json: JSON.stringify(treeForResident(build), null, 2),
-  })),
-];
-for (const { name, json } of allCases) {
-  const file = new URL(`${name}.json`, dir);
-  if (check) {
-    const prev = await Deno.readTextFile(file);
-    if (prev !== json) {
-      failures++;
-      console.error(`MISMATCH: ${name}`);
+  let failures = 0;
+  const allCases: Array<{ name: string; json: string }> = [
+    ...cases.map(({ name, build }) => ({
+      name,
+      json: JSON.stringify(treeFor(build), serializeTypedArrays, 2),
+    })),
+    ...residentCases.map(({ name, build }) => ({
+      name,
+      json: JSON.stringify(treeForResident(build), serializeTypedArrays, 2),
+    })),
+  ];
+  for (const { name, json } of allCases) {
+    const file = new URL(`${name}.json`, dir);
+    if (check) {
+      const prev = await Deno.readTextFile(file);
+      if (prev !== json) {
+        failures++;
+        console.error(`MISMATCH: ${name}`);
+      } else {
+        console.log(`ok: ${name}`);
+      }
     } else {
-      console.log(`ok: ${name}`);
+      await Deno.writeTextFile(file, json);
+      console.log(`wrote: ${name}`);
     }
-  } else {
-    await Deno.writeTextFile(file, json);
-    console.log(`wrote: ${name}`);
   }
-}
 
-if (check && failures > 0) {
-  console.error(`\n${failures} fixture(s) differ from baseline`);
-  Deno.exit(1);
+  if (check && failures > 0) {
+    console.error(`\n${failures} fixture(s) differ from baseline`);
+    Deno.exit(1);
+  }
+  if (check) console.log("\nAll fixtures deep-equal to baseline.");
 }
-if (check) console.log("\nAll fixtures deep-equal to baseline.");

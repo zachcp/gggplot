@@ -9,6 +9,7 @@ import {
   groupColumnsOf,
   groupKeyAt,
   groupValuesAt,
+  isDiscreteColumn,
   rowCount,
   sliceRows,
 } from "../group/mod.ts";
@@ -135,9 +136,26 @@ export function statDensityAxis(axis: "x" | "y"): StatFn {
   return (data, mapping, params) => {
     const valueCol = mapping[axis];
     if (!valueCol || !(valueCol in data)) return { data, mapping };
-    const groupCols = groupColumnsOf(mapping, data).filter((column) =>
+    const implicitGroupCols = groupColumnsOf(mapping, data).filter((column) =>
       column !== valueCol
     );
+    // The OTHER position axis (x for ydensity/violin, y for density) is not
+    // part of IMPLICIT_GROUP_AES, so a plain aes(x=<discrete>, y=<value>)
+    // with no color/fill/shape/linetype mapped would otherwise pool every
+    // position category into a single density curve and drop the position
+    // column from the output entirely (gggplot-8vu). When no other implicit
+    // group is already in play, promote the discrete position axis to a
+    // grouping + carry-through column, mirroring ggplot2's stat_ydensity
+    // computing one density per x group. Leave the established color/fill
+    // grouping path untouched.
+    const posAxis = axis === "y" ? "x" : "y";
+    const posCol = mapping[posAxis];
+    const posColIsDiscretePosition = implicitGroupCols.length === 0 &&
+      !!posCol && posCol !== valueCol && posCol in data &&
+      isDiscreteColumn(data, posCol, columnValues(data, posCol));
+    const groupCols = posColIsDiscretePosition
+      ? [...implicitGroupCols, posCol]
+      : implicitGroupCols;
     const grouped = new Map<
       string,
       { rows: number[]; group: Record<string, unknown> }
@@ -166,11 +184,26 @@ export function statDensityAxis(axis: "x" | "y"): StatFn {
         out[column].push(...grid.samples.map(() => entry.group[column]));
       }
     }
+    // Downstream lowering (e.g. lowerViolin) splits marks by
+    // splitByEffectiveGroup, which honors an explicit `group` aesthetic
+    // before falling back to IMPLICIT_GROUP_AES. Since the promoted position
+    // axis isn't in IMPLICIT_GROUP_AES, surface it as `group` so each
+    // position category renders as its own curve. Only do this when the
+    // caller didn't already set an explicit group — never override it.
+    const groupMapping = posColIsDiscretePosition && !mapping.group
+      ? { group: posCol }
+      : {};
     return {
       data: dataFrameFromColumns(out),
       mapping: axis === "x"
-        ? { ...mapping, x: valueCol, y: "density", density: "density" }
-        : { ...mapping, y: valueCol, density: "density" },
+        ? {
+          ...mapping,
+          x: valueCol,
+          y: "density",
+          density: "density",
+          ...groupMapping,
+        }
+        : { ...mapping, y: valueCol, density: "density", ...groupMapping },
     };
   };
 }

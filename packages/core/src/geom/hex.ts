@@ -1,9 +1,9 @@
-// geom_hex — hexagonal 2D bins as one Polygon face per cell.
+// geom_hex — hexagonal 2D bins as one ChunkedFace node (gggplot-tzc.4).
 import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
 import { scalePosition } from "../scale/mod.ts";
 import type { LayerContext } from "./types.ts";
-import { colorsOf, valuesOf } from "./shared.ts";
+import { colorsOf, type FaceLoop, packFaceLoops, valuesOf } from "./shared.ts";
 
 export function lowerHex(
   layer: Layer,
@@ -44,13 +44,22 @@ export function lowerHex(
   const metadata = typeof layer.params.fun === "function"
     ? { execution: "cpu-custom-summary", nonSerializable: true }
     : {};
-  return colors
-    ? positions.map((position, i) =>
-      node("Polygon", { positions: position, fill: colors[i], ...metadata })
-    )
-    : [node("Polygon", {
-      positions,
-      fill: (layer.params.fill as string) ?? "#3b82f6",
+  if (positions.length === 0) return [];
+  const fill = (layer.params.fill as string) ?? "#3b82f6";
+  // Regular hexagons are always convex, so this uses fan triangulation
+  // (concave: false) — same rationale as bar/tile/rect's guaranteed-convex
+  // loops (gggplot-tzc.4's render/chunked_face.tsx spike writeup).
+  const loops: FaceLoop[] = colors
+    ? positions.map((position, i) => ({ positions: position, fill: colors[i] }))
+    : positions.map((position) => ({ positions: position, fill }));
+  const packed = packFaceLoops(loops);
+  return [
+    node("ChunkedFace", {
+      positions: packed.positions,
+      topology: packed.topology,
+      colors: packed.colors,
+      concave: false,
       ...metadata,
-    })];
+    }),
+  ];
 }

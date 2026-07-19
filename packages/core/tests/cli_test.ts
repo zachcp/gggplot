@@ -12,7 +12,8 @@ Deno.test("runCli compiles a spec module to emitted UseGPU Live source", async (
     const src = await Deno.readTextFile(outPath);
     assertStringIncludes(src, "@jsx createElement");
     assertStringIncludes(src, "<Point");
-    assertStringIncludes(src, "<Line");
+    // gggplot-tzc.3: geom_line now lowers to the ChunkedLine component.
+    assertStringIncludes(src, "<ChunkedLine");
   } finally {
     await Deno.remove(outPath);
   }

@@ -3,11 +3,14 @@ import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
 import { scalePosition } from "../scale/mod.ts";
 import type { LayerContext } from "./types.ts";
-import { valuesOf } from "./shared.ts";
+import { packUniformChunks, valuesOf } from "./shared.ts";
 
 /**
  * Lower an annotate("segment", ...)/geom_segment layer (x, y, xend, yend) to a
- * single Line of disjoint segments, one per row.
+ * single Line of disjoint segments, one per row. gggplot-tzc.3: positions
+ * pack into one FlatTensor + MarkTopology (packUniformChunks); component
+ * stays 'Line' (a row-disjoint annotation, not geom_line's per-group
+ * ChunkedLine — see the bd note on gggplot-tzc.3).
  */
 export function lowerSegment(
   layer: Layer,
@@ -32,11 +35,12 @@ export function lowerSegment(
       [scalePosition(xScale, xends[i]), scalePosition(yScale, yends[i])],
     ]);
   }
-
   const color = (layer.params.color as string) ?? "#3b82f6";
+  const packed = packUniformChunks(segments);
   return [
     node("Line", {
-      positions: segments,
+      positions: packed.positions,
+      topology: packed.topology,
       color,
       width: (layer.params.strokeWidth as number) ?? 2,
     }),

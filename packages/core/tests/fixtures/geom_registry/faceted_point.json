@@ -71,25 +71,53 @@
                   {
                     "component": "Point",
                     "props": {
-                      "positions": [
-                        [
-                          1,
-                          2
+                      "positions": {
+                        "array": {
+                          "$f32": [
+                            1,
+                            2,
+                            2,
+                            4,
+                            3,
+                            1
+                          ]
+                        },
+                        "format": "vec2",
+                        "dims": 2,
+                        "length": 3,
+                        "size": [
+                          3
                         ],
-                        [
-                          2,
-                          4
+                        "version": 0
+                      },
+                      "topology": {
+                        "kind": "points"
+                      },
+                      "colors": {
+                        "array": {
+                          "$f32": [
+                            0.164706,
+                            0.470588,
+                            0.839216,
+                            1,
+                            0.105882,
+                            0.686275,
+                            0.478431,
+                            1,
+                            0.164706,
+                            0.470588,
+                            0.839216,
+                            1
+                          ]
+                        },
+                        "format": "vec4",
+                        "dims": 4,
+                        "length": 3,
+                        "size": [
+                          3
                         ],
-                        [
-                          3,
-                          1
-                        ]
-                      ],
-                      "colors": [
-                        "#2a78d6",
-                        "#1baf7a",
-                        "#2a78d6"
-                      ],
+                        "version": 0
+                      },
                       "size": 3
                     },
                     "children": []
@@ -148,25 +176,53 @@
                   {
                     "component": "Point",
                     "props": {
-                      "positions": [
-                        [
-                          4,
-                          8
-                        ],
-                        [
-                          5,
+                      "positions": {
+                        "array": {
+                          "$f32": [
+                            4,
+                            8,
+                            5,
+                            3,
+                            6,
+                            5
+                          ]
+                        },
+                        "format": "vec2",
+                        "dims": 2,
+                        "length": 3,
+                        "size": [
                           3
                         ],
-                        [
-                          6,
-                          5
-                        ]
-                      ],
-                      "colors": [
-                        "#1baf7a",
-                        "#2a78d6",
-                        "#1baf7a"
-                      ],
+                        "version": 0
+                      },
+                      "topology": {
+                        "kind": "points"
+                      },
+                      "colors": {
+                        "array": {
+                          "$f32": [
+                            0.105882,
+                            0.686275,
+                            0.478431,
+                            1,
+                            0.164706,
+                            0.470588,
+                            0.839216,
+                            1,
+                            0.105882,
+                            0.686275,
+                            0.478431,
+                            1
+                          ]
+                        },
+                        "format": "vec4",
+                        "dims": 4,
+                        "length": 3,
+                        "size": [
+                          3
+                        ],
+                        "version": 0
+                      },
                       "size": 3
                     },
                     "children": []
@@ -505,25 +561,53 @@
                   {
                     "component": "Point",
                     "props": {
-                      "positions": [
-                        [
-                          1,
-                          2
+                      "positions": {
+                        "array": {
+                          "$f32": [
+                            1,
+                            2,
+                            2,
+                            4,
+                            3,
+                            1
+                          ]
+                        },
+                        "format": "vec2",
+                        "dims": 2,
+                        "length": 3,
+                        "size": [
+                          3
                         ],
-                        [
-                          2,
-                          4
+                        "version": 0
+                      },
+                      "topology": {
+                        "kind": "points"
+                      },
+                      "colors": {
+                        "array": {
+                          "$f32": [
+                            0.164706,
+                            0.470588,
+                            0.839216,
+                            1,
+                            0.105882,
+                            0.686275,
+                            0.478431,
+                            1,
+                            0.164706,
+                            0.470588,
+                            0.839216,
+                            1
+                          ]
+                        },
+                        "format": "vec4",
+                        "dims": 4,
+                        "length": 3,
+                        "size": [
+                          3
                         ],
-                        [
-                          3,
-                          1
-                        ]
-                      ],
-                      "colors": [
-                        "#2a78d6",
-                        "#1baf7a",
-                        "#2a78d6"
-                      ],
+                        "version": 0
+                      },
                       "size": 3
                     },
                     "children": []
@@ -582,25 +666,53 @@
                   {
                     "component": "Point",
                     "props": {
-                      "positions": [
-                        [
-                          4,
-                          8
-                        ],
-                        [
-                          5,
+                      "positions": {
+                        "array": {
+                          "$f32": [
+                            4,
+                            8,
+                            5,
+                            3,
+                            6,
+                            5
+                          ]
+                        },
+                        "format": "vec2",
+                        "dims": 2,
+                        "length": 3,
+                        "size": [
                           3
                         ],
-                        [
-                          6,
-                          5
-                        ]
-                      ],
-                      "colors": [
-                        "#1baf7a",
-                        "#2a78d6",
-                        "#1baf7a"
-                      ],
+                        "version": 0
+                      },
+                      "topology": {
+                        "kind": "points"
+                      },
+                      "colors": {
+                        "array": {
+                          "$f32": [
+                            0.105882,
+                            0.686275,
+                            0.478431,
+                            1,
+                            0.164706,
+                            0.470588,
+                            0.839216,
+                            1,
+                            0.105882,
+                            0.686275,
+                            0.478431,
+                            1
+                          ]
+                        },
+                        "format": "vec4",
+                        "dims": 4,
+                        "length": 3,
+                        "size": [
+                          3
+                        ],
+                        "version": 0
+                      },
                       "size": 3
                     },
                     "children": []

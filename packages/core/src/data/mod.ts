@@ -159,6 +159,43 @@ function copyFactorColumn(
   return copy;
 }
 
+/**
+ * The public data boundary: the ONLY place raw caller-supplied data (a
+ * RowStore, LegacyDataFrame, or already-typed TypedDataFrame) becomes the
+ * TypedDataFrame the rest of the pipeline (GGSpec["data"] = DataFrame =
+ * TypedDataFrame) reads column arrays from.
+ *
+ * IMMUTABILITY CONTRACT (gggplot-tzc.5): for raw input (a plain object of
+ * arrays or a row store), ingest() always MATERIALIZES FRESH column arrays
+ * — toNumeric/toFactor build their `values` via `.map()` over the input,
+ * never retaining the caller's own array by reference. Mutating the array
+ * you originally passed in after calling ingest() (or after ggplot(...) /
+ * .build(), which calls ingest() internally) therefore has no effect on the
+ * resulting spec: spec.data is decoupled from the caller's own arrays at
+ * the moment of ingestion, verified in this function (no code path returns
+ * or wraps the raw `values` array itself into a Column).
+ *
+ * The one exception is intentional and load-bearing, not a gap: when `data`
+ * is ALREADY a TypedDataFrame (isTypedDataFrame(normalized) is true —
+ * i.e. it already came from a prior ingest() call), this function is an
+ * IDENTITY PASSTHROUGH — it returns the exact same object, not a copy. This
+ * makes ingest() idempotent for already-typed data (re-ingesting is a
+ * no-op) and is what lets two separately-built DSL specs that reuse the
+ * same already-ingested TypedDataFrame (ggplot(sameTypedData, aes).build()
+ * called twice) observe IDENTICAL Column object references — the mechanism
+ * gggplot-tzc.5's pack cache depends on to recognize a DSL-rebuilt spec as
+ * depending on the same underlying data without any deep-equality check.
+ *
+ * Because of this, mutating spec.data (or any Column object reached through
+ * it) IN PLACE after build()/ingest() is UNSUPPORTED: nothing revalidates a
+ * pack cache against an in-place mutation, since identity — not a version
+ * counter on the array itself — is the coherence signal (see FlatTensor's
+ * `version` field, which stays 0 always; compile/pack_cache.ts's revisions
+ * WeakMap is the only supported invalidation path). A host that must mutate
+ * ingested data in place should call `packCache.invalidate(column)` itself
+ * (compile/pack_cache.ts) as the explicit escape hatch — see that module's
+ * doc comment for the invalidation contract.
+ */
 export function ingest(
   data: InputData,
   options: IngestOptions = {},

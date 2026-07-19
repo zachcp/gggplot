@@ -15,7 +15,7 @@ import type { InputData } from "../data/mod.ts";
 const IMPLICIT_GROUP_AES = ["color", "fill", "shape", "linetype"] as const;
 const SINGLE_GROUP = "__single__";
 
-function isDiscreteColumn(
+export function isDiscreteColumn(
   data: DataFrame,
   column: string,
   values: unknown[] | undefined,

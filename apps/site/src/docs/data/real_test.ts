@@ -41,9 +41,18 @@ Deno.test("the lazily loaded mtcars asset remains typed and supports numeric lin
     linewidth: "hp",
   }).add(geomLine()).build();
   const panel = findNodes(compile(spec), "Cartesian")[0];
-  const lines = panel.children.filter((node) => node.component === "Line");
+  // gggplot-tzc.3: grouped geom_line lowers to ChunkedLine nodes, one per dash
+  // batch — the two linetype (am) levels are two distinct dash patterns, so
+  // they stay two separate nodes. widths is now a FlatTensor(f32), not an Array.
+  const lines = panel.children.filter((node) =>
+    node.component === "ChunkedLine"
+  );
   assertEquals(lines.length, 2);
-  assertEquals(lines[0].props.widths instanceof Array, true);
+  assertEquals(
+    (lines[0].props.widths as { array?: Float32Array }).array instanceof
+      Float32Array,
+    true,
+  );
   assertEquals(
     lines.some((line) => JSON.stringify(line.props.dash) === "[8,5]"),
     true,

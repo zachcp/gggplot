@@ -1,7 +1,12 @@
 import type { Aes, GGSpec, Layer, Theme } from "../ir/types.ts";
-import { node, type RenderNode } from "./rendertree.ts";
+import {
+  type FlatTensor,
+  type MarkTopology,
+  node,
+  type RenderNode,
+} from "./rendertree.ts";
 import { expandRange, scalePosition, type TrainedScale } from "../scale/mod.ts";
-import { valuesOf } from "../geom/shared.ts";
+import { expandByOwners, valuesOf } from "../geom/shared.ts";
 
 /**
  * The true y-extent of a stacked/filled bar layer is the summed height per x,
@@ -101,6 +106,220 @@ export function munchPolygonNode(n: RenderNode): RenderNode {
   return node(n.component, { ...n.props, positions: munched }, n.children);
 }
 
+// ---------------------------------------------------------------------------
+// Flat-tensor munching (gggplot-tzc.2). Same per-edge subdivision density as
+// munchLoop above (MUNCH_DETAIL points per edge, fixed — equivalent input
+// produces equivalent segment counts), reimplemented over an interleaved
+// Float32Array + MarkTopology instead of nested coordinate arrays, and
+// dispatched on that shape rather than on component === 'Polygon'. Additive:
+// no geom emits FlatTensor-bearing nodes yet (tzc.3/tzc.4), so this has no
+// effect on the legacy nested-array path munchPolygonNode still serves.
+// ---------------------------------------------------------------------------
+
+/** Matches munchLoop's fixed per-edge subdivision count above. */
+const MUNCH_DETAIL = 16;
+
+/**
+ * Munch one closed-loop chunk (vertices [start, start+len) of a shared
+ * position array), INCLUDING its closing edge (len-1 back to 0). Emits
+ * MUNCH_DETAIL points per edge (t = 0/MUNCH_DETAIL .. (MUNCH_DETAIL-1)/MUNCH_DETAIL,
+ * so each edge's own start vertex is reproduced exactly and the edge's end
+ * vertex is picked up as the next edge's start) — numerically identical
+ * policy to munchLoop, just walking a flat array instead of point tuples.
+ * Degenerate chunks (len < 2) pass through unchanged, matching munchLoop.
+ * Appends emitted vertex components to outXY and each emitted vertex's
+ * ORIGINATING (segment-start) source index to outSource, for companion
+ * expansion via expandByOwners. Returns the emitted vertex count.
+ */
+function munchLoopChunk(
+  array: Float32Array,
+  dims: number,
+  start: number,
+  len: number,
+  outXY: number[],
+  outSource: number[],
+): number {
+  if (len < 2) {
+    for (let i = 0; i < len; i++) {
+      for (let d = 0; d < dims; d++) outXY.push(array[(start + i) * dims + d]);
+      outSource.push(start + i);
+    }
+    return len;
+  }
+  let emitted = 0;
+  for (let i = 0; i < len; i++) {
+    const aIdx = start + i;
+    const bIdx = start + ((i + 1) % len);
+    for (let step = 0; step < MUNCH_DETAIL; step++) {
+      const t = step / MUNCH_DETAIL;
+      for (let d = 0; d < dims; d++) {
+        const a = array[aIdx * dims + d];
+        const b = array[bIdx * dims + d];
+        outXY.push(a + (b - a) * t);
+      }
+      outSource.push(aIdx);
+      emitted++;
+    }
+  }
+  return emitted;
+}
+
+/**
+ * Munch one open-polyline chunk, subdividing only its INTERIOR segments
+ * (i - i+1 for i in [0, len-2]) at the same per-edge density as
+ * munchLoopChunk — NO closing edge, closing the passthrough gap the legacy
+ * nested path left for lines/paths (ARCHITECTURE.md design-debt item 3).
+ * Because interior-segment subdivision alone stops just short of t=1 on the
+ * final segment, the chunk's true final vertex is appended explicitly so an
+ * open path still reaches its real endpoint. Degenerate chunks (len < 2)
+ * pass through unchanged.
+ */
+function munchPolylineChunk(
+  array: Float32Array,
+  dims: number,
+  start: number,
+  len: number,
+  outXY: number[],
+  outSource: number[],
+): number {
+  if (len < 2) {
+    for (let i = 0; i < len; i++) {
+      for (let d = 0; d < dims; d++) outXY.push(array[(start + i) * dims + d]);
+      outSource.push(start + i);
+    }
+    return len;
+  }
+  let emitted = 0;
+  for (let i = 0; i < len - 1; i++) {
+    const aIdx = start + i;
+    const bIdx = start + i + 1;
+    for (let step = 0; step < MUNCH_DETAIL; step++) {
+      const t = step / MUNCH_DETAIL;
+      for (let d = 0; d < dims; d++) {
+        const a = array[aIdx * dims + d];
+        const b = array[bIdx * dims + d];
+        outXY.push(a + (b - a) * t);
+      }
+      outSource.push(aIdx);
+      emitted++;
+    }
+  }
+  const lastIdx = start + len - 1;
+  for (let d = 0; d < dims; d++) outXY.push(array[lastIdx * dims + d]);
+  outSource.push(lastIdx);
+  emitted++;
+  return emitted;
+}
+
+/**
+ * Munch a flat-tensor node's positions (plus any per-vertex companion
+ * tensors) under nonlinear (polar) coordinates. Dispatches on
+ * topology.kind, NOT component name — today's munchPolygonNode keys on
+ * component === 'Polygon' and would silently skip a chunked Face node
+ * carrying the same 'loops' topology under a different component name.
+ *
+ * - kind='loops': each chunk (topology.chunks, or the whole tensor as one
+ *   chunk when 'chunks' is absent) is munched INCLUDING its closing edge
+ *   (see munchLoopChunk) — numerically equivalent to munchPolygonNode's
+ *   nested-array loop munching for the same input.
+ * - kind='polyline': each chunk's interior segments are munched with NO
+ *   closing edge (see munchPolylineChunk) — this is the ggplot2
+ *   coord_munch() line/path coverage the legacy path never had.
+ * - kind='points': nothing to munch (no segments); returned unchanged.
+ *
+ * COMPANION EXPANSION: any other prop on the node that is itself a
+ * FlatTensor with the same vertex count as 'positions' (colors/sizes/
+ * alphas/...) is expanded alongside positions via expandByOwners, using
+ * each emitted vertex's originating segment-start source index — i.e. the
+ * companion value is REPEATED across all vertices munched from one edge
+ * (piecewise-constant, no interpolation), matching the legacy nested
+ * behavior. Interpolating companions across a munched edge is a possible
+ * later enhancement, not implemented here.
+ *
+ * THROWS if topology.indices is present. Triangulation happens strictly
+ * after coordinate transforms (see the lowering-order contract documented
+ * at compile/mod.ts's polarMarks): munching a node whose topology already
+ * carries triangulated indices would silently desync those indices from
+ * the newly-inserted vertices, so this is a loud ordering violation rather
+ * than a silent corruption.
+ */
+export function munchFlatNode(n: RenderNode): RenderNode {
+  const positions = n.props.positions;
+  const topology = n.props.topology;
+  if (!isFlatTensor(positions) || !isMarkTopology(topology)) {
+    return node(
+      n.component,
+      n.props,
+      n.children.map((child) => munchFlatNode(child)),
+    );
+  }
+  if (topology.indices) {
+    throw new Error(
+      "munchFlatNode: topology.indices is already present. Munching must " +
+        "run before triangulation — see the lowering-order contract at " +
+        "compile/mod.ts's polarMarks (coordinate transforms first, " +
+        "indices attached afterward).",
+    );
+  }
+  if (topology.kind === "points") {
+    return node(
+      n.component,
+      n.props,
+      n.children.map((child) => munchFlatNode(child)),
+    );
+  }
+
+  const { array, dims } = positions;
+  const vertexCount = positions.length;
+  const chunkLens = topology.chunks ? Array.from(topology.chunks) : [
+    vertexCount,
+  ];
+
+  const outXY: number[] = [];
+  const outSource: number[] = [];
+  const newChunkLens: number[] = [];
+  let cursor = 0;
+  for (const len of chunkLens) {
+    const emitted = topology.kind === "loops"
+      ? munchLoopChunk(array, dims, cursor, len, outXY, outSource)
+      : munchPolylineChunk(array, dims, cursor, len, outXY, outSource);
+    newChunkLens.push(emitted);
+    cursor += len;
+  }
+
+  const newArray = Float32Array.from(outXY);
+  const newPositions: FlatTensor = {
+    array: newArray,
+    format: positions.format,
+    dims,
+    length: newArray.length / dims,
+    size: [newArray.length / dims],
+    version: positions.version,
+  };
+  const sourceIndex = Uint32Array.from(outSource);
+
+  const newProps: Record<string, unknown> = {
+    ...n.props,
+    positions: newPositions,
+  };
+  for (const [key, value] of Object.entries(n.props)) {
+    if (key === "positions" || key === "topology") continue;
+    if (isFlatTensor(value) && value.length === vertexCount) {
+      newProps[key] = expandByOwners(value, sourceIndex);
+    }
+  }
+  const newTopology: MarkTopology = { kind: topology.kind };
+  if (topology.chunks) newTopology.chunks = Uint32Array.from(newChunkLens);
+  if (topology.loops !== undefined) newTopology.loops = topology.loops;
+  newProps.topology = newTopology;
+
+  return node(
+    n.component,
+    newProps,
+    n.children.map((child) => munchFlatNode(child)),
+  );
+}
+
 function mapPositionValue(
   value: unknown,
   axis: 0 | 1,
@@ -118,6 +337,45 @@ function mapPositionValue(
   return value.map((entry) => mapPositionValue(entry, axis, map));
 }
 
+/**
+ * Structural check for a compile/rendertree.ts FlatTensor prop value: a
+ * plain object (not an array) carrying a Float32Array 'array' and numeric
+ * 'dims'. Used to dispatch flat-tensor coordinate transforms on SHAPE, not
+ * on component name (see polarizeNode / munchFlatNode below).
+ */
+export function isFlatTensor(v: unknown): v is FlatTensor {
+  return !!v && typeof v === "object" && !Array.isArray(v) &&
+    (v as FlatTensor).array instanceof Float32Array &&
+    typeof (v as FlatTensor).dims === "number";
+}
+
+/** Structural check for a compile/rendertree.ts MarkTopology prop value. */
+function isMarkTopology(v: unknown): v is MarkTopology {
+  return !!v && typeof v === "object" && !Array.isArray(v) &&
+    typeof (v as MarkTopology).kind === "string";
+}
+
+/**
+ * Pointwise polar remap of one axis component of an interleaved FlatTensor
+ * position array, into a brand-NEW Float32Array — 'array' is documented as
+ * never-mutate-after-construction (compile/rendertree.ts) and may be shared
+ * with a cached upstream pack, so this never writes through the input.
+ * Output tensor keeps the input's version (pointwise remap doesn't change
+ * vertex identity/count, only a component's value).
+ */
+function polarizeFlatPositions(
+  positions: FlatTensor,
+  axis: 0 | 1,
+  map: (value: number) => number,
+): FlatTensor {
+  const { array, dims } = positions;
+  const out = new Float32Array(array.length);
+  for (let i = 0; i < array.length; i++) {
+    out[i] = i % dims === axis ? map(array[i]) : array[i];
+  }
+  return { ...positions, array: out };
+}
+
 /** Convert the selected theta scale from trained data units into radians. */
 export function polarizeNode(
   n: RenderNode,
@@ -129,9 +387,25 @@ export function polarizeNode(
   const [lo, hi] = domain;
   const span = hi - lo || 1;
   const map = (value: number) => start + (value - lo) / span * (end - start);
-  const props = "positions" in n.props
-    ? { ...n.props, positions: mapPositionValue(n.props.positions, axis, map) }
-    : n.props;
+
+  const rawPositions = n.props.positions;
+  let props = n.props;
+  if (isFlatTensor(rawPositions) && isMarkTopology(n.props.topology)) {
+    // Flat-aware path (gggplot-tzc.2): any node carrying a FlatTensor
+    // 'positions' plus a MarkTopology 'topology' prop is transformed,
+    // regardless of component name. The legacy nested-array branch below
+    // stays keyed on "positions" in n.props, untouched, for geoms that
+    // haven't converted to FlatTensor yet.
+    props = {
+      ...n.props,
+      positions: polarizeFlatPositions(rawPositions, axis, map),
+    };
+  } else if ("positions" in n.props) {
+    props = {
+      ...n.props,
+      positions: mapPositionValue(n.props.positions, axis, map),
+    };
+  }
   return node(
     n.component,
     props,

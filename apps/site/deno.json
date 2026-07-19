@@ -4,7 +4,8 @@
     "build": "deno run -A npm:vite build",
     "check": "deno check src/index.tsx",
     "preview": "deno run -A npm:vite preview",
-    "test:visual": "deno task build && deno run -A scripts/visual_smoke.ts"
+    "test:visual": "deno task build && deno run -A scripts/visual_smoke.ts",
+    "test:gpu-instrument": "deno task build && deno run -A scripts/gpu_instrument_check.ts"
   },
   "imports": {
     "react": "npm:react@^18.3.1",

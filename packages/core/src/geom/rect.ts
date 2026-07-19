@@ -3,11 +3,13 @@ import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
 import { scalePosition } from "../scale/mod.ts";
 import type { LayerContext } from "./types.ts";
-import { colorsOf, valuesOf } from "./shared.ts";
+import { colorsOf, type FaceLoop, packFaceLoops, valuesOf } from "./shared.ts";
 
 /**
  * Lower an annotate("rect", ...)/geom_rect layer (xmin, xmax, ymin, ymax) to a
- * single Polygon of rectangle loops, one per row.
+ * single ChunkedFace node (gggplot-tzc.4) of rectangle loops, one per row.
+ * Rectangles are always axis-aligned (guaranteed convex), so this uses fan
+ * triangulation (concave: false).
  */
 export function lowerRect(
   layer: Layer,
@@ -43,7 +45,17 @@ export function lowerRect(
   );
   const fill = (layer.params.fill as string) ??
     (layer.params.color as string) ?? "#3b82f6";
+  if (positions.length === 0) return [];
+  const loops: FaceLoop[] = colors
+    ? positions.map((position, i) => ({ positions: position, fill: colors[i] }))
+    : positions.map((position) => ({ positions: position, fill }));
+  const packed = packFaceLoops(loops);
   return [
-    node("Polygon", { positions, ...(colors ? { fills: colors } : { fill }) }),
+    node("ChunkedFace", {
+      positions: packed.positions,
+      topology: packed.topology,
+      colors: packed.colors,
+      concave: false,
+    }),
   ];
 }

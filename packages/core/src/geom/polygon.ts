@@ -1,9 +1,13 @@
-// geom_polygon — one closed loop per effective group.
+// geom_polygon — one closed loop per effective group, packed into a single
+// ChunkedFace node per layer (gggplot-tzc.4). Arbitrary user-supplied
+// outlines are not guaranteed convex, so this uses the concave-capable
+// triangulation path (concave: true) — see render/chunked_face.tsx's spike
+// writeup.
 import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
 import { splitByEffectiveGroup } from "../group/mod.ts";
 import type { LayerContext } from "./types.ts";
-import { colorsOf, positionsOf } from "./shared.ts";
+import { colorsOf, type FaceLoop, packFaceLoops, positionsOf } from "./shared.ts";
 
 export function lowerPolygon(
   layer: Layer,
@@ -17,24 +21,25 @@ export function lowerPolygon(
   const fillScale = ctx.scales.fill;
 
   const groups = splitByEffectiveGroup(mapping, data);
-  const loops: [number, number][][] = [];
-  const fills: string[] = [];
+  const loops: FaceLoop[] = [];
 
   for (const { mapping: m, data: d } of groups) {
     const positions = positionsOf(m, d, xScale, yScale);
     if (positions.length < 3) continue;
-    loops.push(positions);
     const colors = colorsOf(m, d, colorScale, fillScale, "fillOrColor");
-    fills.push(
-      colors?.[0] ?? (layer.params.fill as string) ??
+    loops.push({
+      positions,
+      fill: colors?.[0] ?? (layer.params.fill as string) ??
         (layer.params.color as string) ?? "#3b82f6",
-    );
+    });
   }
 
   if (loops.length === 0) return [];
-  const uniform = fills.every((f) => f === fills[0]);
-  return [node("Polygon", {
-    positions: loops.length === 1 ? loops[0] : loops,
-    ...(uniform ? { fill: fills[0] } : { fills }),
+  const packed = packFaceLoops(loops);
+  return [node("ChunkedFace", {
+    positions: packed.positions,
+    topology: packed.topology,
+    colors: packed.colors,
+    concave: true,
   })];
 }

@@ -10,7 +10,11 @@ import {
   colorsOf,
   colorWithAlpha,
   dashOf,
+  type FaceLoop,
   linewidthsOf,
+  packFaceLoops,
+  packMarkRows,
+  packUniformChunks,
   resolutionOf,
   sizesOf,
   valuesOf,
@@ -125,28 +129,49 @@ function lowerErrorbarLayer(
     : colorWithAlpha(baseColor, mappedAlpha);
   const dash = dashOf(layer, mapping, data, linetypeScale);
   const mappedWidth = linewidthsOf(mapping, data, linewidthScale)?.[0];
+  // gggplot-tzc.3: stems pack into one FlatTensor + MarkTopology
+  // (packUniformChunks — every stem segment here is a fixed 2-point pair);
+  // component stays 'Line' (row-disjoint, not geom_line's per-group
+  // ChunkedLine). Boxes (ChunkedFace, gggplot-tzc.4) are axis-aligned
+  // rectangles (guaranteed convex), so this uses fan triangulation
+  // (concave: false).
+  const packedStems = packUniformChunks(segments);
   const nodes = [
     node("Line", {
-      positions: segments,
+      positions: packedStems.positions,
+      topology: packedStems.topology,
       color,
       width: (layer.params.linewidth as number) ?? mappedWidth ?? 2,
       ...(dash ? { dash } : {}),
     }),
   ];
   if (boxes.length) {
+    const boxFill = (layer.params.fill as string) ??
+      colorsOf(mapping, data, colorScale, fillScale, "fill")?.[0] ??
+      "#00000000";
+    const boxLoops: FaceLoop[] = boxes.map((positions) => ({
+      positions,
+      fill: boxFill,
+    }));
+    const packedBoxes = packFaceLoops(boxLoops);
     nodes.unshift(
-      node("Polygon", {
-        positions: boxes,
-        fill: (layer.params.fill as string) ??
-          colorsOf(mapping, data, colorScale, fillScale, "fill")?.[0] ??
-          "#00000000",
+      node("ChunkedFace", {
+        positions: packedBoxes.positions,
+        topology: packedBoxes.topology,
+        colors: packedBoxes.colors,
+        concave: false,
       }),
     );
   }
   if (points.length) {
+    const packedPoints = packMarkRows({
+      xs: points.map(([x]) => x),
+      ys: points.map(([, y]) => y),
+    });
     nodes.push(
       node("Point", {
-        positions: points,
+        positions: packedPoints.positions,
+        topology: { kind: "points" },
         color,
         size: (layer.params.size as number) ??
           sizesOf(mapping, data, sizeScale)?.[0] ?? 5,

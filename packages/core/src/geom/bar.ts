@@ -29,9 +29,9 @@ import type {
   LayerContext,
   ResidentProductProps,
 } from "./types.ts";
-import { resolutionOf, valuesOf } from "./shared.ts";
+import { type FaceLoop, packFaceLoops, resolutionOf, valuesOf } from "./shared.ts";
 
-/** Lower a geom_bar/geom_col layer to a single Polygon of bar-rectangle loops, stacked/dodged/filled per layer.position. */
+/** Lower a geom_bar/geom_col layer to a single ChunkedFace node of bar-rectangle loops (gggplot-tzc.4), stacked/dodged/filled per layer.position. */
 export function lowerBar(
   layer: Layer,
   mapping: Aes,
@@ -102,12 +102,27 @@ export function lowerBar(
     return [[x0, bar.y0], [x0, bar.y1], [x1, bar.y1], [x1, bar.y0]];
   });
   const fills = placed.map((bar) => fillOf(bar.groupKey));
-  // Plot Polygon treats a nested position array as one multi-loop surface;
-  // independent rectangles must remain independent faces or the triangulator
-  // bridges their top edges and fills the complement between bars.
-  return positions.map((position, i) =>
-    node("Polygon", { positions: position, fill: fills[i] })
-  );
+  if (positions.length === 0) return [];
+  // gggplot-tzc.4: one ChunkedFace node per layer — packFaceLoops keeps each
+  // bar an independent closed loop (chunked, not a single multi-loop
+  // surface), so the live/emitted triangulator never bridges one bar's top
+  // edge to the next and fills the complement between bars. Bar rectangles
+  // are always axis-aligned (guaranteed convex), so this uses fan
+  // triangulation (concave: false) — see render/chunked_face.tsx's spike
+  // writeup for why this stays valid even after polar (coxcomb) munching.
+  const loops: FaceLoop[] = positions.map((position, i) => ({
+    positions: position,
+    fill: fills[i],
+  }));
+  const packed = packFaceLoops(loops);
+  return [
+    node("ChunkedFace", {
+      positions: packed.positions,
+      topology: packed.topology,
+      colors: packed.colors,
+      concave: false,
+    }),
+  ];
 }
 
 /**

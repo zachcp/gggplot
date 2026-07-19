@@ -8,6 +8,7 @@ import {
   type PointCloudSpec,
 } from "@gggplot/3d";
 import { scatterLine } from "./docs/examples.tsx";
+import { InstrumentProbe } from "./InstrumentProbe.tsx";
 
 declare global {
   interface Window {
@@ -94,5 +95,15 @@ if (exportProbeMode) {
   document.body.append(trigger);
 }
 
+// gggplot-tzc.8's dedicated instrumented route: ?instrument mounts ONLY the
+// probe (not the full docs App), the same way ?export-probe above mounts a
+// standalone trigger rather than touching App. render/GGPlot.tsx reads this
+// SAME query flag (isInstrumentFlagSet) to install GPU mark-data upload
+// instrumentation, so this route and the library's own gate agree on what
+// "instrumented" means.
 const root = document.getElementById("root")!;
-createRoot(root).render(<App />);
+createRoot(root).render(
+  new URLSearchParams(location.search).has("instrument")
+    ? <InstrumentProbe />
+    : <App />,
+);

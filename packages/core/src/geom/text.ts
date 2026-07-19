@@ -4,13 +4,24 @@ import { node, type RenderNode } from "../compile/rendertree.ts";
 import { scalePosition } from "../scale/mod.ts";
 import { columnValues } from "../data/mod.ts";
 import type { TextMeasurer } from "../compile/guides.ts";
+import type { MarkTopology } from "../compile/rendertree.ts";
 import type { LayerContext } from "./types.ts";
-import { colorsOf, normalizeFontface, valuesOf } from "./shared.ts";
+import {
+  colorsOf,
+  type FaceLoop,
+  normalizeFontface,
+  packFaceLoops,
+  packMarkRows,
+  packUniformChunks,
+  valuesOf,
+} from "./shared.ts";
 
 const fallbackMeasurer: TextMeasurer = (text, size) => ({
   width: text.length * size * 0.6,
   height: size,
 });
+
+const POINTS_TOPOLOGY: MarkTopology = { kind: "points" };
 
 /**
  * Lower geom_text to labels and geom_label to measured background, border,
@@ -110,13 +121,30 @@ export function lowerText(
     batches.set(key, batch);
   });
 
-  const labelNodes = [...batches.values()].map((batch) =>
-    node("Label", {
-      positions: batch.indices.map((index) => positions[index]),
-      labels: batch.indices.map((index) => labels[index]),
-      ...(colors
-        ? { colors: batch.indices.map((index) => colors[index]) }
-        : { color }),
+  // gggplot-tzc.3: positions (and colors, when mapped) pack into FlatTensors
+  // via packMarkRows — labels stay a plain string[] (label text never goes
+  // flat) but are re-filtered by the SAME mask so they stay index-aligned
+  // with the packed positions/colors (a no-op here in practice: 'retained'
+  // above has already dropped every non-finite position, so packMarkRows'
+  // mask is always all-1s at this point — kept for consistency with
+  // packMarkRows as the sole mask builder, per the epic's row-alignment rule).
+  const labelNodes = [...batches.values()].map((batch) => {
+    const batchColors = colors
+      ? batch.indices.map((index) => colors[index])
+      : undefined;
+    const packed = packMarkRows({
+      xs: batch.indices.map((index) => positions[index][0]),
+      ys: batch.indices.map((index) => positions[index][1]),
+      ...(batchColors ? { colors: batchColors } : {}),
+    });
+    const batchLabels = batch.indices
+      .filter((_, i) => packed.mask[i])
+      .map((index) => labels[index]);
+    return node("Label", {
+      positions: packed.positions,
+      topology: POINTS_TOPOLOGY,
+      labels: batchLabels,
+      ...(packed.colors ? { colors: packed.colors } : { color }),
       size,
       weight: batch.weight,
       style: batch.style,
@@ -124,8 +152,8 @@ export function lowerText(
       ...(angle ? { angle } : {}),
       zBias: 2,
       ...(batch.family ? { family: batch.family } : {}),
-    })
-  );
+    });
+  });
   if (layer.geom !== "label") return labelNodes;
 
   const padding = Number(layer.params.labelPadding ?? 3);
@@ -213,16 +241,30 @@ export function lowerText(
   const opacity = layer.params.alpha as number | undefined;
   const fill = (layer.params.fill as string) ?? "#ffffff";
   const borderColor = (layer.params.borderColor as string) ?? color;
+  // gggplot-cct: geom_label's background and border pack into a ChunkedFace
+  // (packFaceLoops — label boxes are convex rounded rects, concave: false)
+  // and a flat Line (packUniformChunks — every box loop tessellates to the
+  // same fixed vertex count), mirroring geom_boxplot's own box+line pattern.
+  const boxLoops: FaceLoop[] = fills
+    ? boxes.map((positions, i) => ({ positions, fill: fills[i] }))
+    : boxes.map((positions) => ({ positions, fill }));
+  const packedBoxes = packFaceLoops(boxLoops);
+  const packedBorder = packUniformChunks(
+    boxes.map((box) => [...box, box[0]]),
+  );
   return [
-    node("Polygon", {
-      positions: boxes,
-      ...(fills ? { fills } : { fill }),
+    node("ChunkedFace", {
+      positions: packedBoxes.positions,
+      topology: packedBoxes.topology,
+      colors: packedBoxes.colors,
+      concave: false,
       zBias: 0,
       ...(opacity != null ? { opacity } : {}),
       radius,
     }),
     node("Line", {
-      positions: boxes.map((box) => [...box, box[0]]),
+      positions: packedBorder.positions,
+      topology: packedBorder.topology,
       ...(colors ? { colors } : { color: borderColor }),
       width: borderWidth,
       zBias: 1,

@@ -1,15 +1,26 @@
-// geom_boxplot — box Polygon plus median/whisker Line segments.
+// geom_boxplot — box ChunkedFace (gggplot-tzc.4) plus median/whisker Line
+// segments, packed via packUniformChunks (gggplot-cct) the same way
+// errorbar.ts's/segment.ts's/spoke.ts's stems are.
 import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
 import { scalePosition } from "../scale/mod.ts";
 import type { LayerContext } from "./types.ts";
-import { colorsOf, resolutionOf, valuesOf } from "./shared.ts";
+import {
+  colorsOf,
+  type FaceLoop,
+  packFaceLoops,
+  packUniformChunks,
+  resolutionOf,
+  valuesOf,
+} from "./shared.ts";
 
 /**
  * Lower a geom_boxplot layer (x, lower, middle, upper, ymin, ymax) to a box
- * Polygon (lower..upper) plus a Line of disjoint segments for the median and
- * the two whiskers (each with a half-width cap). `params.width` sets the box
- * width (default: 0.75 * x resolution, ggplot2's default).
+ * ChunkedFace node (lower..upper, gggplot-tzc.4) plus a Line of disjoint
+ * segments for the median and the two whiskers (each with a half-width cap).
+ * `params.width` sets the box width (default: 0.75 * x resolution, ggplot2's
+ * default). Boxes are always axis-aligned (guaranteed convex), so this uses
+ * fan triangulation (concave: false).
  */
 export function lowerBoxplot(
   layer: Layer,
@@ -74,13 +85,22 @@ export function lowerBoxplot(
   const strokeColor = (layer.params.color as string) ?? "#1a1a1a";
   const strokeWidth = (layer.params.strokeWidth as number) ?? 2;
 
+  const boxLoops: FaceLoop[] = colors
+    ? boxes.map((positions, i) => ({ positions, fill: colors[i] }))
+    : boxes.map((positions) => ({ positions, fill }));
+  const packedBoxes = packFaceLoops(boxLoops);
+  const packedSegments = packUniformChunks(segments);
+
   return [
-    node("Polygon", {
-      positions: boxes,
-      ...(colors ? { fills: colors } : { fill }),
+    node("ChunkedFace", {
+      positions: packedBoxes.positions,
+      topology: packedBoxes.topology,
+      colors: packedBoxes.colors,
+      concave: false,
     }),
     node("Line", {
-      positions: segments,
+      positions: packedSegments.positions,
+      topology: packedSegments.topology,
       color: strokeColor,
       width: strokeWidth,
     }),

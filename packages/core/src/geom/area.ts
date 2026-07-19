@@ -4,7 +4,27 @@ import { node, type RenderNode } from "../compile/rendertree.ts";
 import { splitByEffectiveGroup } from "../group/mod.ts";
 import { scalePosition, type TrainedScale } from "../scale/mod.ts";
 import type { DomainContributionCtx, LayerContext } from "./types.ts";
-import { bandPositions, colorsOf, valuesOf } from "./shared.ts";
+import {
+  bandPositions,
+  colorsOf,
+  type FaceLoop,
+  packFaceLoops,
+  valuesOf,
+} from "./shared.ts";
+
+/** Wrap a layer's collected per-group band loops into the single ChunkedFace node the layer emits (gggplot-tzc.4: one Face node per layer). Bands can wiggle/self-cross, so this uses the concave-capable triangulation path (concave: true). */
+function faceNodesFor(loops: FaceLoop[]): RenderNode[] {
+  if (loops.length === 0) return [];
+  const packed = packFaceLoops(loops);
+  return [
+    node("ChunkedFace", {
+      positions: packed.positions,
+      topology: packed.topology,
+      colors: packed.colors,
+      concave: true,
+    }),
+  ];
+}
 
 function lowerStackedAreaLayer(
   layer: Layer,
@@ -17,7 +37,7 @@ function lowerStackedAreaLayer(
 ): RenderNode[] {
   const positive = new Map<number, number>();
   const negative = new Map<number, number>();
-  const nodes: RenderNode[] = [];
+  const loops: FaceLoop[] = [];
   for (const group of splitByEffectiveGroup(mapping, data)) {
     const xs = valuesOf(group.data, group.mapping.x) ?? [];
     const ys = valuesOf(group.data, group.mapping.y) ?? [];
@@ -49,13 +69,13 @@ function lowerStackedAreaLayer(
       fillScale,
       "fillOrColor",
     );
-    nodes.push(node("Polygon", {
+    loops.push({
       positions,
       fill: colors?.[0] ?? (layer.params.fill as string) ??
         (layer.params.color as string) ?? "#3b82f6",
-    }));
+    });
   }
-  return nodes;
+  return faceNodesFor(loops);
 }
 
 function lowerSilhouetteAreaLayer(
@@ -81,7 +101,7 @@ function lowerSilhouetteAreaLayer(
   }
   const cumulative = new Map<number, number>();
   for (const [x, total] of totals) cumulative.set(x, -total / 2);
-  const nodes: RenderNode[] = [];
+  const loops: FaceLoop[] = [];
   for (const group of groups) {
     const xs = valuesOf(group.data, group.mapping.x) ?? [];
     const ys = valuesOf(group.data, group.mapping.y) ?? [];
@@ -112,13 +132,13 @@ function lowerSilhouetteAreaLayer(
       fillScale,
       "fillOrColor",
     );
-    nodes.push(node("Polygon", {
+    loops.push({
       positions,
       fill: colors?.[0] ?? (layer.params.fill as string) ??
         (layer.params.color as string) ?? "#3b82f6",
-    }));
+    });
   }
-  return nodes;
+  return faceNodesFor(loops);
 }
 
 /**
@@ -171,7 +191,7 @@ export function areaDomainContribution(
   };
 }
 
-/** Lower a geom_area/geom_ribbon layer to one filled Polygon band per group. */
+/** Lower a geom_area/geom_ribbon layer to a single ChunkedFace node (gggplot-tzc.4) of filled band loops, one per group. */
 export function lowerArea(
   layer: Layer,
   mapping: Aes,
@@ -210,13 +230,14 @@ export function lowerArea(
   }
   const fill = (layer.params.fill as string) ??
     (layer.params.color as string) ?? "#3b82f6";
-  return splitByEffectiveGroup(mapping, data)
+  const loops: FaceLoop[] = splitByEffectiveGroup(mapping, data)
     .map(({ mapping: m, data: d }) => {
       const positions = bandPositions(m, d, xScale, yScale);
       const colors = colorsOf(m, d, colorScale, fillScale, "fillOrColor");
       return positions.length
-        ? node("Polygon", { positions, fill: colors?.[0] ?? fill })
+        ? { positions, fill: colors?.[0] ?? fill }
         : null;
     })
-    .filter((n): n is RenderNode => n !== null);
+    .filter((l): l is FaceLoop => l !== null);
+  return faceNodesFor(loops);
 }

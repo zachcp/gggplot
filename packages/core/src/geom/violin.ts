@@ -1,12 +1,15 @@
-// geom_violin — one mirrored density polygon per group.
+// geom_violin — one mirrored density loop per group, packed into a single
+// ChunkedFace node per layer (gggplot-tzc.4). A mirrored density outline is
+// not guaranteed convex, so this uses the concave-capable triangulation path
+// (concave: true) — see render/chunked_face.tsx's spike writeup.
 import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
 import { splitByEffectiveGroup } from "../group/mod.ts";
 import { scalePosition } from "../scale/mod.ts";
 import type { LayerContext } from "./types.ts";
-import { colorsOf, valuesOf } from "./shared.ts";
+import { colorsOf, type FaceLoop, packFaceLoops, valuesOf } from "./shared.ts";
 
-/** Lower a dense y-density product to one mirrored polygon per group. */
+/** Lower a dense y-density product to one mirrored density loop per group, packed into a single ChunkedFace node. */
 export function lowerViolin(
   layer: Layer,
   mapping: Aes,
@@ -18,7 +21,7 @@ export function lowerViolin(
   const colorScale = ctx.scales.color;
   const fillScale = ctx.scales.fill;
 
-  const polygons: RenderNode[] = [];
+  const loops: FaceLoop[] = [];
   for (
     const { mapping: groupedMapping, data: groupedData }
       of splitByEffectiveGroup(mapping, data)
@@ -52,10 +55,17 @@ export function lowerViolin(
       fillScale,
       "fillOrColor",
     );
-    polygons.push(node("Polygon", {
+    loops.push({
       positions: [...right, ...left],
       fill: colors?.[0] ?? (layer.params.fill as string) ?? "#3b82f6",
-    }));
+    });
   }
-  return polygons;
+  if (loops.length === 0) return [];
+  const packed = packFaceLoops(loops);
+  return [node("ChunkedFace", {
+    positions: packed.positions,
+    topology: packed.topology,
+    colors: packed.colors,
+    concave: true,
+  })];
 }

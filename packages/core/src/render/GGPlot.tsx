@@ -14,6 +14,7 @@ import {
   useAwait,
   useContext,
   useMemo,
+  useOne,
 } from "@use-gpu/live";
 import {
   Axis,
@@ -33,15 +34,27 @@ import {
   MatrixContext,
   TransformContext,
   useCombinedMatrixTransform,
+  useDeviceContext,
   useFontContext,
+  useNoDeviceContext,
 } from "@use-gpu/workbench";
 import { RangeContext } from "@use-gpu/plot/mjs/providers/range-provider.mjs";
 import { mat4 } from "gl-matrix";
 import { resolveResidentProduct } from "../runtime/mod.ts";
 import type { ComponentName, RenderNode } from "../compile/rendertree.ts";
+import type { FlatTensor } from "../compile/rendertree.ts";
 import type { GGSpec } from "../ir/types.ts";
-import { compile } from "../compile/mod.ts";
+import { compile, createPackCache } from "../compile/mod.ts";
 import { RotatedLabel } from "./rotated_label.tsx";
+import { ChunkedLine } from "./chunked_line.tsx";
+import { ChunkedFace } from "./chunked_face.tsx";
+import {
+  getGpuMarkCounters,
+  installGpuInstrumentation,
+  isInstrumentFlagSet,
+  registerKnownMarkArray,
+  resetGpuMarkCounters,
+} from "./gpu_instrument.ts";
 import {
   createFontResources,
   createGlyphTextMeasurer,
@@ -261,6 +274,19 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
   Point,
   Line,
   Polygon,
+  // ChunkedLine (gggplot-tzc.3) is NOT a @use-gpu/plot export — see
+  // render/chunked_line.tsx for the spike finding and its LineLayer-based
+  // realization. The 'Line' mapping directly above stays the untouched
+  // plot Line delegate, so guide/axis/annotation/reference-line nodes
+  // (which always use component 'Line') are unaffected by this addition.
+  ChunkedLine,
+  // ChunkedFace (gggplot-tzc.4) is NOT a @use-gpu/plot export — see
+  // render/chunked_face.tsx for the concavity spike finding and its
+  // FaceLayer-based realization. The 'Polygon' mapping directly above stays
+  // the untouched plot Polygon delegate, so guide/legend and the
+  // theme-background panel (which always use component 'Polygon') are
+  // unaffected by this addition.
+  ChunkedFace,
   Label: (props: Record<string, unknown>) =>
     typeof props.angle === "number" && props.angle !== 0
       ? createElement(RotatedLabel, props)
@@ -282,8 +308,40 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
   RadialViewport,
 };
 
+/** Mark-tensor prop names carried by Point-family RenderNodes (see
+ * geom/point.ts/geom/errorbar.ts/geom/text.ts's Point-emitting paths). */
+const POINT_TENSOR_PROPS = ["positions", "colors", "sizes", "widths", "alphas"];
+
+/**
+ * gggplot-tzc.8: Point (unlike ChunkedLine/ChunkedFace) is NOT our own
+ * wrapper — it delegates straight to @use-gpu/plot's own <Point>, which
+ * builds its raw GPU sources deep inside a deferred shape-reconciler
+ * pipeline (see gpu_instrument.ts's module doc) that withMarkAttribution's
+ * synchronous bracket cannot reach. As a documented, narrower fallback, this
+ * registers each Point node's own FlatTensor arrays as "known mark data" at
+ * RenderTree-to-Live-element construction time — BEFORE Live mounts/renders
+ * anything — so gpu_instrument.ts's writeBuffer patch can corroborate a
+ * later write against these array identities (optional corroboration; NEVER
+ * used for create attribution, which stays unavailable for Point pending a
+ * deeper @use-gpu/plot-internal spike — see the bd note on this bead).
+ * No-op unless ?instrument is set.
+ */
+function registerPointMarkArrays(n: RenderNode): void {
+  if (n.component !== "Point") return;
+  for (const key of POINT_TENSOR_PROPS) {
+    const value = n.props[key];
+    if (
+      value && typeof value === "object" &&
+      (value as FlatTensor).array instanceof Float32Array
+    ) {
+      registerKnownMarkArray((value as FlatTensor).array);
+    }
+  }
+}
+
 /** Recursively turn a RenderNode into a Live element. */
 export function renderTree(n: RenderNode): unknown {
+  if (isInstrumentFlagSet()) registerPointMarkArrays(n);
   const Component = REGISTRY[n.component];
   if (!Component) {
     console.warn(`[gggplot] no Live component for "${n.component}"`);
@@ -312,14 +370,48 @@ const GlyphMeasuredPlot = ({ spec }: { spec: GGSpec }) => {
     number,
     number,
   ];
-  const tree = compile(spec, {
-    resident: true,
-    layout: {
-      width: Math.max(right - left, 1),
-      height: Math.max(bottom - top, 1),
-      measureText,
-    },
-  });
+  const width = Math.max(right - left, 1);
+  const height = Math.max(bottom - top, 1);
+  // ONE staged geometry cache (gggplot-tzc.5) for the lifetime of this
+  // mounted plot: useOne's default (null) dependency never changes across
+  // re-renders, so this is created exactly once per mount, letting an
+  // unchanged spec's re-render (or a DSL-rebuilt structurally-identical
+  // spec over the same data) reuse the exact same renderer-ready tensors
+  // instead of re-uploading them. See compile/pack_cache.ts.
+  const packCache = useOne(() => createPackCache());
+  // gggplot-tzc.8: dev-only GPU mark-data upload instrumentation, gated
+  // behind ?instrument (isInstrumentFlagSet). useDeviceContext/
+  // useNoDeviceContext is the same paired-hook-and-no-op idiom
+  // render/chunked_line.tsx's useOptionalTensorSource documents — the branch
+  // itself is invariant for the lifetime of one mounted instance (the query
+  // flag doesn't change mid-session), so calling exactly one side of the
+  // pair every render stays hook-order-stable. installGpuInstrumentation is
+  // idempotent per device and window.__gggplotGpuInstrument is the probe
+  // surface a route (or a Playwright/deno-level driver) reads counters from.
+  if (isInstrumentFlagSet()) {
+    const device = useDeviceContext();
+    useOne(() => {
+      installGpuInstrumentation(device);
+      if (typeof window !== "undefined") {
+        (window as unknown as Record<string, unknown>).__gggplotGpuInstrument = {
+          getCounters: getGpuMarkCounters,
+          reset: resetGpuMarkCounters,
+        };
+      }
+      return true;
+    });
+  } else {
+    useNoDeviceContext();
+  }
+  const tree = useMemo(
+    () =>
+      compile(spec, {
+        resident: true,
+        packCache,
+        layout: { width, height, measureText },
+      }),
+    [spec, width, height, measureText],
+  );
   // deno-lint-ignore no-explicit-any
   return renderTree(tree) as any;
 };

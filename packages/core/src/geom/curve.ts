@@ -3,7 +3,11 @@ import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
 import { scalePosition } from "../scale/mod.ts";
 import type { LayerContext } from "./types.ts";
-import { literalLineProps, requiredValues } from "./shared.ts";
+import {
+  literalLineProps,
+  packUniformChunks,
+  requiredValues,
+} from "./shared.ts";
 
 export function lowerCurve(
   layer: Layer,
@@ -55,8 +59,10 @@ export function lowerCurve(
     positions.push(curve);
   }
   if (!positions.length) return [];
+  const packed = packUniformChunks(positions);
   return [node("Line", {
-    positions,
+    positions: packed.positions,
+    topology: packed.topology,
     color: (layer.params.color as string) ?? "#3b82f6",
     ...literalLineProps(layer, 2),
   })];

@@ -4,7 +4,7 @@ import { node, type RenderNode } from "../compile/rendertree.ts";
 import { scalePosition } from "../scale/mod.ts";
 import { widenForTileAxis } from "../compile/coordinates.ts";
 import type { DomainContributionCtx, LayerContext } from "./types.ts";
-import { colorsOf, resolutionOf, valuesOf } from "./shared.ts";
+import { colorsOf, type FaceLoop, packFaceLoops, resolutionOf, valuesOf } from "./shared.ts";
 
 /**
  * geom_tile domain contribution: cells extend half a cell beyond their center
@@ -37,12 +37,14 @@ export function tileDomainContribution(
 }
 
 /**
- * Lower a geom_tile/geom_raster layer to a single Polygon of full-resolution
- * cell rectangles, one per row, centered on (x,y) and colored by the mapped
- * fill/color. Cell size defaults to each axis's resolution (the smallest gap
- * between distinct values, or 1 level-index unit for a discrete axis) so
- * adjacent cells tile edge-to-edge with no gaps, matching ggplot2's default;
- * `params.width`/`params.height` override it.
+ * Lower a geom_tile/geom_raster layer to a single ChunkedFace node
+ * (gggplot-tzc.4) of full-resolution cell rectangles, one loop per row,
+ * centered on (x,y) and colored by the mapped fill/color. Cell size defaults
+ * to each axis's resolution (the smallest gap between distinct values, or 1
+ * level-index unit for a discrete axis) so adjacent cells tile edge-to-edge
+ * with no gaps, matching ggplot2's default; `params.width`/`params.height`
+ * override it. Cells are always axis-aligned rectangles (guaranteed convex),
+ * so triangulation uses the fan path (concave: false).
  */
 export function lowerTile(
   layer: Layer,
@@ -93,9 +95,18 @@ export function lowerTile(
     ? { execution: "cpu-custom-summary", nonSerializable: true }
     : {};
 
-  return colors
-    ? positions.map((position, i) =>
-      node("Polygon", { positions: position, fill: colors[i], ...metadata })
-    )
-    : [node("Polygon", { positions, fill, ...metadata })];
+  if (positions.length === 0) return [];
+  const loops: FaceLoop[] = colors
+    ? positions.map((position, i) => ({ positions: position, fill: colors[i] }))
+    : positions.map((position) => ({ positions: position, fill }));
+  const packed = packFaceLoops(loops);
+  return [
+    node("ChunkedFace", {
+      positions: packed.positions,
+      topology: packed.topology,
+      colors: packed.colors,
+      concave: false,
+      ...metadata,
+    }),
+  ];
 }

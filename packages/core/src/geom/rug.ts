@@ -3,7 +3,7 @@ import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
 import { scalePosition } from "../scale/mod.ts";
 import type { LayerContext } from "./types.ts";
-import { literalLineProps, valuesOf } from "./shared.ts";
+import { literalLineProps, packUniformChunks, valuesOf } from "./shared.ts";
 
 export function lowerRug(
   layer: Layer,
@@ -58,8 +58,10 @@ export function lowerRug(
     }
   }
   if (!positions.length) return [];
+  const packed = packUniformChunks(positions);
   return [node("Line", {
-    positions,
+    positions: packed.positions,
+    topology: packed.topology,
     color: (layer.params.color as string) ?? "#111827",
     ...literalLineProps(layer, 1),
   })];
