@@ -3,29 +3,21 @@
   "specifiers": {
     "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/internal@^1.0.12": "1.0.12",
-    "npm:@types/react-dom@^18.3.0": "18.3.7_@types+react@18.3.12",
-    "npm:@types/react@18.3.12": "18.3.12",
-    "npm:@types/react@^18.3.12": "18.3.12",
-    "npm:@use-gpu/core@0.19": "0.19.0",
-    "npm:@use-gpu/glyph@0.19": "0.19.0",
-    "npm:@use-gpu/live@0.19": "0.19.0",
-    "npm:@use-gpu/plot@*": "0.19.0",
-    "npm:@use-gpu/plot@0.19": "0.19.0",
-    "npm:@use-gpu/plot@0.19.0": "0.19.0",
-    "npm:@use-gpu/react@0.19": "0.19.0_react@18.3.1_react-dom@18.3.1__react@18.3.1",
-    "npm:@use-gpu/scene@0.19": "0.19.0",
-    "npm:@use-gpu/shader@0.19": "0.19.0",
-    "npm:@use-gpu/webgpu@0.19": "0.19.0",
-    "npm:@use-gpu/wgsl-loader@0.19": "0.19.0_rollup@4.62.2",
-    "npm:@use-gpu/wgsl@0.19": "0.19.0",
-    "npm:@use-gpu/wgsl@0.19.0": "0.19.0",
-    "npm:@use-gpu/workbench@*": "0.19.0",
-    "npm:@use-gpu/workbench@0.19": "0.19.0",
+    "npm:@types/react-dom@^18.3.0": "18.3.7_@types+react@18.3.31",
+    "npm:@types/react@^18.3.12": "18.3.31",
+    "npm:@use-gpu/core@0.20": "0.20.0",
+    "npm:@use-gpu/glyph@0.20": "0.20.0",
+    "npm:@use-gpu/live@0.20": "0.20.0",
+    "npm:@use-gpu/plot@0.20": "0.20.0",
+    "npm:@use-gpu/react@0.20": "0.20.0_react@18.3.1_react-dom@18.3.1__react@18.3.1",
+    "npm:@use-gpu/scene@0.20": "0.20.0",
+    "npm:@use-gpu/shader@0.20": "0.20.0",
+    "npm:@use-gpu/webgpu@0.20": "0.20.0",
+    "npm:@use-gpu/wgsl-loader@0.20": "0.20.0_rollup@4.62.2",
+    "npm:@use-gpu/wgsl@0.20": "0.20.0",
+    "npm:@use-gpu/workbench@0.20": "0.20.0",
     "npm:@vitejs/plugin-react@^5.2.0": "5.2.0_vite@7.3.6",
-    "npm:gl-matrix@*": "3.4.4",
     "npm:gl-matrix@^3.4.4": "3.4.4",
-    "npm:playwright@*": "1.61.1",
-    "npm:playwright@^1.61.1": "1.61.1",
     "npm:react-dom@^18.3.1": "18.3.1_react@18.3.1",
     "npm:react@^18.3.1": "18.3.1",
     "npm:rollup@^4.24.0": "4.62.2",
@@ -537,46 +529,46 @@
     "@types/prop-types@15.7.15": {
       "integrity": "sha512-F6bEyamV9jKGAFBEmlQnesRPGOQqS2+Uwi0Em15xenOxHaf2hv6L8YCVn3rPdPJOiJfPiCnLIRyvwVaqMY3MIw=="
     },
-    "@types/react-dom@18.3.7_@types+react@18.3.12": {
+    "@types/react-dom@18.3.7_@types+react@18.3.31": {
       "integrity": "sha512-MEe3UeoENYVFXzoXEWsvcpg6ZvlrFNlOQ7EOsvhI3CfAXwzPfO8Qwuxd40nepsYKqyyVQnTdEfv68q91yLcKrQ==",
       "dependencies": [
         "@types/react"
       ]
     },
-    "@types/react@18.3.12": {
-      "integrity": "sha512-D2wOSq/d6Agt28q7rSI3jhU7G6aiuzljDGZ2hTZHIkrTLUI+AF3WMeKkEZ9nN2fkBAlcktT6vcZjDFiIhMYEQw==",
+    "@types/react@18.3.31": {
+      "integrity": "sha512-vfEqpXTvwT91yhmwdfouStN2hSKwTvyRs8qpLfADyrq/kxDw0hZM7Wk9Ug1FELj8hIby+S/+kQCSRFF32nv2Qw==",
       "dependencies": [
         "@types/prop-types",
         "csstype"
       ]
     },
-    "@use-gpu/core@0.19.0": {
-      "integrity": "sha512-VnjIwb9XI5bf6szsDYYvcUWDkoP0USM8OJbRUEcyJVmuML4GXZ/DelyWKQD4DaEOERShiBDAjBfondVRUkcmUA==",
+    "@use-gpu/core@0.20.0": {
+      "integrity": "sha512-srvExwCi5DRrJN/p23S1wsiKlHeIi6DcEu3EOCiU4yAAgmR6bGm2kaWaQbbPVCDVSR9vzQc5fdiLLFCFNgCm+w==",
       "dependencies": [
         "@use-gpu/state",
         "earcut",
-        "gl-matrix",
+        "gl-matrix@3.4.3",
         "lodash"
       ]
     },
-    "@use-gpu/glyph@0.19.0": {
-      "integrity": "sha512-34GI/o5ovYz1qXe3l+1dHzwSlTNVAXcJCeb+DQC1+iHPkH2wGvg2fdNaqgPl3kbb0s4aQVBkTzkwSmT2RLxBSQ==",
+    "@use-gpu/glyph@0.20.0": {
+      "integrity": "sha512-igviY8+hfKb4BPuoigV2q8DYXhutOnun5Gkv5A24fIAFWmUHm9X9Pk3DJGcP3deXRuiRRtCCdL4U3omfSYd9BQ==",
       "dependencies": [
         "@use-gpu/state"
       ]
     },
-    "@use-gpu/live@0.19.0": {
-      "integrity": "sha512-sbHdVt2g3c0gOyDTiUpv4IrGbVw3sMtZddOnoKSSBnyyqA2kmtDQ8i8kPootaFOmFKptnsHhLBJZi9nHfNT2tQ=="
+    "@use-gpu/live@0.20.0": {
+      "integrity": "sha512-Z8YvLEP1H35sLlZWbZWHlSD1TI03c3XAp7rIoVroCkMy8OQ7St70JtfG8FT/XZ7U9szwIoQxJMAob53swogiTg=="
     },
-    "@use-gpu/parse@0.19.0": {
-      "integrity": "sha512-TFG93fVag/R+ITPAaw7q1FAveLjb1wZzQQw8ncwjTTFhQ11qOzsBtHSajxybYB+L0FFUCAPpDEel0LeyghI8ew==",
+    "@use-gpu/parse@0.20.0": {
+      "integrity": "sha512-bFZDbFmEl7t3MW3dMaNbDXz2FHKm7iX5rJGnFsvG9d6kQ+rg2cPSqxxBxlPjP4di1hejd6WuLWlhytQvf5YpkQ==",
       "dependencies": [
         "@use-gpu/core",
-        "gl-matrix"
+        "gl-matrix@3.4.3"
       ]
     },
-    "@use-gpu/plot@0.19.0": {
-      "integrity": "sha512-0oPuHhQfMK6LOf9K/Qw4zrd6dknm7shjfHsMxFCNZc39ChZVCXUj2+acBqOXx26oUrNrTzpW7rSiCaUyFHqHxg==",
+    "@use-gpu/plot@0.20.0": {
+      "integrity": "sha512-mO4Ftsu0EcYbZskIecEFpZPYZywB7yqTMZfQz27DmiRD6PLG/WaZXpWGYz4CNiuVK+tPlqBD7Cok52aSegjpPg==",
       "dependencies": [
         "@use-gpu/core",
         "@use-gpu/live",
@@ -584,16 +576,16 @@
         "@use-gpu/workbench"
       ]
     },
-    "@use-gpu/react@0.19.0_react@18.3.1_react-dom@18.3.1__react@18.3.1": {
-      "integrity": "sha512-JW07bNDJUhli5iVxlPuJJb3JJeHv0DOfQNJbFDgLNEofabsZJx3HSo7yjDWPxHptYRIpkTLQBeW6vu/U6LpWlw==",
+    "@use-gpu/react@0.20.0_react@18.3.1_react-dom@18.3.1__react@18.3.1": {
+      "integrity": "sha512-S2vl07IIK15DZEkHDTCBCeRdacpX9qxk82Vf4NUfrApXjfDBkq6V+IhNmGNjb7icIaoQPk848NSt4YsDizCUyw==",
       "dependencies": [
         "@use-gpu/live",
         "react",
         "react-dom"
       ]
     },
-    "@use-gpu/scene@0.19.0": {
-      "integrity": "sha512-e6BpvHrM/p7AsIGejjH+sX+qySdLWeMnCqBJv15dftaGoY9C0Q5sBkalMXQZGuQsQSDxqSuDxWlqs2rVyH+V1g==",
+    "@use-gpu/scene@0.20.0": {
+      "integrity": "sha512-m32Cg7MAAP91UV2LJpddpZixp7z0ZH5WwvsZddO6f9/RIqMEjexUEpPCZrfjJHBUWx2x/AugY8kBRfAPIjPbzg==",
       "dependencies": [
         "@use-gpu/core",
         "@use-gpu/live",
@@ -601,8 +593,8 @@
         "@use-gpu/workbench"
       ]
     },
-    "@use-gpu/shader@0.19.0": {
-      "integrity": "sha512-qxz66Z/75D8NIGkHMJO0y+7KAInr6cVINGuZUMLgxzSingmfXCMtgUGcacizbSZ7zrJlwlMHU4oKxSEK73taYQ==",
+    "@use-gpu/shader@0.20.0": {
+      "integrity": "sha512-sq5RPtJHSxbxHmxZgoXYrIyC+NQEkLsWahxuNcXKyfC/0Id2Aekb+rg3Gj7xb24G/Upk0G/AMAkPmRUcAQUieg==",
       "dependencies": [
         "@lezer/generator",
         "@lezer/lr",
@@ -614,36 +606,36 @@
       ],
       "bin": true
     },
-    "@use-gpu/state@0.19.0": {
-      "integrity": "sha512-QOzwoKeTkNtislKT2V+oTsQjFKKiB89AaWYshIbI9HSIxAgggPXYzCxfsxIf8C5ZQVgbUur1XsK3GZJ90dvbsQ=="
+    "@use-gpu/state@0.20.0": {
+      "integrity": "sha512-1ZbrX3nTqQVUSCDrDgkHha/9TbvTjNNU2ruZdTtc+CTvd8rAAWuCzPIQ8tbPq4/4V6lKlWfhx8xDwAjUuRnCyw=="
     },
-    "@use-gpu/traits@0.19.0": {
-      "integrity": "sha512-YlcfIfHPaLpekB0GIGwo4PMWkNEFx5NjyftEVEqZKBHg0m2fJL/voRQ8ThegB8UvtZnpJiyX5R4ZkfBj392jOA==",
+    "@use-gpu/traits@0.20.0": {
+      "integrity": "sha512-cK0uXIAjwVfbyyXVXwHJVYAyYNhpx6/lRbmdpXVaNWGeiMBV5D+By2b4jMJ83Acr2CZjNGj6y6/VkZe1pTXVAA==",
       "dependencies": [
         "@use-gpu/live"
       ]
     },
-    "@use-gpu/webgpu@0.19.0": {
-      "integrity": "sha512-dw7taHprQykrptdc4kltjnFi8IgcAxHB+BP/OFNtWY8TVRQ9kATeT1Mo3ncrxJnXYoNz3/hW5Qt9xvgjKoSeiA==",
+    "@use-gpu/webgpu@0.20.0": {
+      "integrity": "sha512-bVXwABWf7qu2yApIQSDvqXWfD9GdwCHwq81GDo8cmPBESCVHRzdEUa92o5K/TiYjmhVpqN/o9/bH5OKF3OFULA==",
       "dependencies": [
         "@use-gpu/core",
         "@use-gpu/live",
         "@use-gpu/workbench"
       ]
     },
-    "@use-gpu/wgsl-loader@0.19.0_rollup@4.62.2": {
-      "integrity": "sha512-5MtMXCgchVQXTtXgAcpaQeqU+hpY1+F69f6H3//ODQ4/KGm7sMKKE2jKbdrCN5RRY9UJewxIQeIgDgaFXjwphA==",
+    "@use-gpu/wgsl-loader@0.20.0_rollup@4.62.2": {
+      "integrity": "sha512-nJ9yElFoeDyRfoAbxxy2PuLAkCunDmSZJ1j1zlA7dH0dncbsJLW8t3Ex0oWHK6iS/ccqe7t0aIAg024DTExbcQ==",
       "dependencies": [
         "@rollup/pluginutils",
         "@use-gpu/shader",
         "schema-utils"
       ]
     },
-    "@use-gpu/wgsl@0.19.0": {
-      "integrity": "sha512-F/NOU6pJ7ezBiaSTmRIq7UKUZIwo54A1J90frOxKukA4PXTTDsWFtSbOEwgaxES+PBZHpUDmuWJX2KQprQgvZg=="
+    "@use-gpu/wgsl@0.20.0": {
+      "integrity": "sha512-ARFT+BYZjd23m5gSI4TE7sh34Iz2C6fwccETmRr80O/JtDyNpQZc0DHgbLvqW63N7JZRuW0xsElPU/kQKcUpJg=="
     },
-    "@use-gpu/workbench@0.19.0": {
-      "integrity": "sha512-VqOZCHvYWaVxkewsik1ObJI3fA7izX/ECWYXoMFmDK7BHoZCx8hn3GgEwHwGaRr/aex4lplJEv5kA4unSQfyQQ==",
+    "@use-gpu/workbench@0.20.0": {
+      "integrity": "sha512-stNljeqbQlQIffXr5o8y0LvT6+oST2ISsDn5svT5r3Lbzb+50RhDNS3UPE1AjDJoytpAgQVagQvkG4xIH2ikNQ==",
       "dependencies": [
         "@use-gpu/core",
         "@use-gpu/glyph",
@@ -653,7 +645,8 @@
         "@use-gpu/state",
         "@use-gpu/traits",
         "@use-gpu/wgsl",
-        "gl-matrix",
+        "comlink",
+        "gl-matrix@3.4.3",
         "lodash",
         "lru-cache@6.0.0"
       ]
@@ -688,12 +681,12 @@
     "array-back@6.2.3": {
       "integrity": "sha512-SGDvmg6QTYiTxCBkYVmThcoa67uLl35pyzRHdpCGBOcqFy6BtwnphoFPk7LhJshD+Yk1Kt35WGWeZPTgwR4Fhw=="
     },
-    "baseline-browser-mapping@2.10.42": {
-      "integrity": "sha512-c/jurFrDLyui7o1J86yLkRu4LMsTYcBohveus7/I2Hzdn9KIP2bdJPTue/lR1KH46enoPbD77GKeSYNdyPoD3Q==",
+    "baseline-browser-mapping@2.10.43": {
+      "integrity": "sha512-AjYpR78kDWAY3Efj+cDTFH9t9SCoL7OoTp1BOb0mQV7S+6CiLwnWM3FyxhJtdPufDFKzmCSFoUncKjWgJEZTCQ==",
       "bin": true
     },
-    "browserslist@4.28.4": {
-      "integrity": "sha512-MTc8i/x9jBQd1iMw2CFGS+rwMa07eYjLR0CCTLDACl9xhxy+nIs3KeML/biicXtk9JrZ6dnnTatmc7ErPXIxqw==",
+    "browserslist@4.28.6": {
+      "integrity": "sha512-FQBYNK15VMslhLHpA7+n+n1GOlF1kId2xcCg7/j95f24AOF6VDYMNH4mFxF7KuaTdv627faazpOAjFzMrfJOUw==",
       "dependencies": [
         "baseline-browser-mapping",
         "caniuse-lite",
@@ -703,8 +696,11 @@
       ],
       "bin": true
     },
-    "caniuse-lite@1.0.30001802": {
-      "integrity": "sha512-vmv8ub2xwTNmljSKf82mtCk5JH7hC+YgzLj3P5zotvA0tPQ9016tdNNOG8WRca1IxOnhSsivB+J0z5FeE5LOUw=="
+    "caniuse-lite@1.0.30001806": {
+      "integrity": "sha512-72Cuvd95zbSYPKq6Fhg8eDJRlzgWDf7/mtoZv6Qe/DYNCEBdNxoA3+rZAU2ZhGCpZlns3EssFavaZomckT5Uuw=="
+    },
+    "comlink@4.4.2": {
+      "integrity": "sha512-OxGdvBmJuNKSCMO4NTl1L47VRp6xn2wG4F/2hYzB6tiCb709otOxtEYCSvK80PtjODfXXZu8ds+Nw5kVCjqd2g=="
     },
     "command-line-args@6.0.2": {
       "integrity": "sha512-AIjYVxrV9X752LmPDLbVYv8aMCuHPSLZJXEo2qo/xJfv+NYhaZ4sMSF01rM+gHPaMgvPM0l5D/F+Qx+i2WfSmQ==",
@@ -730,8 +726,8 @@
     "earcut@2.2.4": {
       "integrity": "sha512-/pjZsA1b4RPHbeWZQn66SWS8nZZWLQQ23oE3Eam7aroEFGEvwKAsJfZ9ytiEMycfzXWpca4FA9QIOehf7PocBQ=="
     },
-    "electron-to-chromium@1.5.387": {
-      "integrity": "sha512-TaxwufTFDufvPEoXdhwVrA3UdFWBeWGkYoJ1K8ldF1xe6gKfth6iRNS5lTQ5JPNOHdGQm8PT1QYKUqFLCiUefQ=="
+    "electron-to-chromium@1.5.393": {
+      "integrity": "sha512-kiDJdIUawuEIcp9XoICKp1iTYDEbgguIPq526N1Q7jIQDeQ3CqoMx71025PI/7E48Ddtw2HuWsVjY7afEgNxmg=="
     },
     "esbuild@0.28.1": {
       "integrity": "sha512-HrJrvZv5ayxBzPfwphOoNzkzOIIlifzk0KJrGK2c8R4+LKpMtpYLQeUdjnwjWv/LZlkH2laZk+4w78pi99D4Vw==",
@@ -778,7 +774,7 @@
     "fast-json-stable-stringify@2.1.0": {
       "integrity": "sha512-lhd/wF+Lk98HZoTCtlVraHtfh5XYijIjalXck7saUtuanSDyLMxnHhSXEDJqHxD7msR8D0uCmqlkwjCV8xvwHw=="
     },
-    "fdir@6.5.0_picomatch@4.0.4": {
+    "fdir@6.5.0_picomatch@4.0.5": {
       "integrity": "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==",
       "dependencies": [
         "picomatch"
@@ -790,11 +786,6 @@
     "find-replace@5.0.2": {
       "integrity": "sha512-Y45BAiE3mz2QsrN2fb5QEtO4qb44NcS7en/0y9PEVsg351HsLeVclP8QPMH79Le9sH3rs5RSwJu99W0WPZO43Q=="
     },
-    "fsevents@2.3.2": {
-      "integrity": "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==",
-      "os": ["darwin"],
-      "scripts": true
-    },
     "fsevents@2.3.3": {
       "integrity": "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==",
       "os": ["darwin"],
@@ -802,6 +793,9 @@
     },
     "gensync@1.0.0-beta.2": {
       "integrity": "sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg=="
+    },
+    "gl-matrix@3.4.3": {
+      "integrity": "sha512-wcCp8vu8FT22BnvKVPjXa/ICBWRq/zjFfdofZy1WSpQZpphblv12/bOQLBC1rMM7SGOFS9ltVmKOHil5+Ml7gA=="
     },
     "gl-matrix@3.4.4": {
       "integrity": "sha512-latSnyDNt/8zYUB6VIJ6PCh2jBjJX6gnDsoCZ7LyW7GkqrD51EWwa9qCoGixj8YqBtETQK/xY7OmpTF8xz1DdQ=="
@@ -854,35 +848,21 @@
     "ms@2.1.3": {
       "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA=="
     },
-    "nanoid@3.3.12": {
-      "integrity": "sha512-ZB9RH/39qpq5Vu6Y+NmUaFhQR6pp+M2Xt76XBnEwDaGcVAqhlvxrl3B2bKS5D3NH3QR76v3aSrKaF/Kiy7lEtQ==",
+    "nanoid@3.3.16": {
+      "integrity": "sha512-bzlKTyNJ7+LdGIIwy8ijFpIqEQIvafahV7eYykJ8Cvh42EdJeODoJ6gUJXpQJvej1BddH8OqTXZNE/KfbWAu8Q==",
       "bin": true
     },
-    "node-releases@2.0.50": {
-      "integrity": "sha512-J6l92tKHX6w8Jy5nO1Vuc01NoIiRGi/d6qBKVxh+IQ8Cr3b6HbVNfKiF8ZpFKufTwpwxMmce2W3iQZ861ZRyTg=="
+    "node-releases@2.0.51": {
+      "integrity": "sha512-wRNIrw4DmVLKQlbgOMdkMx27Wrpzes2hh5Jtbi2bjPd+4wJstWIqP5A+lscnqbm0xxmT5Bpg8Lec5ItEBwx6BQ=="
     },
     "picocolors@1.1.1": {
       "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="
     },
-    "picomatch@4.0.4": {
-      "integrity": "sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A=="
+    "picomatch@4.0.5": {
+      "integrity": "sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A=="
     },
-    "playwright-core@1.61.1": {
-      "integrity": "sha512-h7Qlt6m4REp25qvIdvbDtVmD4LqVXfpRxhORv9L0jzETM05p4fuPJ3dKyuSXQxDSbXnmS79HAgi9589lGSpLkg==",
-      "bin": true
-    },
-    "playwright@1.61.1": {
-      "integrity": "sha512-DWnY5o3YbLWK4GovuAVwpqL+1VwGNdUGrRr++8j8PtQQzvAVZUIMjKQ90fY689sEJZJBbZVw1rXaOKSTitkzPQ==",
-      "dependencies": [
-        "playwright-core"
-      ],
-      "optionalDependencies": [
-        "fsevents@2.3.2"
-      ],
-      "bin": true
-    },
-    "postcss@8.5.15": {
-      "integrity": "sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==",
+    "postcss@8.5.19": {
+      "integrity": "sha512-Mz8SaolMd8nB+G13WkORcxQKHZ/NE4xXevtkJHVuG+guo9/wYKlIMTKAqGdEmYOXR2ijPjTYNHssizdaVSUNdQ==",
       "dependencies": [
         "nanoid",
         "picocolors",
@@ -940,7 +920,7 @@
         "@rollup/rollup-win32-ia32-msvc",
         "@rollup/rollup-win32-x64-gnu",
         "@rollup/rollup-win32-x64-msvc",
-        "fsevents@2.3.3"
+        "fsevents"
       ],
       "bin": true
     },
@@ -975,7 +955,7 @@
     "typical@7.3.0": {
       "integrity": "sha512-ya4mg/30vm+DOWfBg4YK3j2WD6TWtRkCbasOJr40CseYENzCUby/7rIvXA99JGsQHeNxLbnXdyLLxKSv3tauFw=="
     },
-    "update-browserslist-db@1.2.3_browserslist@4.28.4": {
+    "update-browserslist-db@1.2.3_browserslist@4.28.6": {
       "integrity": "sha512-Js0m9cx+qOgDxo0eMiFGEueWztz+d4+M3rGlmKPT+T4IS/jP4ylw3Nwpu6cpTTP8R1MAC1kF4VbdLt3ARf209w==",
       "dependencies": [
         "browserslist",
@@ -1007,7 +987,7 @@
         "tinyglobby"
       ],
       "optionalDependencies": [
-        "fsevents@2.3.3"
+        "fsevents"
       ],
       "bin": true
     },
@@ -1024,15 +1004,15 @@
         "dependencies": [
           "npm:@types/react-dom@^18.3.0",
           "npm:@types/react@^18.3.12",
-          "npm:@use-gpu/core@0.19",
-          "npm:@use-gpu/live@0.19",
-          "npm:@use-gpu/plot@0.19",
-          "npm:@use-gpu/react@0.19",
-          "npm:@use-gpu/scene@0.19",
-          "npm:@use-gpu/shader@0.19",
-          "npm:@use-gpu/webgpu@0.19",
-          "npm:@use-gpu/wgsl-loader@0.19",
-          "npm:@use-gpu/workbench@0.19",
+          "npm:@use-gpu/core@0.20",
+          "npm:@use-gpu/live@0.20",
+          "npm:@use-gpu/plot@0.20",
+          "npm:@use-gpu/react@0.20",
+          "npm:@use-gpu/scene@0.20",
+          "npm:@use-gpu/shader@0.20",
+          "npm:@use-gpu/webgpu@0.20",
+          "npm:@use-gpu/wgsl-loader@0.20",
+          "npm:@use-gpu/workbench@0.20",
           "npm:@vitejs/plugin-react@^5.2.0",
           "npm:react-dom@^18.3.1",
           "npm:react@^18.3.1",
@@ -1044,23 +1024,23 @@
       "packages/3d": {
         "dependencies": [
           "jsr:@std/assert@1",
-          "npm:@use-gpu/live@0.19",
-          "npm:@use-gpu/plot@0.19",
-          "npm:@use-gpu/workbench@0.19"
+          "npm:@use-gpu/live@0.20",
+          "npm:@use-gpu/plot@0.20",
+          "npm:@use-gpu/workbench@0.20"
         ]
       },
       "packages/core": {
         "dependencies": [
           "jsr:@std/assert@1",
-          "npm:@use-gpu/glyph@0.19",
-          "npm:@use-gpu/live@0.19",
-          "npm:@use-gpu/plot@0.19",
-          "npm:@use-gpu/react@0.19",
-          "npm:@use-gpu/scene@0.19",
-          "npm:@use-gpu/shader@0.19",
-          "npm:@use-gpu/webgpu@0.19",
-          "npm:@use-gpu/wgsl@0.19",
-          "npm:@use-gpu/workbench@0.19",
+          "npm:@use-gpu/glyph@0.20",
+          "npm:@use-gpu/live@0.20",
+          "npm:@use-gpu/plot@0.20",
+          "npm:@use-gpu/react@0.20",
+          "npm:@use-gpu/scene@0.20",
+          "npm:@use-gpu/shader@0.20",
+          "npm:@use-gpu/webgpu@0.20",
+          "npm:@use-gpu/wgsl@0.20",
+          "npm:@use-gpu/workbench@0.20",
           "npm:gl-matrix@^3.4.4",
           "npm:react-dom@^18.3.1",
           "npm:react@^18.3.1"
