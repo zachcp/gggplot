@@ -13,7 +13,11 @@ import type {
   LayerContext,
   ResidentProductProps,
 } from "./types.ts";
-import { explicitDomain, residentBarPalette } from "./bar.ts";
+import {
+  explicitDomain,
+  residentBinRequest,
+  residentColorGroups,
+} from "./resident_shared.ts";
 import { colorsOf, type FaceLoop, packFaceLoops, resolutionOf, valuesOf } from "./shared.ts";
 
 /**
@@ -81,20 +85,10 @@ export function tileResidentPlan(
     mapping.y || "weight" in layer.params
   ) return undefined;
 
-  // Same fill/color eligibility as barResidentPlan: a factor column with a
-  // default scale that itself drives grouping; anything else stays on CPU.
-  const colorAes: "fill" | "color" | undefined = mapping.fill
-    ? "fill"
-    : mapping.color
-    ? "color"
-    : undefined;
-  const colorCol = colorAes ? mapping[colorAes] : undefined;
-  if (colorCol) {
-    const colorColumn = data[colorCol];
-    const declaredScale = spec.scales.find((scale) => scale.aes === colorAes);
-    if (colorColumn?.type !== "factor" || declaredScale) return undefined;
-    if (mapping.group && mapping.group !== colorCol) return undefined;
-  }
+  // Shared fill/color eligibility + grouping (resident_shared.ts).
+  const colorGroups = residentColorGroups(spec, mapping, data);
+  if (!colorGroups) return undefined;
+  const { group, groupColumn, groupsCount, paletteColors } = colorGroups;
 
   const x = mapping.x;
   const xColumn = x ? data[x] : undefined;
@@ -102,27 +96,13 @@ export function tileResidentPlan(
 
   // A heatmap strip needs factor rows; a group-less tile strip is just a
   // histogram and should use the bar product.
-  const group = mapping.fill ?? mapping.color ?? mapping.group;
-  const groupColumn = group ? data[group] : undefined;
   if (!group || groupColumn?.type !== "factor") return undefined;
-  const groupsCount = groupColumn.levels.length;
-  const paletteColors = colorCol
-    ? residentBarPalette(data, colorCol, groupColumn.levels)
-    : undefined;
 
-  const requestedBinwidth = layer.params.binwidth;
-  const requestedBins = layer.params.bins;
-  if (
-    requestedBinwidth != null &&
-      (typeof requestedBinwidth !== "number" || requestedBinwidth <= 0) ||
-    requestedBins != null &&
-      (typeof requestedBins !== "number" || requestedBins <= 0)
-  ) return undefined;
-  const bins = (requestedBins as number | undefined) ?? 30;
+  const binRequest = residentBinRequest(layer.params);
+  if (!binRequest) return undefined;
   const xDomain = explicitDomain(spec, "x");
   const shared = {
-    binwidth: requestedBinwidth as number | undefined,
-    bins: requestedBinwidth == null ? bins : undefined,
+    ...binRequest,
     groupsCount,
     // Tiles are a dense grid; bar-position layout does not apply.
     position: "identity" as const,

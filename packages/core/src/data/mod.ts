@@ -24,12 +24,10 @@ export interface FactorColumn {
 
 export type Column = NumericColumn | FactorColumn;
 export type TypedDataFrame = Record<string, Column>;
-export type LegacyDataFrame = Record<string, unknown[]>;
+/** Raw caller input: a plain object of parallel column arrays. */
+export type ColumnStore = Record<string, unknown[]>;
 export type RowStore = Array<Record<string, unknown>>;
-export type InputData = LegacyDataFrame | RowStore | TypedDataFrame;
-export type DataFrameLike = TypedDataFrame | LegacyDataFrame;
-
-const metadata = new WeakMap<LegacyDataFrame, TypedDataFrame>();
+export type InputData = ColumnStore | RowStore | TypedDataFrame;
 
 export interface ColumnOverride {
   type: "numeric" | "factor";
@@ -62,7 +60,7 @@ function isRowStore(data: InputData): data is RowStore {
   return Array.isArray(data);
 }
 
-function columnStoreFromRows(rows: RowStore): LegacyDataFrame {
+function columnStoreFromRows(rows: RowStore): ColumnStore {
   const names: string[] = [];
   const seen = new Set<string>();
   for (const row of rows) {
@@ -74,7 +72,7 @@ function columnStoreFromRows(rows: RowStore): LegacyDataFrame {
     }
   }
 
-  const out: LegacyDataFrame = Object.fromEntries(
+  const out: ColumnStore = Object.fromEntries(
     names.map((name) => [name, []]),
   );
   for (const row of rows) {
@@ -83,7 +81,7 @@ function columnStoreFromRows(rows: RowStore): LegacyDataFrame {
   return out;
 }
 
-function normalizeRaw(data: InputData): LegacyDataFrame | TypedDataFrame {
+function normalizeRaw(data: InputData): ColumnStore | TypedDataFrame {
   if (isTypedDataFrame(data)) return data;
   return isRowStore(data) ? columnStoreFromRows(data) : data;
 }
@@ -171,7 +169,7 @@ function copyFactorColumn(
 
 /**
  * The public data boundary: the ONLY place raw caller-supplied data (a
- * RowStore, LegacyDataFrame, or already-typed TypedDataFrame) becomes the
+ * RowStore, ColumnStore, or already-typed TypedDataFrame) becomes the
  * TypedDataFrame the rest of the pipeline (GGSpec["data"] = DataFrame =
  * TypedDataFrame) reads column arrays from.
  *
@@ -227,17 +225,6 @@ export function ingest(
   return out;
 }
 
-export function legacyDataFrame(data: TypedDataFrame): LegacyDataFrame {
-  const legacy = Object.fromEntries(
-    Object.entries(data).map(([name, column]) => [
-      name,
-      column.values.map((value) => value),
-    ]),
-  );
-  metadata.set(legacy, data);
-  return legacy;
-}
-
 /** Build a typed semantic data frame from stat/annotation output columns. */
 export function dataFrameFromColumns(
   columns: Record<string, unknown[]>,
@@ -271,74 +258,34 @@ export function sliceTypedDataFrame(
   );
 }
 
-export function sliceLegacyDataFrame(
-  data: LegacyDataFrame,
-  indices: number[],
-): LegacyDataFrame {
-  const meta = dataFrameMetadata(data);
-  if (meta) return legacyDataFrame(sliceTypedDataFrame(meta, indices));
-
-  return Object.fromEntries(
-    Object.entries(data).map((
-      [col, values],
-    ) => [col, indices.map((i) => values[i])]),
-  );
-}
-
-export function dataFrameMetadata(
-  data: LegacyDataFrame,
-): TypedDataFrame | undefined {
-  return metadata.get(data);
-}
-
-export function columnMetadata(
-  data: LegacyDataFrame,
-  column: string,
-): Column | undefined {
-  return metadata.get(data)?.[column];
-}
-
-function typedMetadata(data: DataFrameLike): TypedDataFrame | undefined {
-  return isTypedDataFrame(data) ? data : dataFrameMetadata(data);
-}
-
-export function isFactorColumn(data: DataFrameLike, column: string): boolean {
-  return typedMetadata(data)?.[column]?.type === "factor";
+export function isFactorColumn(data: TypedDataFrame, column: string): boolean {
+  return data[column]?.type === "factor";
 }
 
 export function factorLevelsFor(
-  data: DataFrameLike,
+  data: TypedDataFrame,
   column: string,
 ): string[] | undefined {
-  const meta = typedMetadata(data)?.[column];
-  return meta?.type === "factor" ? meta.declaredLevels : undefined;
+  const col = data[column];
+  return col?.type === "factor" ? col.declaredLevels : undefined;
 }
 
-export function columnValues(data: DataFrameLike, column: string): unknown[] {
-  return typedMetadata(data)?.[column]?.values ??
-    (isTypedDataFrame(data) ? [] : data[column] ?? []);
+export function columnValues(data: TypedDataFrame, column: string): unknown[] {
+  return data[column]?.values ?? [];
 }
 
 export function numericColumnValues(
-  data: DataFrameLike,
+  data: TypedDataFrame,
   column: string,
 ): Array<number | null> {
-  const meta = typedMetadata(data)?.[column];
-  if (meta?.type === "numeric") return meta.values;
+  const col = data[column];
+  if (col?.type === "numeric") return col.values;
 
   return columnValues(data, column).map((value) => {
     if (value == null || value === "") return null;
     const n = typeof value === "number" ? value : Number(value);
     return Number.isFinite(n) ? n : null;
   });
-}
-
-export function numericValueAt(
-  data: DataFrameLike,
-  column: string,
-  row: number,
-): number | null {
-  return numericColumnValues(data, column)[row] ?? null;
 }
 
 export function factorIds(column: FactorColumn): Uint32Array {

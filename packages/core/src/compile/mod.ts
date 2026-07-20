@@ -1,5 +1,11 @@
 // Pipeline orchestration. Lowering, coordinate, guide, and facet details live in focused modules.
-import type { AesName, GGSpec } from "../ir/types.ts";
+import type {
+  Aes,
+  AesName,
+  DataFrame,
+  GGSpec,
+  Layer,
+} from "../ir/types.ts";
 import { node, type RenderNode } from "./rendertree.ts";
 import { applyStat } from "../stat/mod.ts";
 import { trainScales, type TrainedScale } from "../scale/mod.ts";
@@ -50,6 +56,31 @@ export interface CompileOptions {
    * identical to pre-tzc.5 behavior. See compile/pack_cache.ts.
    */
   packCache?: PackCache;
+}
+
+/** Fold every layer's geom domainContribution into the starting domains. */
+function widenDomains(
+  perLayer: ReadonlyArray<
+    { layer: Layer; data: DataFrame; mapping: Aes }
+  >,
+  xScale: TrainedScale | undefined,
+  yScale: TrainedScale | undefined,
+  xStart: [number, number],
+  yStart: [number, number],
+): [[number, number], [number, number]] {
+  let xDomain = xStart;
+  let yDomain = yStart;
+  for (const { layer, data, mapping } of perLayer) {
+    const contrib = GEOM_REGISTRY[layer.geom].domainContribution?.(
+      layer,
+      mapping,
+      data,
+      { xScale, yScale, xDomain, yDomain },
+    );
+    if (contrib?.x) xDomain = contrib.x;
+    if (contrib?.y) yDomain = contrib.y;
+  }
+  return [xDomain, yDomain];
 }
 
 export function compile(
@@ -106,18 +137,13 @@ export function compile(
   const linetypeScale = scales.get("linetype");
   const linewidthScale = scales.get("linewidth");
   const strokeScale = scales.get("stroke");
-  let xDomain = numericRange(xScale) ?? [0, 1];
-  let yDomain = numericRange(yScale) ?? [0, 1];
-  for (const { layer, data, mapping } of allPerLayer) {
-    const contrib = GEOM_REGISTRY[layer.geom].domainContribution?.(
-      layer,
-      mapping,
-      data,
-      { xScale, yScale, xDomain, yDomain },
-    );
-    if (contrib?.x) xDomain = contrib.x;
-    if (contrib?.y) yDomain = contrib.y;
-  }
+  const [xDomain, yDomain] = widenDomains(
+    allPerLayer,
+    xScale,
+    yScale,
+    numericRange(xScale) ?? [0, 1],
+    numericRange(yScale) ?? [0, 1],
+  );
   const xGuideScale = xScale?.kind === "continuous"
     ? { ...xScale, domain: xDomain }
     : xScale;
@@ -183,21 +209,13 @@ export function compile(
     let panelYDomain = free === "free" || free === "free_y"
       ? numericRange(panelYScale) ?? yDomain
       : yDomain;
-    for (const { layer, data, mapping } of perLayer) {
-      const contrib = GEOM_REGISTRY[layer.geom].domainContribution?.(
-        layer,
-        mapping,
-        data,
-        {
-          xScale: panelXScale,
-          yScale: panelYScale,
-          xDomain: panelXDomain,
-          yDomain: panelYDomain,
-        },
-      );
-      if (contrib?.x) panelXDomain = contrib.x;
-      if (contrib?.y) panelYDomain = contrib.y;
-    }
+    [panelXDomain, panelYDomain] = widenDomains(
+      perLayer,
+      panelXScale,
+      panelYScale,
+      panelXDomain,
+      panelYDomain,
+    );
     // ⑤ geoms → marks. One LayerContext per panel replaces the former
     // 19-positional-parameter lowerLayer signature: the x/y scales are the
     // panel's (possibly free-scaled) scales, the other aesthetic scales are the

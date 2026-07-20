@@ -18,6 +18,7 @@ import {
   type TrainedScale,
 } from "../scale/mod.ts";
 import type { FlatTensor, MarkTopology } from "../compile/rendertree.ts";
+import { expandHexColor, parseColorRGBA } from "../color/mod.ts";
 
 export function valuesOf(
   data: DataFrame,
@@ -147,25 +148,6 @@ export function alphasOf(
   return scaledColumn(mapping, data, "alpha", alphaScale, scaleAlphaValue);
 }
 
-/**
- * Recognize a #rgb or #rrggbb hex color and normalize it to a 6-digit hex
- * string, preserving the input's original digit casing. Returns null for
- * anything else (named CSS colors, rgb()/rgba() strings, #rrggbbaa) — those
- * are not hex/named-parseable by this minimal parser. Shared by
- * colorWithAlpha (CSS string output) and packColorsRGBA (normalized vec4
- * output) so both agree on what counts as a parseable color.
- */
-function expandHexColor(color: string): string | null {
-  const hex = color.startsWith("#") ? color.slice(1) : color;
-  if (/^[0-9a-f]{3}$/i.test(hex)) {
-    return [...hex].map((part) => part + part).join("");
-  }
-  if (/^[0-9a-f]{6}$/i.test(hex)) {
-    return hex;
-  }
-  return null;
-}
-
 /** Encode a mapped opacity into a CSS color the Point adapter can bind per row. */
 export function colorWithAlpha(color: string, alpha: number): string {
   const hex = expandHexColor(color);
@@ -179,25 +161,6 @@ export function colorWithAlpha(color: string, alpha: number): string {
       "0",
     )
   }`;
-}
-
-/**
- * Parse a color string into normalized [r,g,b,a] components in 0..1, for
- * packColorsRGBA. Uses the same hex recognition as colorWithAlpha
- * (expandHexColor); non-hex colors (named CSS colors, rgb()/rgba() strings)
- * fall back to opaque black — this minimal parser has no CSS named-color
- * table. Alpha defaults to 1 (fully opaque); callers fold per-row alpha in
- * separately via packColorsRGBA's alphas argument.
- */
-function parseColorRGBA(color: string): [number, number, number, number] {
-  const hex = expandHexColor(color);
-  if (hex == null) return [0, 0, 0, 1];
-  return [
-    parseInt(hex.slice(0, 2), 16) / 255,
-    parseInt(hex.slice(2, 4), 16) / 255,
-    parseInt(hex.slice(4, 6), 16) / 255,
-    1,
-  ];
 }
 
 /** Per-row point shapes from a mapped shape column, or undefined if unmapped. */
@@ -437,8 +400,7 @@ export function packColorsRGBA(
   let w = 0;
   for (let i = 0; i < mask.length; i++) {
     if (!mask[i]) continue;
-    const [r, g, b] = parseColorRGBA(colors[i]);
-    const a = alphas ? Math.max(0, Math.min(1, alphas[i])) : 1;
+    const [r, g, b, a] = parseColorRGBA(colors[i], alphas ? alphas[i] : 1);
     array[w * 4] = r;
     array[w * 4 + 1] = g;
     array[w * 4 + 2] = b;

@@ -2,15 +2,12 @@ import { assertEquals } from "@std/assert";
 import {
   asFactor,
   asNumeric,
-  columnMetadata,
-  dataFrameMetadata,
   factorIds,
   factorLevelsFor,
   ingest,
-  legacyDataFrame,
   numericBuffer,
   numericColumnValues,
-  sliceLegacyDataFrame,
+  sliceTypedDataFrame,
 } from "../src/data/mod.ts";
 
 Deno.test("ingest accepts column-store data and infers numeric/factor columns", () => {
@@ -70,42 +67,17 @@ Deno.test("ingest supports asNumeric override for numeric strings", () => {
   });
 });
 
-Deno.test("legacyDataFrame materializes typed columns for current pipeline", () => {
-  const typed = ingest({
-    x: [1, null, 3],
-    g: ["a", "b", null],
-  });
-
-  assertEquals(legacyDataFrame(typed), {
-    x: [1, null, 3],
-    g: ["a", "b", null],
-  });
-});
-
-Deno.test("legacyDataFrame preserves typed metadata as a transitional sidecar", () => {
-  const typed = ingest({
-    cyl: [4, 6, 8],
-  }, {
-    columns: { cyl: asFactor(["8", "6", "4"]) },
-  });
-  const legacy = legacyDataFrame(typed);
-
-  assertEquals(dataFrameMetadata(legacy), typed);
-  assertEquals(columnMetadata(legacy, "cyl")?.type, "factor");
-  assertEquals(factorLevelsFor(legacy, "cyl"), ["8", "6", "4"]);
-});
-
-Deno.test("sliceLegacyDataFrame preserves typed metadata", () => {
+Deno.test("sliceTypedDataFrame preserves factor levels and declared order", () => {
   const typed = ingest({
     cyl: [4, 6, 8, 4],
   }, {
     columns: { cyl: asFactor(["8", "6", "4"]) },
   });
-  const sliced = sliceLegacyDataFrame(legacyDataFrame(typed), [0, 2]);
+  const sliced = sliceTypedDataFrame(typed, [0, 2]);
 
-  assertEquals(sliced.cyl, ["4", "8"]);
+  assertEquals(sliced.cyl.values, ["4", "8"]);
   assertEquals(factorLevelsFor(sliced, "cyl"), ["8", "6", "4"]);
-  assertEquals(columnMetadata(sliced, "cyl")?.type, "factor");
+  assertEquals(sliced.cyl.type, "factor");
 });
 
 Deno.test("factorIds and numericBuffer lower typed columns to GPU-friendly buffers", () => {
@@ -132,12 +104,12 @@ Deno.test("factorIds and numericBuffer lower typed columns to GPU-friendly buffe
   ]);
 });
 
-Deno.test("numericColumnValues reads typed numeric metadata before legacy arrays", () => {
-  const legacy = legacyDataFrame(ingest({
-    x: ["1", "bad", "3"],
-  }, {
-    columns: { x: asNumeric() },
-  }));
+Deno.test("numericColumnValues coerces numeric-string factor columns", () => {
+  // A factor column of numeric strings (no asNumeric override) still yields
+  // numbers for position math, with unparseable entries as null.
+  const typed = ingest({ x: ["1", "bad", "3"] }, {
+    columns: { x: asFactor() },
+  });
 
-  assertEquals(numericColumnValues(legacy, "x"), [1, null, 3]);
+  assertEquals(numericColumnValues(typed, "x"), [1, null, 3]);
 });

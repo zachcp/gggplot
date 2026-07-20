@@ -4,18 +4,9 @@
 // lives here too: it is the resident-render counterpart of the CPU bar
 // lowering below, consuming the resident stat_bin grid instead of row data.
 import type { Aes, DataFrame, GGSpec, Layer } from "../ir/types.ts";
-import {
-  columnValues,
-  factorLevelsFor,
-  type TypedDataFrame,
-} from "../data/mod.ts";
+import type { TypedDataFrame } from "../data/mod.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
-import {
-  categoricalRange,
-  OTHER_COLOR,
-  scaleColorValue,
-  scalePosition,
-} from "../scale/mod.ts";
+import { scaleColorValue, scalePosition } from "../scale/mod.ts";
 import {
   widenForStackedBars,
   widenForTileAxis,
@@ -38,6 +29,11 @@ import type {
   LayerContext,
   ResidentProductProps,
 } from "./types.ts";
+import {
+  explicitDomain,
+  residentBinRequest,
+  residentColorGroups,
+} from "./resident_shared.ts";
 import { type FaceLoop, packFaceLoops, resolutionOf, valuesOf } from "./shared.ts";
 
 /** Lower a geom_bar/geom_col layer to a single ChunkedFace node of bar-rectangle loops (gggplot-tzc.4), stacked/dodged/filled per layer.position. */
@@ -165,64 +161,6 @@ export function barDomainContribution(
   return { x: xDomain, y: yDomain };
 }
 
-export function explicitDomain(
-  spec: GGSpec,
-  aes: "x" | "y",
-): [number, number] | undefined {
-  const scale = spec.scales.find((candidate) => candidate.aes === aes);
-  return scale && Array.isArray(scale.domain) &&
-      typeof scale.domain[0] === "number" && typeof scale.domain[1] === "number"
-    ? scale.domain as [number, number]
-    : undefined;
-}
-
-/**
- * Discrete color/fill domain in trained-scale order: an explicit factor's
- * declared levels, otherwise the sorted unique observed values. This mirrors
- * scale/training.ts's `discreteLevels` for a single mapped column so the bar
- * palette below is assigned in the SAME order the trained scale (and therefore
- * the legend) uses. Only reached when no custom scale is declared for the aes.
- */
-function discreteColorDomain(data: TypedDataFrame, col: string): string[] {
-  const declared = factorLevelsFor(data, col);
-  if (declared) {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const level of declared) {
-      if (!seen.has(level)) {
-        seen.add(level);
-        out.push(level);
-      }
-    }
-    return out;
-  }
-  const inferred = new Set<string>();
-  for (const value of columnValues(data, col)) {
-    if (value != null) inferred.add(String(value));
-  }
-  return [...inferred].sort();
-}
-
-/**
- * One hex color per GPU group id (i.e. per factor level in `levels`, the
- * `column.levels` order factorIds resolves to). Each level takes the color the
- * default discrete palette (categoricalRange — the exact function trainScales
- * uses) assigns at its position in the trained domain, so bar colors match the
- * legend swatches the trained fill/color scale produces.
- */
-export function residentBarPalette(
-  data: TypedDataFrame,
-  col: string,
-  levels: readonly string[],
-): string[] {
-  const domain = discreteColorDomain(data, col);
-  const range = categoricalRange(domain.length);
-  return levels.map((level) => {
-    const index = domain.indexOf(level);
-    return index >= 0 && index < range.length ? range[index] : OTHER_COLOR;
-  });
-}
-
 /**
  * geom_bar's GPU-resident capability: the first safe resident lowering contract
  * for an eligible stat_bin layer, or undefined when the CPU compiler must stay
@@ -255,38 +193,15 @@ export function barResidentPlan(
   ) return undefined;
   const position = layer.position as "identity" | "stack" | "dodge" | "fill";
 
-  // A fill/color mapping is only resident-eligible when it maps a factor column
-  // with a default scale and that same column drives grouping; anything else
-  // (continuous fill, a declared color/fill scale, or a fill column distinct
-  // from a separate group mapping) stays on the CPU lowering.
-  const colorAes: "fill" | "color" | undefined = mapping.fill
-    ? "fill"
-    : mapping.color
-    ? "color"
-    : undefined;
-  const colorCol = colorAes ? mapping[colorAes] : undefined;
-  if (colorCol) {
-    const colorColumn = data[colorCol];
-    const declaredScale = spec.scales.find((scale) => scale.aes === colorAes);
-    if (colorColumn?.type !== "factor" || declaredScale) return undefined;
-    if (mapping.group && mapping.group !== colorCol) return undefined;
-  }
+  // Shared fill/color eligibility + grouping (resident_shared.ts): factor
+  // column with a default scale driving groupIds, or CPU fallback.
+  const colorGroups = residentColorGroups(spec, mapping, data);
+  if (!colorGroups) return undefined;
+  const { group, groupsCount, paletteColors } = colorGroups;
 
   const x = mapping.x;
   const xColumn = x ? data[x] : undefined;
   if (!x || !xColumn) return undefined;
-
-  // fill/color take precedence over group as the grouping column, matching
-  // lowerBar's groupCol derivation and the CPU stat's effective fill grouping.
-  const group = mapping.fill ?? mapping.color ?? mapping.group;
-  const groupColumn = group ? data[group] : undefined;
-  if (group && groupColumn?.type !== "factor") return undefined;
-  const groupsCount = groupColumn?.type === "factor"
-    ? groupColumn.levels.length
-    : 1;
-  const paletteColors = colorCol && groupColumn?.type === "factor"
-    ? residentBarPalette(data, colorCol, groupColumn.levels)
-    : undefined;
   if (layer.stat === "count") {
     if (xColumn.type !== "factor") return undefined;
     const nodeProps: ResidentCountNodeProps = {
@@ -311,37 +226,17 @@ export function barResidentPlan(
     };
   }
   if (xColumn.type !== "numeric") return undefined;
-  const requestedBinwidth = layer.params.binwidth;
-  const requestedBins = layer.params.bins;
-  if (
-    requestedBinwidth != null &&
-      (typeof requestedBinwidth !== "number" || requestedBinwidth <= 0) ||
-    requestedBins != null &&
-      (typeof requestedBins !== "number" || requestedBins <= 0)
-  ) return undefined;
+  const binRequest = residentBinRequest(layer.params);
+  if (!binRequest) return undefined;
 
-  const bins = (requestedBins as number | undefined) ?? 30;
   const xDomain = explicitDomain(spec, "x");
   const nodeProps: ResidentHistogramNodeProps = {
     data,
     x,
     group,
     options: xDomain
-      ? {
-        lo: xDomain[0],
-        hi: xDomain[1],
-        binwidth: requestedBinwidth as number | undefined,
-        bins: requestedBinwidth == null ? bins : undefined,
-        groupsCount,
-        position,
-      }
-      : {
-        autoDomain: true,
-        binwidth: requestedBinwidth as number | undefined,
-        bins: requestedBinwidth == null ? bins : undefined,
-        groupsCount,
-        position,
-      },
+      ? { lo: xDomain[0], hi: xDomain[1], ...binRequest, groupsCount, position }
+      : { autoDomain: true, ...binRequest, groupsCount, position },
     color: (layer.params.fill as string) ?? (layer.params.color as string) ??
       "#3b82f6",
     opacity: layer.params.alpha as number | undefined,

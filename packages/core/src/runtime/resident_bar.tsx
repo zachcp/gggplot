@@ -5,6 +5,7 @@
 import type { LiveElement } from "@use-gpu/live";
 import type { ResidentHistogramProduct } from "./resident_live.tsx";
 import type { GPUStorageSource } from "./types.ts";
+import { parseColorRGBA } from "../color/mod.ts";
 import {
   createElement,
   FaceLayer as Face,
@@ -53,23 +54,6 @@ export interface ResidentHistogramBarsProps {
   colors?: GPUStorageSource;
 }
 
-/** One "#rgb"/"#rrggbb" hex → RGBA (0..1), alpha from `opacity`. */
-export function rgba(color = "#3b82f6", opacity = 1): number[] {
-  const hex = color.startsWith("#") ? color.slice(1) : color;
-  const value = Number.parseInt(
-    hex.length === 3
-      ? hex.split("").map((digit) => digit + digit).join("")
-      : hex.slice(0, 6),
-    16,
-  );
-  return [
-    ((value >> 16) & 255) / 255,
-    ((value >> 8) & 255) / 255,
-    (value & 255) / 255,
-    opacity,
-  ];
-}
-
 /**
  * Flatten factor-level hex colors into a packed RGBA Float32Array (one vec4 per
  * group, `opacity` baked into every alpha). This is the exact shape the GPU
@@ -81,7 +65,7 @@ export function paletteToRgbaF32(
 ): Float32Array {
   const out = new Float32Array(colors.length * 4);
   for (let i = 0; i < colors.length; i++) {
-    out.set(rgba(colors[i], opacity), i * 4);
+    out.set(parseColorRGBA(colors[i], opacity), i * 4);
   }
   return out;
 }
@@ -116,7 +100,7 @@ export const ResidentHistogramBars = (
     segments,
     chunks,
     // Per-group palette when present; otherwise the single scalar fill color.
-    ...(colors ? { colors: colorSource } : { color: rgba(color, opacity) }),
+    ...(colors ? { colors: colorSource } : { color: parseColorRGBA(color ?? "#3b82f6", opacity ?? 1) }),
     side: "both",
   });
 };
