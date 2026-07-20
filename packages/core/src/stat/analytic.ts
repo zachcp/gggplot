@@ -1,18 +1,13 @@
-import type { DataFrame } from "../ir/types.ts";
 import {
   columnValues,
   dataFrameFromColumns,
-  ingest,
   numericColumnValues,
 } from "../data/mod.ts";
 import {
   groupColumnsOf,
   groupKeyAt,
   groupValuesAt,
-  rowCount,
-  sliceRows,
 } from "../group/mod.ts";
-import type { InputData } from "../data/mod.ts";
 import type { StatFn } from "./shared.ts";
 import { quantile } from "./distributions.ts";
 
@@ -429,7 +424,7 @@ export function statDensity2dProduct(filled: boolean): StatFn {
         ? statContourFilled(grid, contourMapping, params)
         : statContour(grid, contourMapping, params);
       resultMapping = contour.mapping;
-      for (const [column, values] of Object.entries(contour.data)) {
+      for (const column of Object.keys(contour.data)) {
         (combined[column] ??= []).push(...columnValues(contour.data, column));
       }
       const length = Object.values(contour.data)[0]?.values.length ?? 0;

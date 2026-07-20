@@ -1,5 +1,5 @@
 // Statistical transform dispatch and public family exports.
-import type { Aes, DataFrame, Layer } from "../ir/types.ts";
+import type { Aes, Layer } from "../ir/types.ts";
 import { ingest, type InputData } from "../data/mod.ts";
 import {
   statBin,

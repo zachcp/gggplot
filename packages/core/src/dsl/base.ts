@@ -4,24 +4,17 @@
 
 import type {
   Aes,
-  AesName,
   Coord,
   DataFrame,
   ExecutionPolicy,
   Facet,
-  GeomKind,
   GGSpec,
-  Guide,
   Layer,
   PlotLabels,
-  PositionAxis,
-  PositionKind,
   Scale,
-  StatKind,
   Theme,
 } from "../ir/types.ts";
 import { ingest, type IngestOptions, type InputData } from "../data/mod.ts";
-import { GRADIENT2_RAMP, VIRIDIS_RAMP } from "../scale/palette.ts";
 
 /** Identity helper — `aes({ x: "wt", y: "mpg" })` reads like ggplot. */
 export const aes = (mapping: Aes): Aes => mapping;

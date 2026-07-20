@@ -1,4 +1,3 @@
-import type { Aes, DataFrame } from "../ir/types.ts";
 import { dataFrameFromColumns, numericColumnValues } from "../data/mod.ts";
 import { groupColumnsOf, groupKeyAt } from "../group/mod.ts";
 import type { StatFn } from "./shared.ts";

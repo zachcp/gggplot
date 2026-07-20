@@ -49,20 +49,6 @@ import { compile } from "../src/compile/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import { cases, residentCases } from "../../../scripts/capture_geom_fixtures.ts";
 
-const MARK_COMPONENTS = new Set<RenderNode["component"]>([
-  "Point",
-  "ChunkedLine",
-  "ChunkedFace",
-  // Legacy/not-yet-converted mark component names that still legitimately
-  // appear on RenderTree nodes today (guides ALSO use Line/Polygon, so this
-  // set alone can't distinguish guide vs mark use — see the per-family tests
-  // below for that; this list is only used by the fixture-set sweep to catch
-  // an ENTIRELY unexpected component name appearing on a mark-shaped node).
-  "Line",
-  "Polygon",
-  "Label",
-]);
-
 function findAllRaw(
   tree: RenderNode,
   component: RenderNode["component"],

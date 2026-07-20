@@ -1,5 +1,4 @@
 import { groupedHistogram2d } from "@gggplot/reductions";
-import type { Aes, DataFrame } from "../ir/types.ts";
 import {
   columnValues,
   dataFrameFromColumns,
@@ -11,7 +10,6 @@ import {
   groupValuesAt,
   isDiscreteColumn,
   rowCount,
-  sliceRows,
 } from "../group/mod.ts";
 import type { StatFn } from "./shared.ts";
 import { encodeEffectiveGroups } from "./shared.ts";

@@ -19,7 +19,6 @@ import {
   geomVline,
   execution,
   ggplot,
-  labels,
   scaleColorViridis,
   scaleFill,
   scaleLinetype,

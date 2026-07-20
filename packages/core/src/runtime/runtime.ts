@@ -15,9 +15,8 @@ import type {
  * @experimental Contract landed ahead of use (gggplot-btd): no production
  * consumer exists yet — the mounted render path currently manages resources
  * through PackCache + typedArrayForColumn + GPUDataProvider/RawData. This
- * class is the planned source owner for the GPU-native plan's Phase-2
- * "persistent source-backed general marks" (see
- * docs/GPU_NATIVE_ARCHITECTURE_PLAN.md, "Data ownership and cache keys");
+ * class is the planned source owner for the GPU-native trajectory's Phase-2
+ * "persistent source-backed general marks" (see docs/ARCHITECTURE.md §4–§5);
  * until that lands it is exercised only by tests/runtime_test.ts. Wire it in
  * or delete it when Phase 2 is scheduled — do not grow a third mechanism.
  */

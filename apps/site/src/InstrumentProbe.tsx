@@ -61,10 +61,10 @@ async function waitForInstrument(timeoutMs = 10_000): Promise<void> {
 }
 
 export function InstrumentProbe(): React.ReactElement {
-  const [rerenderTick, setRerenderTick] = useState(0);
+  const [, setRerenderTick] = useState(0);
   const [xDomainMax, setXDomainMax] = useState(9);
 
-  // rerenderTick is READ nowhere in the spec — bumping it forces this
+  // The rerender tick is READ nowhere in the spec — bumping it forces this
   // component (and GGPlot beneath it) to re-render with an UNCHANGED spec
   // object, exercising scenario (i). xDomainMax IS read (via
   // scaleXContinuous's domain), so bumping it forces a genuinely different
