@@ -134,12 +134,7 @@ import type { Column } from "../data/mod.ts";
 import type { Aes, AesName, DataFrame, GeomKind, Layer } from "../ir/types.ts";
 import type { TrainedScale } from "../scale/mod.ts";
 import type { RenderNode } from "./rendertree.ts";
-import {
-  isFlatTensor,
-  munchFlatNode,
-  munchPolygonNode,
-  polarizeNode,
-} from "./coordinates.ts";
+import { isFlatTensor, munchFlatNode, polarizeNode } from "./coordinates.ts";
 
 /** Anything a stage key's revision can be tracked against (see module doc). */
 export type RevisionKey = Column | Float32Array;
@@ -325,9 +320,9 @@ export function stageAKey(
  * Stage B: apply the polar coordinate transform (polarize + munch) to one
  * Stage A mark node, memoized against a packCache when supplied. Falls back
  * to the plain uncached computation for a missing cache OR a node whose
- * `positions` prop is not a FlatTensor (the legacy nested-array Polygon path
- * guides/unconverted geoms still use) — identical output either way, just
- * not memoized in the latter case.
+ * `positions` prop is not a FlatTensor — identical output either way, just
+ * not memoized in the latter case. Every mark packs a FlatTensor today, so
+ * the fallback is defensive; guide nodes are never routed here.
  */
 export function stageBTransformedMark(
   cache: PackCache | undefined,
@@ -338,9 +333,7 @@ export function stageBTransformedMark(
   end: number,
 ): RenderNode {
   const compute = () =>
-    munchFlatNode(
-      munchPolygonNode(polarizeNode(mark, axis, domain, start, end)),
-    );
+    munchFlatNode(polarizeNode(mark, axis, domain, start, end));
   if (!cache) return compute();
   const positions = mark.props.positions;
   if (!isFlatTensor(positions)) return compute();

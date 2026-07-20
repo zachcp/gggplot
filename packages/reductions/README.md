@@ -35,8 +35,7 @@ histogram workloads and future browser/GPU-local pipelines.
 CPU reducers are the correctness oracle. GPU reducers must preserve the same
 shape, binning, grouping, and dense output layout.
 
-See `docs/REDUCTIONS_COMPONENTS.md` for the core/package boundary and
-`docs/REDUCTIONS_PACKAGE_PLAN.md` for the implementation roadmap.
+See `docs/REDUCTIONS_COMPONENTS.md` for the core/package boundary.
 
 ## Tests
 

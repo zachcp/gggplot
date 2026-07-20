@@ -293,18 +293,15 @@ export function compile(
     const thetaStart = -thetaSpan / 2;
     const thetaEnd = thetaSpan / 2;
     // LOWERING-ORDER CONTRACT (gggplot-tzc epic): geoms lower into
-    // component-tagged marks first (nested-array positions today; flat
-    // nodes carrying a FlatTensor 'positions' + MarkTopology 'topology'
-    // once tzc.3/tzc.4 convert point/line/rect/area/polygon families) with
-    // NO topology.indices attached yet. Only THEN does compile apply
-    // coordinate transforms — polarizeNode's pointwise theta/radius remap,
-    // followed by munching (munchPolygonNode for the legacy nested-array
-    // path keyed on component === 'Polygon'; munchFlatNode for any node
-    // shaped as FlatTensor + MarkTopology, dispatched on topology.kind
-    // instead of component name). Triangulated indices (tzc.4) are only
-    // ever attached AFTER this point — munchFlatNode throws if it ever sees
-    // topology.indices already present, since munching after triangulation
-    // would silently desync indices from the newly-inserted vertices.
+    // component-tagged marks first — flat nodes carrying a FlatTensor
+    // 'positions' + MarkTopology 'topology' — with NO topology.indices
+    // attached yet. Only THEN does compile apply coordinate transforms:
+    // polarizeNode's pointwise theta/radius remap, followed by munchFlatNode
+    // (dispatched on topology.kind, not component name). Triangulated indices
+    // (tzc.4) are only ever attached AFTER this point — munchFlatNode throws
+    // if it ever sees topology.indices already present, since munching after
+    // triangulation would silently desync indices from the newly-inserted
+    // vertices.
     //
     // Stage B (gggplot-tzc.5): stageBTransformedMark memoizes this transform
     // per mark through options.packCache, rooted on Stage A's OWN output

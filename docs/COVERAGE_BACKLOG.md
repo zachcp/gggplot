@@ -1,5 +1,11 @@
 # Geom/stat coverage audit
 
+**Status: historical snapshot (2026-07-17).** This is a point-in-time audit
+against the pinned Gribouille inventory; it is not maintained as coverage
+lands. For the living coverage picture see `GRAMMAR_ALIGNMENT.md` (the
+generated parity matrix, kept honest by its coverage-bijection test) and the
+open beads (`bd ready`).
+
 Audit date: 2026-07-17
 
 Upstreams:
@@ -91,9 +97,9 @@ gggplot additionally exposes ordinary `geomSmooth` and annotation `rect`
 constructors using the same IR/runtime path. Gribouille-only specialised
 examples are implemented as streamgraph silhouette stacking, reusable bump
 connectors, a core waffle geom/stat, and a versioned cluster-mark extension.
-Extension usage is documented in `WAFFLE_AND_MARK_EXTENSIONS.md`. Typst text is
-rejected by design; gggplot keeps one `FontResources`-based text layout system
-and does not evaluate Typst markup.
+Extension usage is exercised by the `@gggplot/mark` and `@gggplot/3d`
+packages and their tests. Typst text is rejected by design; gggplot keeps one
+`FontResources`-based text layout system and does not evaluate Typst markup.
 
 ## Stats
 

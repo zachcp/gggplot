@@ -6,11 +6,30 @@
 import { assertAlmostEquals, assertEquals, assertThrows } from "@std/assert";
 import { node, type RenderNode } from "../src/compile/rendertree.ts";
 import type { FlatTensor, MarkTopology } from "../src/compile/rendertree.ts";
-import {
-  munchFlatNode,
-  munchPolygonNode,
-  polarizeNode,
-} from "../src/compile/coordinates.ts";
+import { munchFlatNode, polarizeNode } from "../src/compile/coordinates.ts";
+
+/**
+ * Independent nested-array loop munch reference (the retired munchPolygonNode
+ * oracle, gggplot-79f): subdivides each closed-loop edge into 16 points so the
+ * flat munchFlatNode path can be checked against a second implementation.
+ * Kept in the test only — production has one munch path (munchFlatNode).
+ */
+function referenceLoopMunch(
+  loop: [number, number][],
+  detail = 16,
+): [number, number][] {
+  if (loop.length < 2) return loop;
+  const out: [number, number][] = [];
+  for (let i = 0; i < loop.length; i++) {
+    const a = loop[i];
+    const b = loop[(i + 1) % loop.length];
+    for (let step = 0; step < detail; step++) {
+      const t = step / detail;
+      out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    }
+  }
+  return out;
+}
 
 /**
  * FlatTensor stores Float32Array (see compile/rendertree.ts) and its
@@ -54,18 +73,19 @@ function loopsTopology(chunk: number): MarkTopology {
 // Flat vs nested numeric equivalence (loops)
 // ---------------------------------------------------------------------------
 
-Deno.test("flat loop munch under polar coords is numerically equivalent to the legacy nested path", () => {
+Deno.test("flat loop munch under polar coords is numerically equivalent to the reference nested path", () => {
   const rect: [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 1]];
   const domain: [number, number] = [0, 2];
   const start = -Math.PI;
   const end = Math.PI;
 
+  // Reference: polarize the nested positions (polarizeNode handles nested
+  // arrays too), then subdivide with the independent loop-munch reference.
   const nested = node("Polygon", { positions: rect });
-  const nestedOut = munchPolygonNode(
-    polarizeNode(nested, 0, domain, start, end),
-  );
-  const nestedFlatArray = (nestedOut.props.positions as [number, number][])
-    .flat();
+  const polarizedNested = polarizeNode(nested, 0, domain, start, end);
+  const nestedFlatArray = referenceLoopMunch(
+    polarizedNested.props.positions as [number, number][],
+  ).flat();
 
   const flat = node("Polygon", {
     positions: flatPositions(rect),
@@ -86,11 +106,9 @@ Deno.test("flat loop munch under polar coords is numerically equivalent to the l
   assertEquals(topo.loops, true);
 });
 
-Deno.test("flat loop munch matches legacy density policy for a chunk with no explicit 'chunks' (whole tensor as one loop)", () => {
+Deno.test("flat loop munch matches the reference density policy for a chunk with no explicit 'chunks' (whole tensor as one loop)", () => {
   const tri: [number, number][] = [[0, 0], [2, 0], [1, 1]];
-  const nestedOut = munchPolygonNode(node("Polygon", { positions: tri }));
-  const nestedFlatArray = (nestedOut.props.positions as [number, number][])
-    .flat();
+  const nestedFlatArray = referenceLoopMunch(tri).flat();
 
   const flat = node("Polygon", {
     positions: flatPositions(tri),
@@ -235,18 +253,15 @@ Deno.test("munchFlatNode throws when topology.indices is already present", () =>
 // Dispatch ignores component name
 // ---------------------------------------------------------------------------
 
-Deno.test("munchFlatNode transforms a synthetic non-Polygon component (Face) with loops topology", () => {
+Deno.test("munchFlatNode transforms a node by topology shape, independent of component name", () => {
   const rect: [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 1]];
   const face = node("Face", {
     positions: flatPositions(rect),
     topology: loopsTopology(4),
   });
 
-  // The legacy component-name-gated path silently skips it...
-  const legacyResult = munchPolygonNode(face);
-  assertEquals(legacyResult, face); // unchanged: component !== 'Polygon'
-
-  // ...but the flat-aware path munches it purely on topology shape.
+  // Dispatch is on topology 'loops', not component name: a Face munches the
+  // same as any other loop mark (4 edges * 16 = 64 vertices).
   const flatResult = munchFlatNode(face);
   const pos = flatResult.props.positions as FlatTensor;
   assertEquals(pos.length, 64);

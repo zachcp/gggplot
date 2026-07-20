@@ -75,48 +75,19 @@ export function numericRange(
   return scale.domain as [number, number];
 }
 
-function isPoint(v: unknown): v is [number, number] {
-  return Array.isArray(v) && v.length >= 2 && typeof v[0] === "number" &&
-    typeof v[1] === "number";
-}
-
-function munchLoop(loop: [number, number][], detail = 16): [number, number][] {
-  if (loop.length < 2) return loop;
-  const out: [number, number][] = [];
-  for (let i = 0; i < loop.length; i++) {
-    const a = loop[i];
-    const b = loop[(i + 1) % loop.length];
-    for (let step = 0; step < detail; step++) {
-      const t = step / detail;
-      out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
-    }
-  }
-  return out;
-}
-
-export function munchPolygonNode(n: RenderNode): RenderNode {
-  if (n.component !== "Polygon") return n;
-  const positions = n.props.positions;
-  if (!Array.isArray(positions) || positions.length === 0) return n;
-
-  const munched = isPoint(positions[0])
-    ? munchLoop(positions as [number, number][])
-    : (positions as [number, number][][]).map((loop) => munchLoop(loop));
-
-  return node(n.component, { ...n.props, positions: munched }, n.children);
-}
-
 // ---------------------------------------------------------------------------
-// Flat-tensor munching (gggplot-tzc.2). Same per-edge subdivision density as
-// munchLoop above (MUNCH_DETAIL points per edge, fixed — equivalent input
-// produces equivalent segment counts), reimplemented over an interleaved
-// Float32Array + MarkTopology instead of nested coordinate arrays, and
-// dispatched on that shape rather than on component === 'Polygon'. Additive:
-// no geom emits FlatTensor-bearing nodes yet (tzc.3/tzc.4), so this has no
-// effect on the legacy nested-array path munchPolygonNode still serves.
+// Flat-tensor munching (gggplot-tzc.2). Subdivides each polygon edge into
+// MUNCH_DETAIL points (fixed) over an interleaved Float32Array + MarkTopology,
+// dispatched on that shape rather than on component name. This is the sole
+// munch path: every mark packs a FlatTensor (point/line/face families), and
+// stageBTransformedMark only ever runs on marks — the nested-array
+// munchPolygonNode oracle it used to mirror was retired in gggplot-79f once
+// no mark produced a nested Polygon. (Guide Polygon nodes — theme background,
+// legend swatches — are never munched: they render through the plot's native
+// Polygon/Polar view, so they keep their nested positions.)
 // ---------------------------------------------------------------------------
 
-/** Matches munchLoop's fixed per-edge subdivision count above. */
+/** Fixed number of subdivision points emitted per polygon edge. */
 const MUNCH_DETAIL = 16;
 
 /**
@@ -124,9 +95,8 @@ const MUNCH_DETAIL = 16;
  * position array), INCLUDING its closing edge (len-1 back to 0). Emits
  * MUNCH_DETAIL points per edge (t = 0/MUNCH_DETAIL .. (MUNCH_DETAIL-1)/MUNCH_DETAIL,
  * so each edge's own start vertex is reproduced exactly and the edge's end
- * vertex is picked up as the next edge's start) — numerically identical
- * policy to munchLoop, just walking a flat array instead of point tuples.
- * Degenerate chunks (len < 2) pass through unchanged, matching munchLoop.
+ * vertex is picked up as the next edge's start). Degenerate chunks (len < 2)
+ * pass through unchanged.
  * Appends emitted vertex components to outXY and each emitted vertex's
  * ORIGINATING (segment-start) source index to outSource, for companion
  * expansion via expandByOwners. Returns the emitted vertex count.
@@ -167,8 +137,7 @@ function munchLoopChunk(
 /**
  * Munch one open-polyline chunk, subdividing only its INTERIOR segments
  * (i - i+1 for i in [0, len-2]) at the same per-edge density as
- * munchLoopChunk — NO closing edge, closing the passthrough gap the legacy
- * nested path left for lines/paths (ARCHITECTURE.md design-debt item 3).
+ * munchLoopChunk — NO closing edge, since an open path is not a loop.
  * Because interior-segment subdivision alone stops just short of t=1 on the
  * final segment, the chunk's true final vertex is appended explicitly so an
  * open path still reaches its real endpoint. Degenerate chunks (len < 2)
@@ -214,17 +183,15 @@ function munchPolylineChunk(
 /**
  * Munch a flat-tensor node's positions (plus any per-vertex companion
  * tensors) under nonlinear (polar) coordinates. Dispatches on
- * topology.kind, NOT component name — today's munchPolygonNode keys on
- * component === 'Polygon' and would silently skip a chunked Face node
- * carrying the same 'loops' topology under a different component name.
+ * topology.kind, NOT component name, so a chunked Face node carrying 'loops'
+ * topology is munched the same as any other loop mark.
  *
  * - kind='loops': each chunk (topology.chunks, or the whole tensor as one
  *   chunk when 'chunks' is absent) is munched INCLUDING its closing edge
- *   (see munchLoopChunk) — numerically equivalent to munchPolygonNode's
- *   nested-array loop munching for the same input.
+ *   (see munchLoopChunk).
  * - kind='polyline': each chunk's interior segments are munched with NO
- *   closing edge (see munchPolylineChunk) — this is the ggplot2
- *   coord_munch() line/path coverage the legacy path never had.
+ *   closing edge (see munchPolylineChunk) — ggplot2 coord_munch() line/path
+ *   coverage.
  * - kind='points': nothing to munch (no segments); returned unchanged.
  *
  * COMPANION EXPANSION: any other prop on the node that is itself a

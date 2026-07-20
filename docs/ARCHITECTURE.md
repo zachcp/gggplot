@@ -38,10 +38,11 @@ Design rules:
   keeps the DSL a thin, pure layer over the IR, and makes parts reorderable and
   testable.
 - **Data enters through typed ingestion.** `ggplot()` accepts row-store or
-  column-store data, normalizes it with `ingest()`, and keeps typed column
-  metadata through the transitional `DataFrame` shape used by the current IR.
-  `asFactor()` and `asNumeric()` let callers override inference for
-  numeric-coded categories and numeric strings.
+  column-store data and normalizes it with `ingest()` into a `TypedDataFrame`
+  (`GGSpec.data`) of typed numeric/factor columns. `asFactor()` and
+  `asNumeric()` let callers override inference for numeric-coded categories and
+  numeric strings; `typedArrayForColumn` exposes each column's GPU-ready
+  typed array.
 
 ### The IR (`src/ir/types.ts`)
 
@@ -217,18 +218,22 @@ Implemented and tested:
 10. **Backends**: live WebGPU rendering and emitted UseGPU Live source share the
     same RenderTree.
 
-Known design debt worth discussing before the next implementation pass:
+The GPU-first trajectory and what remains on the CPU (with the reason for
+each deviation) live in one reviewable place: `RESIDENCY_MATRIX.md`. The
+target architecture is `GPU_NATIVE_ARCHITECTURE_PLAN.md`. In brief, as of the
+current tree:
 
-1. **Typed IR migration**: `GGSpec.data` still exposes the transitional
-   array-shaped `DataFrame` with typed metadata sidecars. The next cleanup is to
-   store `TypedDataFrame` directly and leave array materialization at the final
-   RenderTree boundary.
-2. **GPU stat scheduling**: `compile()` is synchronous, so core uses CPU
-   reducers today. WebGPU reducers exist for grouped histograms, but choosing
-   them requires an async stat path and a threshold policy that accounts for
-   upload, dispatch, and readback cost.
-3. **Label layout**: text labels and legends render, but there is no text
-   measurement pass yet for collision avoidance, legend boxes, or `geom_label`
-   backgrounds.
+- `GGSpec.data` stores `TypedDataFrame` directly; `typedArrayForColumn`
+  exposes each column's canonical `Float32Array`/`Uint32Array` for GPU
+  lowering (data plane Phase A). Storing typed `values` with validity masks
+  in place of the boxed arrays is Phase B, still open.
+- Marks pack once into flat `FlatTensor`/`MarkTopology` and bind as stable
+  `RawData` sources; the pack cache gives reference-identity reuse so an
+  unchanged spec re-renders with zero re-upload. Eligible `stat_bin`/
+  `stat_count` bar and tile layers run fully GPU-resident (grid, vertex
+  expansion, per-group palette, bounded summary readback only); everything
+  else is a documented, phased CPU deviation (see the residency matrix).
+- Text/label layout uses a real glyph-measurement pass (`FontResources`),
+  which drives legend boxes, `geom_label` backgrounds, and guide placement.
 
 Future roadmap items remain tracked in beads rather than duplicated here.
