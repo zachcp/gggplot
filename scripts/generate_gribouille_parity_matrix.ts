@@ -62,7 +62,7 @@ const gaps = [
   [/streamgraph/, "gggplot-isp.2", "silhouette stack position"],
   [/bump-chart/, "gggplot-isp.3", "stat_connect sigmoid product"],
   [/waffle/, "gggplot-isp.4", "unit-tile stat"],
-  [/geom-mark/, "gggplot-isp.5", "optional cluster-mark extension"],
+  [/geom-mark/, "gggplot-pt0", "removed: unused cluster-mark extension"],
   [/^late-binding/, "gggplot-8e0.26", "late-binding transform contract"],
   [
     /(guide-|sec-axis|shape-character|guide-custom)/,
@@ -95,11 +95,6 @@ const decisions: Record<string, {
     status: "full",
     owner: "—",
     contract: "core statWaffle + geomWaffle tile product",
-  },
-  "geom-mark": {
-    status: "full",
-    owner: "—",
-    contract: "optional enclosure extension",
   },
   "annotate-typst": {
     status: "absent",
