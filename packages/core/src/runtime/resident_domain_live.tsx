@@ -2,26 +2,11 @@
 /** @jsx createElement */
 // Hook-owned finite-domain reduction for mounted f32 sources.
 
-import * as Live from "@use-gpu/live";
-import * as Workbench from "@use-gpu/workbench";
 import type { LiveElement } from "@use-gpu/live";
 import type { ResidentDomain1DResult } from "@gggplot/reductions";
 import { createMountedDomain1D } from "./resident.ts";
 import type { GPUStorageSource } from "./types.ts";
-
-type UseDeviceContext = () => GPUDevice;
-type UseResource = <T>(
-  create: (dispose: (cleanup: () => void) => void) => T,
-  dependencies: readonly unknown[],
-) => T;
-type UseMemo = <T>(create: () => T, dependencies: readonly unknown[]) => T;
-
-const useDeviceContext =
-  (Workbench as unknown as { useDeviceContext: UseDeviceContext })
-    .useDeviceContext;
-const useResource =
-  (Live as unknown as { useResource: UseResource }).useResource;
-const useMemo = (Live as unknown as { useMemo: UseMemo }).useMemo;
+import { useDeviceContext, useMemo, useResource } from "./usegpu_compat.ts";
 
 export interface ResidentDomainProduct {
   readonly domain: GPUStorageSource;

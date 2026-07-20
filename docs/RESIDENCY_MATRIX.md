@@ -99,3 +99,34 @@ a dev-mode warning when `PackCache` roots miss repeatedly for what looks
 like the same logical data, or make `ggplot()`'s own data-ingestion path
 memoize by input object identity so passing the same raw object twice is
 itself enough (not requiring the caller to call `ingest()` explicitly).
+
+---
+
+## Stats — completed by `gggplot-1a6` (2026-07-20)
+
+Registry: `stat/mod.ts` (27 stats). Grouped rows share one executor rationale.
+
+| Stat(s) | Executor | Eligibility gate | Reason CPU / plan phase |
+|---|---|---|---|
+| `bin` (histogram grid) | **GPU-resident** via `@gggplot/reductions` `createResidentHistogram1DFromSources` (atomic count grid → on-GPU bar/tile vertex expansion; bounded summary readback only) | `barResidentPlan` (geom/bar.ts): cartesian, unfaceted, `bar` geom, no mapped y, no `weight`, position ∈ identity/stack/dodge/fill, fill/color only when it is the factor group column with a default scale (`gggplot-5ez`), explicit y domain or standalone auto-y, `spec.execution?.resident !== false` (`gggplot-4se`) | Ineligible layers fall back to CPU `groupedHistogram1d` (cpu.ts) — the kernels' bit-exactness reference. Weighted bin stays CPU by decision (`gggplot-1tt.8`). |
+| `bin` (tile strip) | **GPU-resident** dense [group, bin] tile grid (`gggplot-ysq`) | `tileResidentPlan` (geom/tile.ts): standalone only, `tile` geom + explicit `stat: "bin"`, numeric x, unmapped y, factor fill/color/group rows, default scales | Standalone-only because the strip's y range ([0, groups]) is owned by its view; the CPU grammar has no tile-grid product (documented in the plan hook). |
+| `count` | **GPU-resident** via `createResidentCount1DFromSources` (factor-id histogram) | Same `barResidentPlan` gate, categorical x branch | CPU `groupedCount1d` is the reference and the fallback. |
+| `bin2d` / `binhex` | CPU (`groupedHistogram2d` in reductions/cpu.ts) | — | `groupedHistogram2dGpu` EXISTS with a parity test, but `statBin2d` does not route to it and no resident 2-D product is registered — the next natural resident stat per the plan's phased order (bin/count → bin2d/density). |
+| `smooth`, `summary`, `boxplot`, `density`, `ydensity`, `dotplot`, `summary2d/hex/bin`, `qq(line)`, `ellipse`, `function`, `contour(filled)`, `density2d(filled)`, `quantile`, `ecdf`, `unique`, `sum`, `connect`, `align`, `waffle` | CPU (stat/*.ts over reductions/cpu.ts reducers) | — | The plan's phased order: tiny/irregular outputs (smooth explicitly last — its output is small), quantile/median before a proven GPU selection, custom JS summaries inherently CPU. Each names its reducer in `REDUCTIONS_COMPONENTS.md`. |
+
+## Geoms — completed by `gggplot-1a6` (2026-07-20)
+
+| Geom family | Executor | Reason / plan phase |
+|---|---|---|
+| `bar`/`col` (eligible layers) | GPU-resident bars: stack/dodge/fill layout AND per-group palette colors expanded on-device (`gggplot-5ez`; dodge slots by present groups, `gggplot-6h7`) | The canonical GPU-worthy chart; gate above. |
+| `tile` (eligible layers) | GPU-resident tile strip (`gggplot-ysq`) | Gate above. |
+| point/line/path/step, area/ribbon, polygon, rect, hex, violin, boxplot, errorbar family, segment/curve/spoke, reflines, smooth | CPU pack → FlatTensor/MarkTopology → stable `RawData` sources; re-upload only on pack-cache miss (`gggplot-tzc`) | Phase 2's "pack once, reconcile handles" is DONE for these; per-row shader accessors over raw columns are Phase 3 (`typedArrayForColumn`, `gggplot-c1x`, is Phase A of that data plane). |
+| `text`/`label`/`rug` | CPU, uncached every compile (`UNCACHEABLE_GEOMS`) | Their packed output reads theme/panel pixels; text layout stays CPU until a deliberate GPU text project exists (plan §CPU-first). |
+
+## Positions — completed by `gggplot-1a6` (2026-07-20)
+
+| Position | Executor | Reason / plan phase |
+|---|---|---|
+| stack/dodge/fill inside resident bar/count products | GPU (prefix sums + present-group dodge slotting in the vertex-expansion kernels) | Ships with the resident products; CPU `stackBars`/`dodgeBars` are the semantic reference. |
+| stack/dodge/dodge2/fill on the CPU mark path | CPU (`position/mod.ts`) | Applies to already-CPU-packed marks; the plan's "segmented scans over grouped bins" phase only pays once general marks are source-backed (Phase 2 mature form). |
+| jitter/nudge/jitterdodge | CPU (in point lowering, in-place over planar xs/ys) | RNG-based and tiny; plan lists jitter as a derived-accessor candidate, low priority. |

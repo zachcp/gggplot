@@ -1,4 +1,10 @@
-import type { Aes, PlotLabels, PositionAxis, Theme } from "../ir/types.ts";
+import type {
+  Aes,
+  AesName,
+  PlotLabels,
+  PositionAxis,
+  Theme,
+} from "../ir/types.ts";
 import { node, type RenderNode } from "./rendertree.ts";
 import {
   scaleColorValue,
@@ -61,18 +67,21 @@ export function themeFaceProps(theme: Theme): Record<string, unknown> {
 }
 
 export function legendNodes(
-  colorScale: TrainedScale | undefined,
-  fillScale: TrainedScale | undefined,
-  sizeScale: TrainedScale | undefined,
-  alphaScale: TrainedScale | undefined,
-  shapeScale: TrainedScale | undefined,
-  linetypeScale: TrainedScale | undefined,
-  linewidthScale: TrainedScale | undefined,
+  scales: Partial<Record<AesName, TrainedScale>>,
   labels: PlotLabels,
   theme: Theme,
   panelBounds: [number, number, number, number],
   layoutWidth?: number,
 ): RenderNode[] {
+  const {
+    color: colorScale,
+    fill: fillScale,
+    size: sizeScale,
+    alpha: alphaScale,
+    shape: shapeScale,
+    linetype: linetypeScale,
+    linewidth: linewidthScale,
+  } = scales;
   const nodes: RenderNode[] = [];
   let y = -0.76;
   const guideLeft = panelBounds[2];
@@ -87,52 +96,57 @@ export function legendNodes(
   const swatchX = guideLeft + (paddingPx + keyBoxPx / 2) * px;
   const labelX = guideLeft + (paddingPx + keyBoxPx + keyLabelGapPx) * px;
 
+  // Shared per-entry layout. Every legend family stacks a 14px title, then a
+  // swatch column at swatchX beside a value-label column at labelX, advancing
+  // y by a fixed 0.11 per key plus inter-entry padding. Extracting these keeps
+  // the title/swatch/label geometry defined once instead of per aesthetic.
+  const pushTitle = (scale: TrainedScale, fallback: string) => {
+    nodes.push(
+      labelNode(titleX, y, [legendTitle(scale, labels, fallback)], theme, 14),
+    );
+    y += 0.14;
+  };
+  const pushKeyLabels = (texts: string[]) => {
+    nodes.push(labelNode(labelX, y, texts, theme));
+    y += texts.length * 0.11 + 0.12;
+  };
+  const swatchColumn = (count: number): [number, number][] =>
+    Array.from(
+      { length: count },
+      (_, i): [number, number] => [swatchX, y + i * 0.11],
+    );
+  // size/alpha/linewidth all key a continuous domain by [lo, mid, hi]
+  // representative values (or just [lo] when the domain is a single point).
+  const representativeValues = (scale: TrainedScale): number[] => {
+    const [lo, hi] = scale.domain as [number, number];
+    return hi > lo ? [lo, (lo + hi) / 2, hi] : [lo];
+  };
+
+  // Discrete color and fill are the same swatch legend — a Point per level
+  // tinted by the scale — differing only in which scale supplies the color.
+  const discreteSwatchLegend = (scale: TrainedScale, aes: "color" | "fill") => {
+    const levels = scale.domain as string[];
+    pushTitle(scale, aes);
+    nodes.push(node("Point", {
+      positions: swatchColumn(levels.length),
+      colors: levels.map((level) => scaleColorValue(scale, level)),
+      size: 7,
+    }));
+    pushKeyLabels(levels);
+  };
+
   if (
     colorScale && Array.isArray(colorScale.domain) &&
     typeof colorScale.domain[0] === "string"
   ) {
-    const levels = colorScale.domain as string[];
-    nodes.push(
-      labelNode(
-        titleX,
-        y,
-        [legendTitle(colorScale, labels, "color")],
-        theme,
-        14,
-      ),
-    );
-    y += 0.14;
-    nodes.push(node("Point", {
-      positions: levels.map((
-        _,
-        i,
-      ): [number, number] => [swatchX, y + i * 0.11]),
-      colors: levels.map((level) => scaleColorValue(colorScale, level)),
-      size: 7,
-    }));
-    nodes.push(labelNode(labelX, y, levels, theme));
-    y += levels.length * 0.11 + 0.12;
+    discreteSwatchLegend(colorScale, "color");
   }
 
   if (
     fillScale && Array.isArray(fillScale.domain) &&
     typeof fillScale.domain[0] === "string"
   ) {
-    const levels = fillScale.domain as string[];
-    nodes.push(
-      labelNode(titleX, y, [legendTitle(fillScale, labels, "fill")], theme, 14),
-    );
-    y += 0.14;
-    nodes.push(node("Point", {
-      positions: levels.map((
-        _,
-        i,
-      ): [number, number] => [swatchX, y + i * 0.11]),
-      colors: levels.map((level) => scaleColorValue(fillScale, level)),
-      size: 7,
-    }));
-    nodes.push(labelNode(labelX, y, levels, theme));
-    y += levels.length * 0.11 + 0.12;
+    discreteSwatchLegend(fillScale, "fill");
   }
 
   const continuousColorGuide = (
@@ -193,31 +207,16 @@ export function legendNodes(
   continuousColorGuide(fillScale, "fill");
 
   if (sizeScale && !Array.isArray(sizeScale.domain[0])) {
-    const [lo, hi] = sizeScale.domain as [number, number];
-    const values = hi > lo ? [lo, (lo + hi) / 2, hi] : [lo];
-    nodes.push(
-      labelNode(titleX, y, [legendTitle(sizeScale, labels, "size")], theme, 14),
-    );
-    y += 0.14;
+    const values = representativeValues(sizeScale);
+    pushTitle(sizeScale, "size");
     nodes.push(node("Point", {
-      positions: values.map((
-        _,
-        i,
-      ): [number, number] => [swatchX, y + i * 0.11]),
+      positions: swatchColumn(values.length),
       sizes: values.map((v) => scaleSizeValue(sizeScale, v)),
       color: "#3b82f6",
     }));
-    nodes.push(
-      labelNode(
-        labelX,
-        y,
-        values.map((v) =>
-          String(Number.isInteger(v) ? v : Number(v.toFixed(2)))
-        ),
-        theme,
-      ),
+    pushKeyLabels(
+      values.map((v) => String(Number.isInteger(v) ? v : Number(v.toFixed(2)))),
     );
-    y += values.length * 0.11 + 0.12;
   }
 
   // Alpha is a mapped continuous aesthetic, so it receives the same compact
@@ -225,22 +224,10 @@ export function legendNodes(
   // intentionally absent because it does not train a scale.
   if (alphaScale && !Array.isArray(alphaScale.domain[0])) {
     const [lo, hi] = alphaScale.domain as [number, number];
-    const values = hi > lo ? [lo, (lo + hi) / 2, hi] : [lo];
-    nodes.push(
-      labelNode(
-        titleX,
-        y,
-        [legendTitle(alphaScale, labels, "alpha")],
-        theme,
-        14,
-      ),
-    );
-    y += 0.14;
+    const values = representativeValues(alphaScale);
+    pushTitle(alphaScale, "alpha");
     nodes.push(node("Point", {
-      positions: values.map((
-        _,
-        i,
-      ): [number, number] => [swatchX, y + i * 0.11]),
+      positions: swatchColumn(values.length),
       size: 7,
       colors: values.map((value) => {
         const [rangeLo, rangeHi] = alphaScale.range as [number, number];
@@ -250,15 +237,7 @@ export function legendNodes(
         return colorWithAlpha("#3b82f6", alpha);
       }),
     }));
-    nodes.push(
-      labelNode(
-        labelX,
-        y,
-        values.map((v) => String(Number(v.toFixed(2)))),
-        theme,
-      ),
-    );
-    y += values.length * 0.11 + 0.12;
+    pushKeyLabels(values.map((v) => String(Number(v.toFixed(2)))));
   }
 
   if (
@@ -266,16 +245,7 @@ export function legendNodes(
     typeof shapeScale.domain[0] === "string"
   ) {
     const levels = shapeScale.domain as string[];
-    nodes.push(
-      labelNode(
-        titleX,
-        y,
-        [legendTitle(shapeScale, labels, "shape")],
-        theme,
-        14,
-      ),
-    );
-    y += 0.14;
+    pushTitle(shapeScale, "shape");
     levels.forEach((level, i) => {
       nodes.push(node("Point", {
         positions: [[swatchX, y + i * 0.11]],
@@ -284,8 +254,7 @@ export function legendNodes(
         size: 7,
       }));
     });
-    nodes.push(labelNode(labelX, y, levels, theme));
-    y += levels.length * 0.11 + 0.12;
+    pushKeyLabels(levels);
   }
 
   if (
@@ -293,16 +262,7 @@ export function legendNodes(
     typeof linetypeScale.domain[0] === "string"
   ) {
     const levels = linetypeScale.domain as string[];
-    nodes.push(
-      labelNode(
-        titleX,
-        y,
-        [legendTitle(linetypeScale, labels, "linetype")],
-        theme,
-        14,
-      ),
-    );
-    y += 0.14;
+    pushTitle(linetypeScale, "linetype");
     levels.forEach((level, i) => {
       const dash = scaleLinetypeValue(linetypeScale, level);
       nodes.push(node("Line", {
@@ -315,23 +275,12 @@ export function legendNodes(
         ...(dash ? { dash } : {}),
       }));
     });
-    nodes.push(labelNode(labelX, y, levels, theme));
-    y += levels.length * 0.11 + 0.12;
+    pushKeyLabels(levels);
   }
 
   if (linewidthScale && !Array.isArray(linewidthScale.domain[0])) {
-    const [lo, hi] = linewidthScale.domain as [number, number];
-    const values = hi > lo ? [lo, (lo + hi) / 2, hi] : [lo];
-    nodes.push(
-      labelNode(
-        titleX,
-        y,
-        [legendTitle(linewidthScale, labels, "linewidth")],
-        theme,
-        14,
-      ),
-    );
-    y += 0.14;
+    const values = representativeValues(linewidthScale);
+    pushTitle(linewidthScale, "linewidth");
     values.forEach((value, i) => {
       nodes.push(node("Line", {
         positions: [[swatchX - 0.025, y + i * 0.11], [
@@ -342,15 +291,8 @@ export function legendNodes(
         width: scaleLinewidthValue(linewidthScale, value),
       }));
     });
-    nodes.push(
-      labelNode(
-        labelX,
-        y,
-        values.map((v) =>
-          String(Number.isInteger(v) ? v : Number(v.toFixed(2)))
-        ),
-        theme,
-      ),
+    pushKeyLabels(
+      values.map((v) => String(Number.isInteger(v) ? v : Number(v.toFixed(2)))),
     );
   }
 
@@ -427,10 +369,19 @@ export function guideLayout(
   theme: Theme,
   labels: PlotLabels,
   mapping: Aes,
-  xScale: TrainedScale | undefined,
-  yScale: TrainedScale | undefined,
-  legendScales: (TrainedScale | undefined)[],
+  scales: Partial<Record<AesName, TrainedScale>>,
 ): { bounds: [number, number, number, number]; tickCount: number } {
+  const xScale = scales.x;
+  const yScale = scales.y;
+  const legendScales = [
+    scales.color,
+    scales.fill,
+    scales.size,
+    scales.alpha,
+    scales.shape,
+    scales.linetype,
+    scales.linewidth,
+  ];
   const legendLabels = legendScales.flatMap((scale) => {
     if (!scale || scale.guide?.kind === "none") return [];
     const domain = scale.domain;

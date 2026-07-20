@@ -2737,11 +2737,35 @@ Deno.test("resident compile preserves CPU fallback outside the standalone cartes
   assertEquals(findNodes(tree, "ChunkedFace").length > 0, true);
 });
 
-Deno.test("mapped histogram fills stay on the documented CPU-reference path", () => {
+Deno.test("default-scaled factor fills go resident with a matching palette and legend", () => {
   const spec = ggplot(
     { x: [0, 1, 2, 3], cohort: ["a", "a", "b", "b"] },
     { x: "x", fill: "cohort" },
   ).add(geomHistogram({ binwidth: 2 })).build();
+  const tree = compile(spec, {
+    resident: true,
+    layout: { width: 640, height: 480, measureText: approximateTextMeasurer },
+  });
+
+  const resident = findNodes(tree, "ResidentProduct");
+  assertEquals(resident.length, 1);
+  assertEquals(findNodes(tree, "ChunkedFace").length, 0);
+  // Palette is in factor-level order and matches the trained fill scale.
+  assertEquals(resident[0].props.paletteColors, [
+    CATEGORICAL_PALETTE[0],
+    CATEGORICAL_PALETTE[1],
+  ]);
+  // The trained fill scale still produces a legend on the standalone path.
+  const legend = findNodes(tree, "Label").map((c) => c.props.labels);
+  assertEquals(legend.some((l) => Array.isArray(l) && l.includes("a")), true);
+});
+
+Deno.test("a custom fill scale keeps mapped histogram fills on the CPU path", () => {
+  const spec = ggplot(
+    { x: [0, 1, 2, 3], cohort: ["a", "a", "b", "b"] },
+    { x: "x", fill: "cohort" },
+  ).add(geomHistogram({ binwidth: 2 }), scaleFill({ range: ["#111", "#222"] }))
+    .build();
   const tree = compile(spec, { resident: true });
 
   assertEquals(findNodes(tree, "ResidentProduct").length, 0);
@@ -3817,6 +3841,14 @@ Deno.test("emitSource inlines a standalone FacetGrid definition for faceted spec
   // type-checks standalone (see the generated-module deno-check test below).
   assertStringIncludes(src, "const FacetPanel = ({ children }: any)");
   assertStringIncludes(src, "const FacetGrid = (");
+  // gggplot-q24 drift tripwire: the emitted module embeds the COMPILED
+  // facetCellLayouts function itself, so the emitted grid math is the live
+  // backend's grid math by construction — any edit to facet_layout.ts flows
+  // into emitted source automatically, and the emitted FacetGrid consumes it
+  // the same way render/GGPlot.tsx's FacetGrid does (layouts[i].panel).
+  assertStringIncludes(src, facetCellLayouts.toString());
+  assertStringIncludes(src, "facetCellLayouts(width, height, nrow, ncol, gap, stripHeight)");
+  assertStringIncludes(src, "const panel = layouts[i].panel;");
   assertStringIncludes(
     src,
     "LayoutContext, MatrixContext, TransformContext",

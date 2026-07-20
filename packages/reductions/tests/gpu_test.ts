@@ -33,6 +33,26 @@ async function requestTestDevice(): Promise<GPUDevice | null> {
   return await adapter.requestDevice();
 }
 
+const STORAGE_USAGE = 0x0080 | 0x0008 | 0x0004; // STORAGE | COPY_DST | COPY_SRC
+
+function storageF32(device: GPUDevice, data: Float32Array): GPUBuffer {
+  const buffer = device.createBuffer({
+    size: data.byteLength,
+    usage: STORAGE_USAGE,
+  });
+  device.queue.writeBuffer(buffer, 0, data);
+  return buffer;
+}
+
+function storageU32(device: GPUDevice, data: Uint32Array): GPUBuffer {
+  const buffer = device.createBuffer({
+    size: data.byteLength,
+    usage: STORAGE_USAGE,
+  });
+  device.queue.writeBuffer(buffer, 0, data);
+  return buffer;
+}
+
 Deno.test("packHistogram1dParams matches WGSL uniform layout", () => {
   const packed = packHistogram1dParams({
     values: new Float32Array(17),
@@ -382,7 +402,9 @@ Deno.test("resident histogram positions remain GPU-native for identity, dodge, a
     1,
     0,
   ]);
-  assertEquals(fill.result[1] > 0.66 && fill.result[1] < 0.67, true);
+  // Vertex float layout per cell is [left,y0, left,y1, x1,y1, x1,y0]:
+  // index 3 is cell 0 (group 0)'s top edge, 2/3 of the bin total.
+  assertEquals(fill.result[3] > 0.66 && fill.result[3] < 0.67, true);
   assertEquals(fill.result[9] > 0.66 && fill.result[9] < 0.67, true);
   assertEquals(fill.result[11], 1);
   assertEquals([...identity.tiles.slice(0, 16)], [
@@ -403,12 +425,110 @@ Deno.test("resident histogram positions remain GPU-native for identity, dodge, a
     1,
     1,
   ]);
-  assertEquals([...identity.tiles.slice(16, 24)], [2, 0, 2, 1, 3, 1, 3, 0]);
+  // Cell 2 is group 2 of the single bin: x spans the bin (0..1), y the group
+  // row (2..3) — same bin→x, group→y layout the first-16-float assert checks.
+  assertEquals([...identity.tiles.slice(16, 24)], [0, 2, 0, 3, 1, 3, 1, 2]);
   assertEquals(identity.summary.stackedMaximum, 2);
   assertEquals(dodge.summary.stackedMaximum, 2);
   assertEquals(fill.summary.stackedMaximum, 1);
   valuesBuffer.destroy();
   groupsBuffer.destroy();
+  device.destroy();
+});
+
+Deno.test("resident histogram expands a per-group palette into per-vertex bar colors", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+  // 2 groups x 2 bins, one distinct RGBA per group.
+  const palette = new Float32Array([
+    1, 0, 0, 1, // group 0 → red
+    0, 0, 1, 0.5, // group 1 → half-alpha blue
+  ]);
+  const withPalette = createResidentHistogram1DFromSources(device, {
+    values: storageF32(device, new Float32Array([0, 1, 2, 3, 0, 3])),
+    rows: 6,
+    groupIds: storageU32(device, new Uint32Array([0, 0, 0, 0, 1, 1])),
+    lo: 0,
+    hi: 4,
+    bins: 2,
+    groupsCount: 2,
+    palette,
+  });
+  withPalette.dispatch();
+  const colors = await withPalette.readbackBarColors();
+  // 2 groups x 2 bins = 4 cells, 4 vertices each, 4 channels each = 64 floats.
+  assertEquals(colors.length, 64);
+  for (let cell = 0; cell < 4; cell++) {
+    const group = Math.floor(cell / 2);
+    const expected = [...palette.slice(group * 4, group * 4 + 4)];
+    for (let vertex = 0; vertex < 4; vertex++) {
+      const base = (cell * 4 + vertex) * 4;
+      assertEquals([...colors.slice(base, base + 4)], expected);
+    }
+  }
+  const paletteMetrics = withPalette.metrics();
+  assertEquals(paletteMetrics.computePasses, 7);
+  withPalette.destroy();
+
+  // No palette → no color buffer, no extra allocation, no extra pass.
+  const noPalette = createResidentHistogram1DFromSources(device, {
+    values: storageF32(device, new Float32Array([0, 1, 2, 3, 0, 3])),
+    rows: 6,
+    groupIds: storageU32(device, new Uint32Array([0, 0, 0, 0, 1, 1])),
+    lo: 0,
+    hi: 4,
+    bins: 2,
+    groupsCount: 2,
+  });
+  noPalette.dispatch();
+  assertEquals(noPalette.barColors, undefined);
+  assertEquals((await noPalette.readbackBarColors()).length, 0);
+  const baseline = noPalette.metrics();
+  assertEquals(baseline.computePasses, 6);
+  assertEquals(
+    paletteMetrics.derivedAllocationBytes > baseline.derivedAllocationBytes,
+    true,
+  );
+  noPalette.destroy();
+  device.destroy();
+});
+
+Deno.test("resident count expands a per-group palette into per-vertex bar colors", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+  const palette = new Float32Array([0, 1, 0, 1, 1, 1, 0, 1]); // green, yellow
+  const resident = createResidentCount1DFromSources(device, {
+    valueIds: storageU32(device, new Uint32Array([0, 1, 0, 1])),
+    rows: 4,
+    groupIds: storageU32(device, new Uint32Array([0, 0, 1, 1])),
+    valuesCount: 2,
+    groupsCount: 2,
+    palette,
+  });
+  resident.dispatch();
+  const colors = await resident.readbackBarColors();
+  assertEquals(colors.length, 2 * 2 * 4 * 4);
+  for (let cell = 0; cell < 4; cell++) {
+    const group = Math.floor(cell / 2);
+    const expected = [...palette.slice(group * 4, group * 4 + 4)];
+    for (let vertex = 0; vertex < 4; vertex++) {
+      const base = (cell * 4 + vertex) * 4;
+      assertEquals([...colors.slice(base, base + 4)], expected);
+    }
+  }
+  resident.destroy();
+
+  const noPalette = createResidentCount1DFromSources(device, {
+    valueIds: storageU32(device, new Uint32Array([0, 1, 0, 1])),
+    rows: 4,
+    groupIds: storageU32(device, new Uint32Array([0, 0, 1, 1])),
+    valuesCount: 2,
+    groupsCount: 2,
+  });
+  noPalette.dispatch();
+  assertEquals(noPalette.barColors, undefined);
+  assertEquals((await noPalette.readbackBarColors()).length, 0);
+  noPalette.destroy();
   device.destroy();
 });
 

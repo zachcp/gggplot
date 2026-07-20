@@ -2,37 +2,16 @@
 /** @jsx createElement */
 // A direct Use.GPU Face mark over resident histogram bar vertices.
 
-import * as Live from "@use-gpu/live";
-import * as Workbench from "@use-gpu/workbench";
 import type { LiveElement } from "@use-gpu/live";
 import type { ResidentHistogramProduct } from "./resident_live.tsx";
-
-type UseOne = <T>(create: () => T, dependency?: unknown) => T;
-type UseSource = (definition: unknown, source: unknown) => unknown;
-type FaceComponent = (props: {
-  positions: unknown;
-  count: number;
-  segments: unknown;
-  chunks: readonly number[];
-  color?: number[];
-  side?: "front" | "back" | "both";
-}) => LiveElement;
-type CreateElement = (
-  type: FaceComponent,
-  props: Parameters<FaceComponent>[0],
-) => LiveElement;
-
-const useOne = (Live as unknown as { useOne: UseOne }).useOne;
-const useSource = (Workbench as unknown as { useSource: UseSource }).useSource;
-const useFaceSegmentsSource = (Workbench as unknown as {
-  useFaceSegmentsSource: (chunks: readonly number[]) => {
-    count: number;
-    segments: unknown;
-  };
-}).useFaceSegmentsSource;
-const Face = (Workbench as unknown as { FaceLayer: FaceComponent }).FaceLayer;
-const createElement =
-  (Live as unknown as { createElement: CreateElement }).createElement;
+import type { GPUStorageSource } from "./types.ts";
+import {
+  createElement,
+  FaceLayer as Face,
+  useFaceSegmentsSource,
+  useOne,
+  useSource,
+} from "./usegpu_compat.ts";
 
 /** One four-corner face per logical [group, bin] cell. */
 export function histogramBarChunks(
@@ -66,9 +45,16 @@ export interface ResidentHistogramBarsProps {
   product: ResidentHistogramProduct;
   color?: string;
   opacity?: number;
+  /**
+   * Per-vertex RGBA color source (the resident `barColors` product buffer).
+   * When present the Face binds it instead of the scalar `color`, giving each
+   * factor group its palette color; when absent behavior is unchanged.
+   */
+  colors?: GPUStorageSource;
 }
 
-function rgba(color = "#3b82f6", opacity = 1): number[] {
+/** One "#rgb"/"#rrggbb" hex → RGBA (0..1), alpha from `opacity`. */
+export function rgba(color = "#3b82f6", opacity = 1): number[] {
   const hex = color.startsWith("#") ? color.slice(1) : color;
   const value = Number.parseInt(
     hex.length === 3
@@ -85,17 +71,40 @@ function rgba(color = "#3b82f6", opacity = 1): number[] {
 }
 
 /**
+ * Flatten factor-level hex colors into a packed RGBA Float32Array (one vec4 per
+ * group, `opacity` baked into every alpha). This is the exact shape the GPU
+ * per-group palette buffer expects.
+ */
+export function paletteToRgbaF32(
+  colors: readonly string[],
+  opacity = 1,
+): Float32Array {
+  const out = new Float32Array(colors.length * 4);
+  for (let i = 0; i < colors.length; i++) {
+    out.set(rgba(colors[i], opacity), i * 4);
+  }
+  return out;
+}
+
+/**
  * Binds the provider's `vec2<f32>` storage output as a vertex source. Only
  * fixed topology is CPU-created; bar positions and counts never leave GPU.
  */
 export const ResidentHistogramBars = (
-  { product, color, opacity }: ResidentHistogramBarsProps,
+  { product, color, opacity, colors }: ResidentHistogramBarsProps,
 ): LiveElement => {
   const sourceDefinition = useOne(
     () => ({ name: "getHistogramBarVertex", format: "vec2<f32>" }),
     "histogram-bar-vertex",
   );
   const positions = useSource(sourceDefinition, product.barVertices);
+  const colorDefinition = useOne(
+    () => ({ name: "getHistogramBarColor", format: "vec4<f32>" }),
+    "histogram-bar-color",
+  );
+  // useSource must run unconditionally (stable hook order); the null source is
+  // harmless when the Face never reads it (scalar-color path).
+  const colorSource = useSource(colorDefinition, colors ?? null);
   const chunks = useOne(
     () => histogramBarChunks(product),
     `${product.groupsCount}:${product.bins}`,
@@ -106,7 +115,8 @@ export const ResidentHistogramBars = (
     count,
     segments,
     chunks,
-    color: rgba(color, opacity),
+    // Per-group palette when present; otherwise the single scalar fill color.
+    ...(colors ? { colors: colorSource } : { color: rgba(color, opacity) }),
     side: "both",
   });
 };

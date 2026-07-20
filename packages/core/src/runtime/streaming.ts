@@ -1,3 +1,10 @@
+// @experimental Contract landed ahead of use (gggplot-btd): the streaming
+// source adapter has no consumer outside tests/runtime_test.ts. It is the
+// planned realization of the GPU-native plan's "streaming is a distinct
+// SourceAdapter, not useRawSource" rule (docs/GPU_NATIVE_ARCHITECTURE_PLAN.md,
+// "Upload: once per changed source"); the static-data render path uses
+// GPUDataProvider/RawData instead. Wire it to a demo/host consumer or delete
+// it when streaming data is scheduled — do not grow a third mechanism.
 import type { Column } from "../data/mod.ts";
 import type { FieldSpec } from "../plan/mod.ts";
 import { rawArrayForColumn } from "./raw.ts";

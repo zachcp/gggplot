@@ -1,0 +1,484 @@
+{
+  "plain": {
+    "component": "Embedded",
+    "props": {
+      "normalize": true
+    },
+    "children": [
+      {
+        "component": "PanelViewport",
+        "props": {
+          "bounds": [
+            -0.72,
+            -0.66,
+            0.58,
+            0.68
+          ]
+        },
+        "children": [
+          {
+            "component": "ResidentProduct",
+            "props": {
+              "product": "@gggplot/core:stat_bin@1",
+              "view": true,
+              "data": {
+                "x": {
+                  "type": "numeric",
+                  "values": [
+                    0,
+                    1,
+                    2,
+                    3
+                  ]
+                },
+                "cohort": {
+                  "type": "factor",
+                  "values": [
+                    "a",
+                    "a",
+                    "b",
+                    "b"
+                  ],
+                  "levels": [
+                    "a",
+                    "b"
+                  ]
+                }
+              },
+              "x": "x",
+              "group": "cohort",
+              "options": {
+                "autoDomain": true,
+                "binwidth": 2,
+                "groupsCount": 2,
+                "position": "stack"
+              },
+              "color": "#3b82f6",
+              "paletteColors": [
+                "#2a78d6",
+                "#1baf7a"
+              ],
+              "autoYDomain": true,
+              "axes": "xy",
+              "theme": {
+                "name": "default"
+              }
+            },
+            "children": []
+          }
+        ]
+      },
+      {
+        "component": "FacetPanel",
+        "props": {},
+        "children": [
+          {
+            "component": "Label",
+            "props": {
+              "positions": [
+                [
+                  -0.72,
+                  0.744
+                ],
+                [
+                  -0.395,
+                  0.744
+                ],
+                [
+                  -0.07000000000000006,
+                  0.744
+                ],
+                [
+                  0.2549999999999999,
+                  0.744
+                ],
+                [
+                  0.5799999999999998,
+                  0.744
+                ]
+              ],
+              "labels": [
+                "-0.45",
+                "0.525",
+                "1.5",
+                "2.475",
+                "3.45"
+              ],
+              "color": "#0b0b0b",
+              "size": 11,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          },
+          {
+            "component": "Label",
+            "props": {
+              "positions": [],
+              "labels": [],
+              "color": "#0b0b0b",
+              "size": 11,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          },
+          {
+            "component": "Label",
+            "props": {
+              "positions": [
+                [
+                  -0.07,
+                  0.904
+                ]
+              ],
+              "labels": [
+                "x"
+              ],
+              "color": "#0b0b0b",
+              "size": 13,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          },
+          {
+            "component": "Label",
+            "props": {
+              "positions": [
+                [
+                  -0.916,
+                  0.010000000000000009
+                ]
+              ],
+              "labels": [
+                "y"
+              ],
+              "color": "#0b0b0b",
+              "size": 13,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          }
+        ]
+      },
+      {
+        "component": "Label",
+        "props": {
+          "positions": [
+            [
+              0.6,
+              -0.76
+            ]
+          ],
+          "labels": [
+            "fill"
+          ],
+          "color": "#0b0b0b",
+          "size": 14,
+          "zBias": 2,
+          "weight": "normal",
+          "style": "normal"
+        },
+        "children": []
+      },
+      {
+        "component": "Point",
+        "props": {
+          "positions": [
+            [
+              0.625,
+              -0.62
+            ],
+            [
+              0.625,
+              -0.51
+            ]
+          ],
+          "colors": [
+            "#2a78d6",
+            "#1baf7a"
+          ],
+          "size": 7
+        },
+        "children": []
+      },
+      {
+        "component": "Label",
+        "props": {
+          "positions": [
+            [
+              0.6649999999999999,
+              -0.62
+            ],
+            [
+              0.6649999999999999,
+              -0.51
+            ]
+          ],
+          "labels": [
+            "a",
+            "b"
+          ],
+          "color": "#0b0b0b",
+          "size": 13,
+          "zBias": 2,
+          "weight": "normal",
+          "style": "normal"
+        },
+        "children": []
+      }
+    ]
+  },
+  "laidOut": {
+    "component": "Embedded",
+    "props": {
+      "normalize": true
+    },
+    "children": [
+      {
+        "component": "PanelViewport",
+        "props": {
+          "bounds": [
+            -0.931875,
+            -0.9333333333333333,
+            0.765,
+            0.825
+          ]
+        },
+        "children": [
+          {
+            "component": "ResidentProduct",
+            "props": {
+              "product": "@gggplot/core:stat_bin@1",
+              "view": true,
+              "data": {
+                "x": {
+                  "type": "numeric",
+                  "values": [
+                    0,
+                    1,
+                    2,
+                    3
+                  ]
+                },
+                "cohort": {
+                  "type": "factor",
+                  "values": [
+                    "a",
+                    "a",
+                    "b",
+                    "b"
+                  ],
+                  "levels": [
+                    "a",
+                    "b"
+                  ]
+                }
+              },
+              "x": "x",
+              "group": "cohort",
+              "options": {
+                "autoDomain": true,
+                "binwidth": 2,
+                "groupsCount": 2,
+                "position": "stack"
+              },
+              "color": "#3b82f6",
+              "paletteColors": [
+                "#2a78d6",
+                "#1baf7a"
+              ],
+              "autoYDomain": true,
+              "axes": "xy",
+              "theme": {
+                "name": "default"
+              }
+            },
+            "children": []
+          }
+        ]
+      },
+      {
+        "component": "FacetPanel",
+        "props": {},
+        "children": [
+          {
+            "component": "Label",
+            "props": {
+              "positions": [
+                [
+                  -0.931875,
+                  0.86
+                ],
+                [
+                  -0.6490625000000001,
+                  0.86
+                ],
+                [
+                  -0.3662500000000001,
+                  0.86
+                ],
+                [
+                  -0.08343750000000005,
+                  0.86
+                ],
+                [
+                  0.19937499999999986,
+                  0.86
+                ],
+                [
+                  0.4821875,
+                  0.86
+                ],
+                [
+                  0.7649999999999999,
+                  0.86
+                ]
+              ],
+              "labels": [
+                "-0.45",
+                "0.2",
+                "0.85",
+                "1.5",
+                "2.15",
+                "2.8",
+                "3.45"
+              ],
+              "color": "#0b0b0b",
+              "size": 11,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          },
+          {
+            "component": "Label",
+            "props": {
+              "positions": [],
+              "labels": [],
+              "color": "#0b0b0b",
+              "size": 11,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          },
+          {
+            "component": "Label",
+            "props": {
+              "positions": [
+                [
+                  -0.0834375,
+                  0.9475
+                ]
+              ],
+              "labels": [
+                "x"
+              ],
+              "color": "#0b0b0b",
+              "size": 13,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          },
+          {
+            "component": "Label",
+            "props": {
+              "positions": [
+                [
+                  -0.9795625,
+                  -0.054166666666666696
+                ]
+              ],
+              "labels": [
+                "y"
+              ],
+              "color": "#0b0b0b",
+              "size": 13,
+              "zBias": 2,
+              "weight": "normal",
+              "style": "normal"
+            },
+            "children": []
+          }
+        ]
+      },
+      {
+        "component": "Label",
+        "props": {
+          "positions": [
+            [
+              0.79,
+              -0.76
+            ]
+          ],
+          "labels": [
+            "fill"
+          ],
+          "color": "#0b0b0b",
+          "size": 14,
+          "zBias": 2,
+          "weight": "normal",
+          "style": "normal"
+        },
+        "children": []
+      },
+      {
+        "component": "Point",
+        "props": {
+          "positions": [
+            [
+              0.82125,
+              -0.62
+            ],
+            [
+              0.82125,
+              -0.51
+            ]
+          ],
+          "colors": [
+            "#2a78d6",
+            "#1baf7a"
+          ],
+          "size": 7
+        },
+        "children": []
+      },
+      {
+        "component": "Label",
+        "props": {
+          "positions": [
+            [
+              0.8712500000000001,
+              -0.62
+            ],
+            [
+              0.8712500000000001,
+              -0.51
+            ]
+          ],
+          "labels": [
+            "a",
+            "b"
+          ],
+          "color": "#0b0b0b",
+          "size": 13,
+          "zBias": 2,
+          "weight": "normal",
+          "style": "normal"
+        },
+        "children": []
+      }
+    ]
+  }
+}

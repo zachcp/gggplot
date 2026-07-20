@@ -45,6 +45,32 @@ export function positionsOf(
 }
 
 /**
+ * Same scalePosition semantics as positionsOf, but writes into two parallel
+ * planar arrays instead of allocating a tuple per row — the form packMarkRows
+ * consumes directly. Returns empty arrays when either axis is unmapped/empty.
+ */
+export function positionsXYOf(
+  mapping: Aes,
+  data: GGSpec["data"],
+  xScale: TrainedScale | undefined,
+  yScale: TrainedScale | undefined,
+): { xs: number[]; ys: number[] } {
+  const xCol = valuesOf(data, mapping.x);
+  const yCol = valuesOf(data, mapping.y);
+  if (!xCol || !yCol || xCol.length === 0 || yCol.length === 0) {
+    return { xs: [], ys: [] };
+  }
+  const n = Math.min(xCol.length, yCol.length);
+  const xs = new Array<number>(n);
+  const ys = new Array<number>(n);
+  for (let i = 0; i < n; i++) {
+    xs[i] = scalePosition(xScale, xCol[i]);
+    ys[i] = scalePosition(yScale, yCol[i]);
+  }
+  return { xs, ys };
+}
+
+/**
  * Reorder every column by ascending x — geom_line always connects points in
  * x order (so an unsorted dataset still draws a proper line), unlike
  * geom_path, which preserves the data's own row order for trajectories.
@@ -60,6 +86,24 @@ export function sortByX(mapping: Aes, data: GGSpec["data"]): GGSpec["data"] {
 }
 
 export type ColorPreference = "color" | "fill" | "colorOrFill" | "fillOrColor";
+
+/**
+ * Per-row aesthetic extraction shared by sizesOf/alphasOf/shapesOf/
+ * linewidthsOf/strokesOf (and colorsOf's final map): read the column mapped to
+ * `aes`, return undefined if unmapped/absent, else map each value through
+ * `scaleFn` with the given trained scale.
+ */
+function scaledColumn<T>(
+  mapping: Aes,
+  data: GGSpec["data"],
+  aes: keyof Aes,
+  scale: TrainedScale | undefined,
+  scaleFn: (scale: TrainedScale | undefined, raw: unknown) => T,
+): T[] | undefined {
+  const col = mapping[aes];
+  if (!col || !(col in data)) return undefined;
+  return columnValues(data, col).map((v) => scaleFn(scale, v));
+}
 
 /** Per-row hex colors from a mapped color/fill column, or undefined if unmapped. */
 export function colorsOf(
@@ -80,10 +124,9 @@ export function colorsOf(
     : mapping.fill
     ? "fill"
     : undefined;
-  const col = aesName ? mapping[aesName] : undefined;
-  if (!col || !(col in data)) return undefined;
+  if (!aesName) return undefined;
   const scale = aesName === "fill" ? fillScale : colorScale;
-  return columnValues(data, col).map((v) => scaleColorValue(scale, v));
+  return scaledColumn(mapping, data, aesName, scale, scaleColorValue);
 }
 
 /** Per-row point radii from a mapped size column, or undefined if unmapped. */
@@ -92,9 +135,7 @@ export function sizesOf(
   data: GGSpec["data"],
   sizeScale: TrainedScale | undefined,
 ): number[] | undefined {
-  const col = mapping.size;
-  if (!col || !(col in data)) return undefined;
-  return columnValues(data, col).map((v) => scaleSizeValue(sizeScale, v));
+  return scaledColumn(mapping, data, "size", sizeScale, scaleSizeValue);
 }
 
 /** Per-row opacity from a mapped alpha column; literals remain layer params. */
@@ -103,9 +144,7 @@ export function alphasOf(
   data: GGSpec["data"],
   alphaScale: TrainedScale | undefined,
 ): number[] | undefined {
-  const col = mapping.alpha;
-  if (!col || !(col in data)) return undefined;
-  return columnValues(data, col).map((v) => scaleAlphaValue(alphaScale, v));
+  return scaledColumn(mapping, data, "alpha", alphaScale, scaleAlphaValue);
 }
 
 /**
@@ -167,9 +206,7 @@ export function shapesOf(
   data: GGSpec["data"],
   shapeScale: TrainedScale | undefined,
 ): string[] | undefined {
-  const col = mapping.shape;
-  if (!col || !(col in data)) return undefined;
-  return columnValues(data, col).map((v) => scaleShapeValue(shapeScale, v));
+  return scaledColumn(mapping, data, "shape", shapeScale, scaleShapeValue);
 }
 
 /** Per-vertex line widths from a mapped continuous linewidth column. */
@@ -178,10 +215,12 @@ export function linewidthsOf(
   data: GGSpec["data"],
   linewidthScale: TrainedScale | undefined,
 ): number[] | undefined {
-  const col = mapping.linewidth;
-  if (!col || !(col in data)) return undefined;
-  return columnValues(data, col).map((v) =>
-    scaleLinewidthValue(linewidthScale, v)
+  return scaledColumn(
+    mapping,
+    data,
+    "linewidth",
+    linewidthScale,
+    scaleLinewidthValue,
   );
 }
 
@@ -190,11 +229,7 @@ export function strokesOf(
   data: GGSpec["data"],
   strokeScale: TrainedScale | undefined,
 ): number[] | undefined {
-  const column = mapping.stroke;
-  if (!column || !(column in data)) return undefined;
-  return columnValues(data, column).map((value) =>
-    scaleLinewidthValue(strokeScale, value)
-  );
+  return scaledColumn(mapping, data, "stroke", strokeScale, scaleLinewidthValue);
 }
 
 /** A connected Line has one dash style; grouping has already isolated its level. */

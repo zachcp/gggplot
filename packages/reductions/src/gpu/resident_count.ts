@@ -1,17 +1,12 @@
 import {
   CLEAR_U32_WGSL,
   COUNT_BAR_VERTICES_WGSL,
+  GRID_BAR_VERTEX_COLORS_WGSL,
   GROUPED_COUNT_1D_WGSL,
   HISTOGRAM_SUMMARY_WGSL,
 } from "../wgsl.ts";
+import { readBuffer, storage, uniform, USAGE } from "./plumbing.ts";
 
-const USAGE = {
-  MAP_READ: 1,
-  COPY_SRC: 4,
-  COPY_DST: 8,
-  UNIFORM: 64,
-  STORAGE: 128,
-} as const;
 export type CountPosition = "identity" | "stack" | "dodge" | "fill";
 export interface ResidentCount1DSourceInput {
   valueIds: GPUBuffer;
@@ -20,6 +15,12 @@ export interface ResidentCount1DSourceInput {
   valuesCount: number;
   groupsCount: number;
   position?: CountPosition;
+  /**
+   * Optional per-group RGBA palette (length groupsCount*4, channels 0..1). When
+   * present a color pass expands it into per-vertex `barColors`; when absent no
+   * palette/color buffers are allocated and no extra pass is dispatched.
+   */
+  palette?: Float32Array;
 }
 export interface ResidentCountSummary {
   groupTotals: Uint32Array;
@@ -29,23 +30,18 @@ export interface ResidentCountSummary {
 export interface ResidentCount1D {
   counts: GPUBuffer;
   barVertices: GPUBuffer;
+  /** Per-vertex RGBA bar colors; present only when created with a `palette`. */
+  barColors: GPUBuffer | undefined;
   summary: GPUBuffer;
   valuesCount: number;
   groupsCount: number;
   dispatch(): void;
   readback(): Promise<Uint32Array>;
   readbackBarVertices(): Promise<Float32Array>;
+  /** Per-vertex RGBA readback; empty when no palette was supplied. */
+  readbackBarColors(): Promise<Float32Array>;
   readbackSummary(): Promise<ResidentCountSummary>;
   destroy(): void;
-}
-
-function uniform(device: GPUDevice, data: ArrayBuffer): GPUBuffer {
-  const buffer = device.createBuffer({
-    size: data.byteLength,
-    usage: USAGE.UNIFORM | USAGE.COPY_DST,
-  });
-  device.queue.writeBuffer(buffer, 0, data);
-  return buffer;
 }
 
 export function createResidentCount1DFromSources(
@@ -87,6 +83,15 @@ export function createResidentCount1DFromSources(
     size: Math.max(4, summaryLength * 4),
     usage: USAGE.STORAGE | USAGE.COPY_SRC | USAGE.COPY_DST,
   });
+  // Optional per-group palette → per-vertex color buffer (four RGBA per cell).
+  const barColorsByteLength = cells * 4 * 4 * Float32Array.BYTES_PER_ELEMENT;
+  const palette = input.palette ? storage(device, input.palette) : undefined;
+  const barColors = palette
+    ? device.createBuffer({
+      size: Math.max(16, barColorsByteLength),
+      usage: USAGE.STORAGE | USAGE.COPY_SRC,
+    })
+    : undefined;
   const groups = input.groupIds ?? input.valueIds;
   const pipeline = (code: string) =>
     device.createComputePipeline({
@@ -100,6 +105,7 @@ export function createResidentCount1DFromSources(
   const count = pipeline(GROUPED_COUNT_1D_WGSL);
   const bars = pipeline(COUNT_BAR_VERTICES_WGSL);
   const summarize = pipeline(HISTOGRAM_SUMMARY_WGSL);
+  const colorize = palette ? pipeline(GRID_BAR_VERTEX_COLORS_WGSL) : undefined;
   const bind = (p: GPUComputePipeline, entries: GPUBindGroupEntry[]) =>
     device.createBindGroup({ layout: p.getBindGroupLayout(0), entries });
   const clearBind = bind(clear, [{ binding: 0, resource: { buffer: counts } }, {
@@ -124,30 +130,34 @@ export function createResidentCount1DFromSources(
   const barsBind = bind(bars, [{ binding: 0, resource: { buffer: counts } }, {
     binding: 1,
     resource: { buffer: barVertices },
-  }, { binding: 2, resource: { buffer: params } }]);
+    // Dodge slotting reads per-group totals; the summarize pass runs earlier
+    // in the same encoder, so this pass observes the current totals.
+  }, { binding: 2, resource: { buffer: params } }, {
+    binding: 3,
+    resource: { buffer: summary },
+  }]);
+  const colorBind = colorize && barColors && palette
+    ? bind(colorize, [
+      { binding: 0, resource: { buffer: palette } },
+      { binding: 1, resource: { buffer: barColors } },
+      { binding: 2, resource: { buffer: params } },
+    ])
+    : undefined;
 
-  async function read<T extends Uint32Array | Float32Array>(
+  // A zero-length count grid never touches the GPU; every other read (always a
+  // multiple of four bytes) is byte-identical to the shared staging helper.
+  const read = <T extends Uint32Array | Float32Array>(
     source: GPUBuffer,
     bytes: number,
     create: (data: ArrayBuffer) => T,
-  ): Promise<T> {
-    if (bytes === 0) return create(new ArrayBuffer(0));
-    const staging = device.createBuffer({
-      size: bytes,
-      usage: USAGE.COPY_DST | USAGE.MAP_READ,
-    });
-    const encoder = device.createCommandEncoder();
-    encoder.copyBufferToBuffer(source, 0, staging, 0, bytes);
-    device.queue.submit([encoder.finish()]);
-    await staging.mapAsync(1);
-    const result = create(staging.getMappedRange().slice(0));
-    staging.unmap();
-    staging.destroy();
-    return result;
-  }
+  ): Promise<T> =>
+    bytes === 0
+      ? Promise.resolve(create(new ArrayBuffer(0)))
+      : readBuffer(device, source, bytes, create);
   return {
     counts,
     barVertices,
+    barColors,
     summary,
     valuesCount,
     groupsCount,
@@ -166,11 +176,16 @@ export function createResidentCount1DFromSources(
       run(clear, summaryClearBind, summaryLength);
       run(summarize, summaryBind, valuesCount);
       run(bars, barsBind, cells);
+      if (colorize && colorBind) run(colorize, colorBind, cells);
       device.queue.submit([encoder.finish()]);
     },
     readback: () => read(counts, cells * 4, (data) => new Uint32Array(data)),
     readbackBarVertices: () =>
       read(barVertices, cells * 32, (data) => new Float32Array(data)),
+    readbackBarColors: () =>
+      barColors
+        ? read(barColors, barColorsByteLength, (data) => new Float32Array(data))
+        : Promise.resolve(new Float32Array(0)),
     async readbackSummary() {
       const result = await read(
         summary,
@@ -186,6 +201,8 @@ export function createResidentCount1DFromSources(
     destroy() {
       counts.destroy();
       barVertices.destroy();
+      barColors?.destroy();
+      palette?.destroy();
       summary.destroy();
       params.destroy();
       clearParams.destroy();

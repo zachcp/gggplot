@@ -4,9 +4,18 @@
 // lives here too: it is the resident-render counterpart of the CPU bar
 // lowering below, consuming the resident stat_bin grid instead of row data.
 import type { Aes, DataFrame, GGSpec, Layer } from "../ir/types.ts";
-import type { TypedDataFrame } from "../data/mod.ts";
+import {
+  columnValues,
+  factorLevelsFor,
+  type TypedDataFrame,
+} from "../data/mod.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
-import { scaleColorValue, scalePosition } from "../scale/mod.ts";
+import {
+  categoricalRange,
+  OTHER_COLOR,
+  scaleColorValue,
+  scalePosition,
+} from "../scale/mod.ts";
 import {
   widenForStackedBars,
   widenForTileAxis,
@@ -156,7 +165,7 @@ export function barDomainContribution(
   return { x: xDomain, y: yDomain };
 }
 
-function explicitDomain(
+export function explicitDomain(
   spec: GGSpec,
   aes: "x" | "y",
 ): [number, number] | undefined {
@@ -168,11 +177,65 @@ function explicitDomain(
 }
 
 /**
+ * Discrete color/fill domain in trained-scale order: an explicit factor's
+ * declared levels, otherwise the sorted unique observed values. This mirrors
+ * scale/training.ts's `discreteLevels` for a single mapped column so the bar
+ * palette below is assigned in the SAME order the trained scale (and therefore
+ * the legend) uses. Only reached when no custom scale is declared for the aes.
+ */
+function discreteColorDomain(data: TypedDataFrame, col: string): string[] {
+  const declared = factorLevelsFor(data, col);
+  if (declared) {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const level of declared) {
+      if (!seen.has(level)) {
+        seen.add(level);
+        out.push(level);
+      }
+    }
+    return out;
+  }
+  const inferred = new Set<string>();
+  for (const value of columnValues(data, col)) {
+    if (value != null) inferred.add(String(value));
+  }
+  return [...inferred].sort();
+}
+
+/**
+ * One hex color per GPU group id (i.e. per factor level in `levels`, the
+ * `column.levels` order factorIds resolves to). Each level takes the color the
+ * default discrete palette (categoricalRange — the exact function trainScales
+ * uses) assigns at its position in the trained domain, so bar colors match the
+ * legend swatches the trained fill/color scale produces.
+ */
+export function residentBarPalette(
+  data: TypedDataFrame,
+  col: string,
+  levels: readonly string[],
+): string[] {
+  const domain = discreteColorDomain(data, col);
+  const range = categoricalRange(domain.length);
+  return levels.map((level) => {
+    const index = domain.indexOf(level);
+    return index >= 0 && index < range.length ? range[index] : OTHER_COLOR;
+  });
+}
+
+/**
  * geom_bar's GPU-resident capability: the first safe resident lowering contract
  * for an eligible stat_bin layer, or undefined when the CPU compiler must stay
  * authoritative. Automatic y-domains deliberately wait for the bounded-summary
- * executor (standaloneView) rather than materializing stat rows. The eligibility
- * conjunction is the former compile/resident.ts residentHistogramProps, unchanged.
+ * executor (standaloneView) rather than materializing stat rows.
+ *
+ * A fill/color mapping is resident-eligible IFF (a) the mapped column is a
+ * factor column in the data, (b) it is the same column the group derivation
+ * uses (fill/color takes precedence over group, so it directly drives
+ * groupIds), and (c) the spec declares no custom scale for that aesthetic. When
+ * eligible, one hex color per factor level (level order) is emitted as
+ * `paletteColors` for on-GPU per-group bar coloring; every other mapping still
+ * falls back to the CPU lowering.
  */
 export function barResidentPlan(
   spec: GGSpec,
@@ -183,25 +246,47 @@ export function barResidentPlan(
 ): ResidentProductProps | undefined {
   const allowAutomaticY = opts.standalone;
   if (
-    spec.theme.resident === false ||
+    spec.execution?.resident === false ||
     spec.coord.kind !== "cartesian" || spec.facet.kind !== "none" ||
     layer.geom !== "bar" || !["bin", "count"].includes(layer.stat) ||
     !["identity", "stack", "dodge", "fill"].includes(layer.position) ||
-    mapping.y || mapping.color || mapping.fill || "weight" in layer.params ||
+    mapping.y || "weight" in layer.params ||
     (!allowAutomaticY && !explicitDomain(spec, "y"))
   ) return undefined;
   const position = layer.position as "identity" | "stack" | "dodge" | "fill";
+
+  // A fill/color mapping is only resident-eligible when it maps a factor column
+  // with a default scale and that same column drives grouping; anything else
+  // (continuous fill, a declared color/fill scale, or a fill column distinct
+  // from a separate group mapping) stays on the CPU lowering.
+  const colorAes: "fill" | "color" | undefined = mapping.fill
+    ? "fill"
+    : mapping.color
+    ? "color"
+    : undefined;
+  const colorCol = colorAes ? mapping[colorAes] : undefined;
+  if (colorCol) {
+    const colorColumn = data[colorCol];
+    const declaredScale = spec.scales.find((scale) => scale.aes === colorAes);
+    if (colorColumn?.type !== "factor" || declaredScale) return undefined;
+    if (mapping.group && mapping.group !== colorCol) return undefined;
+  }
 
   const x = mapping.x;
   const xColumn = x ? data[x] : undefined;
   if (!x || !xColumn) return undefined;
 
-  const group = mapping.group;
+  // fill/color take precedence over group as the grouping column, matching
+  // lowerBar's groupCol derivation and the CPU stat's effective fill grouping.
+  const group = mapping.fill ?? mapping.color ?? mapping.group;
   const groupColumn = group ? data[group] : undefined;
   if (group && groupColumn?.type !== "factor") return undefined;
   const groupsCount = groupColumn?.type === "factor"
     ? groupColumn.levels.length
     : 1;
+  const paletteColors = colorCol && groupColumn?.type === "factor"
+    ? residentBarPalette(data, colorCol, groupColumn.levels)
+    : undefined;
   if (layer.stat === "count") {
     if (xColumn.type !== "factor") return undefined;
     const nodeProps: ResidentCountNodeProps = {
@@ -216,6 +301,7 @@ export function barResidentPlan(
       color: (layer.params.fill as string) ?? (layer.params.color as string) ??
         "#3b82f6",
       opacity: layer.params.alpha as number | undefined,
+      paletteColors,
       autoYDomain: allowAutomaticY && !explicitDomain(spec, "y"),
     };
     return {
@@ -259,6 +345,7 @@ export function barResidentPlan(
     color: (layer.params.fill as string) ?? (layer.params.color as string) ??
       "#3b82f6",
     opacity: layer.params.alpha as number | undefined,
+    paletteColors,
     autoYDomain: allowAutomaticY && !explicitDomain(spec, "y"),
   };
   return {

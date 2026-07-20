@@ -1,5 +1,7 @@
 # WGPU/WGSL Stats Research
 
+**Status: historical (research note, spike complete).** Findings were folded into `GPU_NATIVE_ARCHITECTURE_PLAN.md` and realized by the `@gggplot/reductions` package; see `RESIDENCY_MATRIX.md` for what runs where today.
+
 This note records the findings for `gggplot-619`: whether gggplot stats can
 eventually use WGPU/WGSL compute shaders for high-row-count work without turning
 the grammar pipeline into a GPU-first data engine.

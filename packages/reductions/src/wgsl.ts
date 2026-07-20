@@ -150,6 +150,7 @@ struct CountParams {
 @group(0) @binding(0) var<storage, read> counts: array<u32>;
 @group(0) @binding(1) var<storage, read_write> vertices: array<vec2<f32>>;
 @group(0) @binding(2) var<uniform> params: CountParams;
+@group(0) @binding(3) var<storage, read> summary: array<u32>;
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -169,8 +170,21 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   var width = 0.9;
   var left = f32(value) - width * 0.5;
   if (params.position == 2u) {
-    width = width / f32(params.groups);
-    left = f32(value) - 0.45 + f32(group) * width;
+    // Dodge divides the band among groups PRESENT in the data (matching CPU
+    // dodgeBars, which slots only observed group keys), not the declared
+    // group-dictionary size. summary[g] holds group g's total count and is
+    // dispatched before this pass; an absent group's cell stays degenerate
+    // (count 0) so its slot collision is invisible.
+    var present = 0u;
+    var slot = 0u;
+    for (var g = 0u; g < params.groups; g = g + 1u) {
+      if (summary[g] > 0u) {
+        if (g < group) { slot = slot + 1u; }
+        present = present + 1u;
+      }
+    }
+    width = width / f32(max(present, 1u));
+    left = f32(value) - 0.45 + f32(slot) * width;
   }
   var y0 = f32(lower);
   var y1 = f32(upper);
@@ -209,6 +223,7 @@ struct HistogramParams {
 @group(0) @binding(0) var<storage, read> counts: array<u32>;
 @group(0) @binding(1) var<storage, read_write> vertices: array<vec2<f32>>;
 @group(0) @binding(2) var<uniform> params: HistogramParams;
+@group(0) @binding(3) var<storage, read> summary: array<u32>;
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -233,8 +248,21 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   var x1 = x0 + params.binwidth;
   var left = x0;
   if (params.position == 2u) {
-    let width = params.binwidth / f32(params.groups);
-    left = x0 + f32(group) * width;
+    // Dodge divides the bin among groups PRESENT in the data (matching CPU
+    // dodgeBars, which slots only observed group keys), not the declared
+    // group-dictionary size. summary[g] holds group g's total count and is
+    // dispatched before this pass; an absent group's cell stays degenerate
+    // (count 0) so its slot collision is invisible.
+    var present = 0u;
+    var slot = 0u;
+    for (var g = 0u; g < params.groups; g = g + 1u) {
+      if (summary[g] > 0u) {
+        if (g < group) { slot = slot + 1u; }
+        present = present + 1u;
+      }
+    }
+    let width = params.binwidth / f32(max(present, 1u));
+    left = x0 + f32(slot) * width;
     x1 = left + width;
   }
   var y0 = f32(lower);
@@ -338,6 +366,46 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
       atomicMax(&summary[params.groups], counts[group * params.bins + bin]);
     }
   }
+}
+`.trim();
+
+/**
+ * Expands a per-group palette into per-vertex bar colors. One invocation per
+ * [group, cell] writes four identical RGBA vertices (the bar's four corners),
+ * matching the four-vertex-per-cell layout the bar-vertex kernels emit.
+ *
+ * The params uniform is SHARED with the count/histogram bar kernels: their
+ * struct's second field is the per-group grid width (bins for the histogram,
+ * values for the count) and the third is the group count. Reading only those
+ * two fields lets one kernel derive `group = cell / perGroup` for either
+ * source — the same trick HISTOGRAM_SUMMARY_WGSL relies on. A larger bound
+ * uniform buffer (32 bytes) is legal against this three-field view.
+ */
+export const GRID_BAR_VERTEX_COLORS_WGSL = `
+struct GridParams {
+  rows: u32,
+  perGroup: u32,
+  groups: u32,
+};
+
+@group(0) @binding(0) var<storage, read> palette: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read_write> colors: array<vec4<f32>>;
+@group(0) @binding(2) var<uniform> params: GridParams;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let cell = global_id.x;
+  let cells = params.groups * params.perGroup;
+  if (cell >= cells || params.perGroup == 0u) {
+    return;
+  }
+  let group = cell / params.perGroup;
+  let color = palette[group];
+  let offset = cell * 4u;
+  colors[offset] = color;
+  colors[offset + 1u] = color;
+  colors[offset + 2u] = color;
+  colors[offset + 3u] = color;
 }
 `.trim();
 

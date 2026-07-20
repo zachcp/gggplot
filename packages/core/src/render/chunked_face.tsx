@@ -41,47 +41,19 @@
 // not a GPU source handle — this is why 'positions.array' is passed to it
 // directly alongside the separately-uploaded GPU positions source.
 
-import * as Live from "@use-gpu/live";
-import * as Workbench from "@use-gpu/workbench";
 import type { LiveElement } from "@use-gpu/live";
 import type { FlatTensor, MarkTopology } from "../compile/rendertree.ts";
 import { withMarkAttribution } from "./gpu_instrument.ts";
-
-// The public Workbench barrel exports these with broad generic signatures;
-// a small structural adapter is clearer at this boundary (same convention as
-// render/chunked_line.tsx, render/rotated_label.tsx, runtime/resident_bar.tsx).
-const { createElement } = Live as unknown as {
-  createElement: (type: unknown, props: Record<string, unknown>) => LiveElement;
-};
-const {
+import {
+  createElement,
   FaceLayer,
-  useFaceSegmentsSource,
-  useNoFaceSegmentsSource,
   useFaceSegmentsConcaveSource,
+  useFaceSegmentsSource,
   useNoFaceSegmentsConcaveSource,
-  useRawTensorSource,
+  useNoFaceSegmentsSource,
   useNoRawTensorSource,
-} = Workbench as unknown as {
-  FaceLayer: unknown;
-  useFaceSegmentsSource: (
-    chunks: Uint32Array,
-  ) => { count: number; segments: unknown };
-  useNoFaceSegmentsSource: () => void;
-  useFaceSegmentsConcaveSource: (
-    chunks: Uint32Array,
-    groups: null,
-    positions: Float32Array,
-    dims: number,
-  ) => { count: number; indexed: number; indices: unknown };
-  useNoFaceSegmentsConcaveSource: () => void;
-  useRawTensorSource: (data: {
-    array: Float32Array;
-    format: string;
-    size: number[];
-    version: number;
-  }) => unknown;
-  useNoRawTensorSource: () => void;
-};
+  useRawTensorSource,
+} from "../runtime/usegpu_compat.ts";
 
 /** Our compiler-internal FlatTensor.format to the WGSL-style format string useRawTensorSource expects. */
 function toWgslFormat(format: FlatTensor["format"]): string {

@@ -28,6 +28,7 @@ import {
   geomTile,
   geomViolin,
   ggplot,
+  scaleFill,
   scaleYContinuous,
 } from "../packages/core/src/dsl/mod.ts";
 import { compile } from "../packages/core/src/compile/mod.ts";
@@ -203,9 +204,11 @@ export const cases: Array<{ name: string; build: () => Spec }> = [
 
 // Resident cases exercise the GPU-resident decision surface (compiled WITH
 // options.resident). One eligible spec resolves to the standalone "view" form,
-// one eligible spec to the inline mark form (explicit y domain), and one gated
-// spec (mapped fill) must fall back to CPU Polygons. These pin the generic
-// ResidentProduct node produced by GeomDefinition.residentPlan going forward.
+// one eligible spec to the inline mark form (explicit y domain), one eligible
+// spec maps a default-scaled factor fill (per-group palette, standalone view),
+// and one gated spec (a custom fill scale) must fall back to CPU Polygons.
+// These pin the generic ResidentProduct node produced by
+// GeomDefinition.residentPlan going forward.
 export const residentCases: Array<{ name: string; build: () => Spec }> = [
   {
     name: "resident_histogram_view",
@@ -223,13 +226,37 @@ export const residentCases: Array<{ name: string; build: () => Spec }> = [
         .build(),
   },
   {
-    name: "resident_histogram_cpu_fallback",
+    name: "resident_histogram_fill",
     build: () =>
       ggplot(
         { x: [0, 1, 2, 3], cohort: ["a", "a", "b", "b"] },
         { x: "x", fill: "cohort" },
       )
         .add(geomHistogram({ binwidth: 2 }))
+        .build(),
+  },
+  {
+    name: "resident_tile_strip",
+    build: () =>
+      ggplot(
+        { x: [0, 1, 2, 3], cohort: ["a", "a", "b", "b"] },
+        { x: "x", fill: "cohort" },
+      )
+        // Explicit stat "bin" + factor fill rows: the resident tile-grid
+        // (heatmap strip) standalone view (gggplot-ysq).
+        .add(geomTile({ stat: "bin", bins: 2 }))
+        .build(),
+  },
+  {
+    name: "resident_histogram_cpu_fallback",
+    build: () =>
+      ggplot(
+        { x: [0, 1, 2, 3], cohort: ["a", "a", "b", "b"] },
+        { x: "x", fill: "cohort" },
+      )
+        // A user-declared fill scale gates the resident color path: this spec
+        // must fall back to CPU ChunkedFace bars.
+        .add(geomHistogram({ binwidth: 2 }), scaleFill({ range: ["#111111", "#222222"] }))
         .build(),
   },
 ];

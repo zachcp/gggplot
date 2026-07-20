@@ -12,12 +12,15 @@
 // not fit without contortion; it does not, so we use the map.
 import {
   RESIDENT_STAT_BIN_PRODUCT,
+  RESIDENT_STAT_BIN_TILES_PRODUCT,
   RESIDENT_STAT_COUNT_PRODUCT,
 } from "../compile/resident.ts";
-import { ResidentCountMark } from "./resident_count_mark.tsx";
+import { ResidentCountMark } from "./resident_count_live.tsx";
 import { ResidentCountView } from "./resident_count_view.tsx";
-import { ResidentHistogramMark } from "./resident_mark.tsx";
+import { ResidentHistogramMark } from "./resident_live.tsx";
 import { ResidentHistogramView } from "./resident_view.tsx";
+import { ResidentTileMark } from "./resident_tile_live.tsx";
+import { ResidentTileView } from "./resident_tile_view.tsx";
 
 /** A UseGPU Live component: props in, LiveElement out (kept opaque to core). */
 export type LiveComponent = (props: Record<string, unknown>) => unknown;
@@ -44,6 +47,16 @@ export const RESIDENT_PRODUCT_REGISTRY: Record<
   [RESIDENT_STAT_COUNT_PRODUCT]: {
     mark: ResidentCountMark as unknown as LiveComponent,
     view: ResidentCountView as unknown as LiveComponent,
+  },
+  // Dense [group, bin] heatmap strip over the same stat_bin grid; the tile
+  // geom's residentPlan only emits the standalone view form (its y range is
+  // the group-row count, owned by the view). Per-count color shading (a
+  // continuous fill field from the resident counts buffer) is the natural
+  // follow-up once shader-accessible scales exist; today rows take their
+  // group's palette color or the single scalar fill.
+  [RESIDENT_STAT_BIN_TILES_PRODUCT]: {
+    mark: ResidentTileMark as unknown as LiveComponent,
+    view: ResidentTileView as unknown as LiveComponent,
   },
 };
 

@@ -1,12 +1,5 @@
 import { DOMAIN_CLEAR_WGSL, FINITE_DOMAIN_1D_WGSL } from "../wgsl.ts";
-
-const USAGE = {
-  MAP_READ: 0x0001,
-  COPY_SRC: 0x0004,
-  COPY_DST: 0x0008,
-  UNIFORM: 0x0040,
-  STORAGE: 0x0080,
-} as const;
+import { readBuffer, uniform, USAGE } from "./plumbing.ts";
 
 export interface ResidentDomain1DResult {
   readonly min: number;
@@ -43,11 +36,7 @@ export function createResidentDomain1D(
     size: 8,
     usage: USAGE.STORAGE | USAGE.COPY_SRC | USAGE.COPY_DST,
   });
-  const params = device.createBuffer({
-    size: 16,
-    usage: USAGE.UNIFORM | USAGE.COPY_DST,
-  });
-  device.queue.writeBuffer(params, 0, new Uint32Array([rows, 0, 0, 0]));
+  const params = uniform(device, new Uint32Array([rows, 0, 0, 0]).buffer);
   const clear = device.createComputePipeline({
     layout: "auto",
     compute: {
@@ -92,17 +81,12 @@ export function createResidentDomain1D(
       device.queue.submit([encoder.finish()]);
     },
     async readback() {
-      const staging = device.createBuffer({
-        size: 8,
-        usage: USAGE.COPY_DST | USAGE.MAP_READ,
-      });
-      const encoder = device.createCommandEncoder();
-      encoder.copyBufferToBuffer(domain, 0, staging, 0, 8);
-      device.queue.submit([encoder.finish()]);
-      await staging.mapAsync(USAGE.MAP_READ);
-      const values = new Uint32Array(staging.getMappedRange().slice(0, 8));
-      staging.unmap();
-      staging.destroy();
+      const values = await readBuffer(
+        device,
+        domain,
+        8,
+        (buffer) => new Uint32Array(buffer),
+      );
       const empty = values[0] === 0xffffffff && values[1] === 0;
       return {
         min: empty ? Number.NaN : floatFromOrdered(values[0]),

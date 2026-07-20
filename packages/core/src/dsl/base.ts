@@ -7,6 +7,7 @@ import type {
   AesName,
   Coord,
   DataFrame,
+  ExecutionPolicy,
   Facet,
   GeomKind,
   GGSpec,
@@ -32,7 +33,14 @@ export type SpecPart =
   | { tag: "coord"; value: Coord }
   | { tag: "facet"; value: Facet }
   | { tag: "labels"; value: PlotLabels }
-  | { tag: "theme"; value: Theme };
+  | { tag: "theme"; value: Theme }
+  | { tag: "execution"; value: ExecutionPolicy };
+
+/** Spec-level execution policy, e.g. `execution({ resident: false })`. */
+export const execution = (value: ExecutionPolicy): SpecPart => ({
+  tag: "execution",
+  value,
+});
 
 function materializeInputData(
   data: InputData,
@@ -90,6 +98,9 @@ export class GG {
           // calls layer new fields over earlier ones instead of replacing
           // the whole theme object.
           this.spec.theme = { ...this.spec.theme, ...part.value };
+          break;
+        case "execution":
+          this.spec.execution = { ...this.spec.execution, ...part.value };
           break;
       }
     }

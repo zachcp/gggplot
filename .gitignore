@@ -9,3 +9,10 @@ node_modules/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Debug screenshots at the repo root (agent/manual capture artifacts)
+/*.png
+
+# Apple system fonts must not be committed (no redistribution license);
+# the site ships only its OFL-licensed faces.
+apps/site/public/fonts/SFNS*.ttf

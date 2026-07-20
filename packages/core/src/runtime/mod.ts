@@ -1,4 +1,6 @@
 export type * from "./types.ts";
+// @experimental — test-only contracts landed ahead of the GPU-native plan's
+// Phase 2; see the module docs on runtime.ts and streaming.ts (gggplot-btd).
 export { GPUPlotRuntime } from "./runtime.ts";
 export { rawArrayForColumn } from "./raw.ts";
 export {
@@ -19,6 +21,8 @@ export {
   type ResidentDomainProviderProps,
 } from "./resident_domain_live.tsx";
 export {
+  ResidentHistogramMark,
+  type ResidentHistogramMarkProps,
   type ResidentHistogramProduct,
   ResidentHistogramProvider,
   type ResidentHistogramProviderProps,
@@ -33,9 +37,15 @@ export {
   type ResidentHistogramTilesProps,
 } from "./resident_tile.tsx";
 export {
-  ResidentHistogramMark,
-  type ResidentHistogramMarkProps,
-} from "./resident_mark.tsx";
+  ResidentTileMark,
+  type ResidentTileMarkProps,
+  ResidentTileProvider,
+  type ResidentTileProviderProps,
+} from "./resident_tile_live.tsx";
+export {
+  ResidentTileView,
+  type ResidentTileViewProps,
+} from "./resident_tile_view.tsx";
 export {
   histogramRange,
   ResidentHistogramView,

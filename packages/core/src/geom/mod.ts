@@ -12,7 +12,11 @@ import { lowerLine } from "./line.ts";
 import { barDomainContribution, barResidentPlan, lowerBar } from "./bar.ts";
 import { areaDomainContribution, lowerArea } from "./area.ts";
 import { lowerPolygon } from "./polygon.ts";
-import { lowerTile, tileDomainContribution } from "./tile.ts";
+import {
+  lowerTile,
+  tileDomainContribution,
+  tileResidentPlan,
+} from "./tile.ts";
 import { lowerHex } from "./hex.ts";
 import { lowerInterval } from "./errorbar.ts";
 import { lowerBoxplot } from "./boxplot.ts";
@@ -156,6 +160,7 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
     defaultStat: "identity",
     lower: lowerTile,
     domainContribution: tileDomainContribution,
+    residentPlan: tileResidentPlan,
     doc: doc("Draw rectangular cells centered on x/y.", ["x", "y"], [
       "fill",
       "color",

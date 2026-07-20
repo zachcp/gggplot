@@ -1,5 +1,7 @@
 # Core module boundary audit
 
+**Status: historical (superseded).** This audit describes the pre-refactor layout — the 2,515-line `compile/mod.ts` and 1,235-line `stat/mod.ts` it measures no longer exist. The geom-registry refactor (`gggplot-elv`, landed `22301c9`) split lowering into `geom/*` behind `GEOM_REGISTRY`, and the flat-array epic (`gggplot-tzc`, landed `677b903`) reshaped the mark pipeline. For the current layout see `ARCHITECTURE.md`; for current review findings see `REVIEW_2026-07-19_THIRD_PASS.md`.
+
 Audit date: 2026-07-17
 
 ## Finding

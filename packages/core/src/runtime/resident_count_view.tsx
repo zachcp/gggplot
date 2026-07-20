@@ -1,7 +1,5 @@
 /** @jsxRuntime classic */
 /** @jsx createElement */
-import * as Live from "@use-gpu/live";
-import * as Plot from "@use-gpu/plot";
 import type { LiveElement } from "@use-gpu/live";
 import type { TypedDataFrame } from "../data/mod.ts";
 import type { Theme } from "../ir/types.ts";
@@ -11,24 +9,16 @@ import {
   type ResidentCountProduct,
   ResidentCountProvider,
 } from "./resident_count_live.tsx";
-import { ResidentHistogramBars } from "./resident_bar.tsx";
-
-type Component = (props: Record<string, unknown>) => LiveElement;
-type CreateElement = (
-  type: Component,
-  props: Record<string, unknown>,
-  ...children: unknown[]
-) => LiveElement;
-type UseAwait = <T>(
-  callback: ((cancelled: () => boolean) => Promise<T>) | null,
-  dependencies: readonly unknown[],
-) => [T | undefined, Error | undefined, boolean];
-const createElement =
-  (Live as unknown as { createElement: CreateElement }).createElement;
-const useAwait = (Live as unknown as { useAwait: UseAwait }).useAwait;
-const Cartesian = (Plot as unknown as { Cartesian: Component }).Cartesian;
-const Grid = (Plot as unknown as { Grid: Component }).Grid;
-const Axis = (Plot as unknown as { Axis: Component }).Axis;
+import { paletteToRgbaF32, ResidentHistogramBars } from "./resident_bar.tsx";
+import type { GPUStorageSource } from "./types.ts";
+import {
+  Axis,
+  Cartesian,
+  createElement,
+  Grid,
+  useAwait,
+  useMemo,
+} from "./usegpu_compat.ts";
 
 export interface ResidentCountViewProps {
   data: TypedDataFrame;
@@ -37,6 +27,8 @@ export interface ResidentCountViewProps {
   options: MountedCountSourceOptions;
   color: string;
   opacity?: number;
+  /** Factor-level hex colors (level order) for a fill/color-mapped bar layer. */
+  paletteColors?: string[];
   axes: string;
   theme: Theme;
 }
@@ -70,10 +62,11 @@ const AwaitCountSummary = (
       width: theme.axisWidth ?? 2,
       ...(theme.axisColor ? { color: theme.axisColor } : {}),
     }),
-    createElement(ResidentHistogramBars as unknown as Component, {
+    createElement(ResidentHistogramBars, {
       product,
       color,
       opacity,
+      colors: product.barColors,
     }),
   ].filter(Boolean);
   return createElement(Cartesian, {
@@ -82,25 +75,35 @@ const AwaitCountSummary = (
   }, ...guides);
 };
 export const ResidentCountView = (
-  { data, x, group, options, color, opacity, axes, theme }:
+  { data, x, group, options, color, opacity, paletteColors, axes, theme }:
     ResidentCountViewProps,
 ): LiveElement => {
+  const palette = useMemo(
+    () =>
+      paletteColors ? paletteToRgbaF32(paletteColors, opacity ?? 1) : undefined,
+    [paletteColors?.join(","), opacity],
+  );
+  const viewOptions = useMemo(
+    () => (palette ? { ...options, palette } : options),
+    [options, palette],
+  );
+  options = viewOptions;
   const fields = [
     { name: x, dtype: "u32", shape: "row", dimensions: ["row"] },
     ...(group
       ? [{ name: group, dtype: "u32", shape: "row", dimensions: ["row"] }]
       : []),
   ];
-  return createElement(GPUDataProvider as unknown as Component, {
+  return createElement(GPUDataProvider, {
     data,
     fields,
-    children: (sources: Record<string, unknown>) =>
-      createElement(ResidentCountProvider as unknown as Component, {
+    children: (sources: Record<string, GPUStorageSource>) =>
+      createElement(ResidentCountProvider, {
         x: sources[x],
         group: group ? sources[group] : undefined,
         options,
         children: (product: ResidentCountProduct) =>
-          createElement(AwaitCountSummary as unknown as Component, {
+          createElement(AwaitCountSummary, {
             product,
             options,
             color,

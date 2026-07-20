@@ -1,13 +1,13 @@
 // geom_point / geom_dotplot (and jitter/nudge/jitterdodge positions).
 import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
-import { jitter, nudge } from "../position/mod.ts";
+import { jitter } from "../position/mod.ts";
 import type { LayerContext } from "./types.ts";
 import {
   alphasOf,
   colorsOf,
   packMarkRows,
-  positionsOf,
+  positionsXYOf,
   resolutionOf,
   shapesOf,
   sizesOf,
@@ -29,21 +29,29 @@ export function lowerPoint(
   const yScale = ctx.scales.y;
   const opacity = layer.params.alpha as number | undefined;
 
-  let positions = positionsOf(mapping, data, xScale, yScale);
-  if (positions.length === 0) return [];
+  // Operate on planar xs/ys directly (no per-row tuple allocation). Position
+  // adjustments mutate xs[i]/ys[i] in place; jitter() call ORDER stays
+  // x-then-y per row, matching the former tuple-literal evaluation order so
+  // the RNG stream is unchanged.
+  const { xs, ys } = positionsXYOf(mapping, data, xScale, yScale);
+  if (xs.length === 0) return [];
   if (layer.position === "jitter") {
     const xAmount = (layer.params.width as number) ??
-      resolutionOf(xScale, positions.map((p) => p[0])) * 0.4;
+      resolutionOf(xScale, xs) * 0.4;
     const yAmount = (layer.params.height as number) ?? 0.4;
-    positions = positions.map((
-      [x, y],
-    ) => [jitter(x, xAmount), jitter(y, yAmount)]);
+    for (let i = 0; i < xs.length; i++) {
+      xs[i] = jitter(xs[i], xAmount);
+      ys[i] = jitter(ys[i], yAmount);
+    }
   } else if (layer.position === "nudge") {
-    positions = nudge(
-      positions,
-      (layer.params.x as number) ?? (layer.params.nudgeX as number) ?? 0,
-      (layer.params.y as number) ?? (layer.params.nudgeY as number) ?? 0,
-    );
+    const dx = (layer.params.x as number) ?? (layer.params.nudgeX as number) ??
+      0;
+    const dy = (layer.params.y as number) ?? (layer.params.nudgeY as number) ??
+      0;
+    for (let i = 0; i < xs.length; i++) {
+      xs[i] += dx;
+      ys[i] += dy;
+    }
   } else if (layer.position === "jitterdodge") {
     const groupValues = valuesOf(
       data,
@@ -53,17 +61,15 @@ export function lowerPoint(
     const dodgeWidth = (layer.params.dodgeWidth as number) ?? 0.75;
     const jitterWidth = (layer.params.jitterWidth as number) ?? 0.1;
     const jitterHeight = (layer.params.jitterHeight as number) ?? 0;
-    positions = positions.map(([x, y], i) => {
+    for (let i = 0; i < xs.length; i++) {
       const slot = Math.max(0, groups.indexOf(String(groupValues?.[i])));
       const offset = groups.length > 1
         ? (slot - (groups.length - 1) / 2) * dodgeWidth / groups.length
         : 0;
-      return [jitter(x + offset, jitterWidth), jitter(y, jitterHeight)];
-    });
+      xs[i] = jitter(xs[i] + offset, jitterWidth);
+      ys[i] = jitter(ys[i], jitterHeight);
+    }
   }
-
-  const xs = positions.map(([x]) => x);
-  const ys = positions.map(([, y]) => y);
 
   const mappedColors = colorsOf(
     mapping,
@@ -89,8 +95,15 @@ export function lowerPoint(
   // stays a scalar 'color'/'size' prop (parseColorRGBA is hex-only, so a
   // literal like "red" must not be forced through the vec4 packer). Emits one
   // Point node (this helper), reused by all three shape/stroke/plain paths.
+  // `px`/`py` are the position arrays to pack directly; `rows` gathers the
+  // per-row companions (colors/sizes/alphas). The plain path passes xs/ys
+  // straight through (rows = every row, in order) so positions are NOT
+  // re-copied via an index map; the shape-split and stroke-outline paths
+  // gather their genuine subsets.
   const emitPoint = (
-    indices: number[],
+    px: number[],
+    py: number[],
+    rows: number[],
     extra: Record<string, unknown>,
     overrides: {
       colorsFor?: string[];
@@ -108,14 +121,14 @@ export function lowerPoint(
     const perRowColors = overrides.scalarColor
       ? undefined
       : overrides.colorsFor ?? mappedColors ??
-        (alphas ? indices.map(() => nodeColor) : undefined);
+        (alphas ? rows.map(() => nodeColor) : undefined);
     const perRowSizes = overrides.sizesFor ?? mappedSizes;
     const packed = packMarkRows({
-      xs: indices.map((i) => xs[i]),
-      ys: indices.map((i) => ys[i]),
-      ...(perRowColors ? { colors: indices.map((i) => perRowColors[i]) } : {}),
-      ...(perRowSizes ? { sizes: indices.map((i) => perRowSizes[i]) } : {}),
-      ...(alphas ? { alphas: indices.map((i) => alphas[i]) } : {}),
+      xs: px,
+      ys: py,
+      ...(perRowColors ? { colors: rows.map((i) => perRowColors[i]) } : {}),
+      ...(perRowSizes ? { sizes: rows.map((i) => perRowSizes[i]) } : {}),
+      ...(alphas ? { alphas: rows.map((i) => alphas[i]) } : {}),
     });
     return node("Point", {
       positions: packed.positions,
@@ -135,8 +148,14 @@ export function lowerPoint(
     });
     // tzc.3: sanctioned per-shape Point split — shape is a uniform render
     // trait (point sprite), so each distinct shape value gets its own node.
+    // Shape genuinely subsets, so gather positions by the shape's row indices.
     return [...byShape.entries()].map(([shape, indices]) =>
-      emitPoint(indices, { shape })
+      emitPoint(
+        indices.map((i) => xs[i]),
+        indices.map((i) => ys[i]),
+        indices,
+        { shape },
+      )
     );
   }
 
@@ -153,19 +172,21 @@ export function lowerPoint(
     const all = xs.map((_, i) => i);
     // Keep the two-node stroke-outline fallback, flat: sizes are per-row
     // (derived from stroke width) so always pack; the outer ring is a single
-    // literal color (scalar), the inner disc mapped-or-literal.
+    // literal color (scalar), the inner disc mapped-or-literal. `all` is the
+    // identity row order, so positions pass through directly.
     return [
-      emitPoint(all, { execution: "cpu-outline-fallback" }, {
+      emitPoint(xs, ys, all, { execution: "cpu-outline-fallback" }, {
         scalarColor: true,
         color: outerColor,
         sizesFor: outerSizes,
       }),
-      emitPoint(all, { execution: "cpu-outline-fallback" }, {
+      emitPoint(xs, ys, all, { execution: "cpu-outline-fallback" }, {
         color: innerColor,
         sizesFor: baseSizes,
       }),
     ];
   }
 
-  return [emitPoint(xs.map((_, i) => i), {})];
+  // Plain path: every row kept, in order — xs/ys go straight to packMarkRows.
+  return [emitPoint(xs, ys, xs.map((_, i) => i), {})];
 }

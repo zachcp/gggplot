@@ -1,5 +1,6 @@
 import {
   CLEAR_U32_WGSL,
+  GRID_BAR_VERTEX_COLORS_WGSL,
   GROUPED_HISTOGRAM_1D_WGSL,
   HISTOGRAM_BAR_VERTICES_WGSL,
   HISTOGRAM_SUMMARY_WGSL,
@@ -7,20 +8,19 @@ import {
 } from "../wgsl.ts";
 import { packHistogram1dParams, packHistogram1dSourceParams } from "../gpu.ts";
 import type { GroupedHistogram1DInput } from "../types.ts";
-
-const USAGE = {
-  MAP_READ: 0x0001,
-  COPY_SRC: 0x0004,
-  COPY_DST: 0x0008,
-  UNIFORM: 0x0040,
-  STORAGE: 0x0080,
-} as const;
+import { readBuffer, storage, uniform, USAGE } from "./plumbing.ts";
 
 /** GPU-resident output grid for stat_bin; callers can bind `counts` directly. */
 export interface ResidentHistogram1D {
   readonly counts: GPUBuffer;
   /** Packed XY vertices: [group, bin, corner, axis], four corners per bar. */
   readonly barVertices: GPUBuffer;
+  /**
+   * Per-vertex RGBA bar colors (four per cell), present only when the source
+   * was created with a `palette`. Absent (undefined) leaves the mark on its
+   * scalar `color` path with no extra allocation or dispatch.
+   */
+  readonly barColors: GPUBuffer | undefined;
   /** Dense [group, bin] tile vertices for a grid mark. */
   readonly tileVertices: GPUBuffer;
   /** Compact [group totals..., stacked maximum] summary buffer. */
@@ -30,6 +30,8 @@ export interface ResidentHistogram1D {
   dispatch(): void;
   readback(): Promise<Uint32Array>;
   readbackBarVertices(): Promise<Float32Array>;
+  /** Per-vertex RGBA readback; empty when no palette was supplied. */
+  readbackBarColors(): Promise<Float32Array>;
   readbackTileVertices(): Promise<Float32Array>;
   readbackSummary(): Promise<ResidentHistogramSummary>;
   metrics(): ResidentHistogramMetrics;
@@ -63,27 +65,12 @@ export interface ResidentHistogram1DSourceInput {
   readonly groupsCount: number;
   /** GPU-resident bar-grid layout; count accumulation remains unchanged. */
   readonly position?: "identity" | "stack" | "dodge" | "fill";
-}
-
-function storage(
-  device: GPUDevice,
-  array: Float32Array | Uint32Array,
-): GPUBuffer {
-  const buffer = device.createBuffer({
-    size: Math.max(4, array.byteLength),
-    usage: USAGE.STORAGE | USAGE.COPY_DST | USAGE.COPY_SRC,
-  });
-  if (array.byteLength) device.queue.writeBuffer(buffer, 0, array);
-  return buffer;
-}
-
-function uniform(device: GPUDevice, array: ArrayBuffer): GPUBuffer {
-  const buffer = device.createBuffer({
-    size: array.byteLength,
-    usage: USAGE.UNIFORM | USAGE.COPY_DST,
-  });
-  device.queue.writeBuffer(buffer, 0, array);
-  return buffer;
+  /**
+   * Optional per-group RGBA palette (length groupsCount*4, channels 0..1). When
+   * present a color pass expands it into per-vertex `barColors`; when absent no
+   * palette/color buffers are allocated and no extra pass is dispatched.
+   */
+  readonly palette?: Float32Array;
 }
 
 /**
@@ -169,11 +156,27 @@ export function createResidentHistogram1DFromSources(
     size: Math.max(4, summaryLength * Uint32Array.BYTES_PER_ELEMENT),
     usage: USAGE.STORAGE | USAGE.COPY_SRC | USAGE.COPY_DST,
   });
+  // Optional per-group palette → per-vertex color expansion. When absent the
+  // color pass and its buffers do not exist, so the byte accounting and
+  // dispatch count below stay identical to the pre-palette path.
+  const barColorsByteLength = packed.countsLength * 4 *
+    4 * Float32Array.BYTES_PER_ELEMENT;
+  const palette = input.palette
+    ? storage(device, input.palette)
+    : undefined;
+  const barColors = palette
+    ? device.createBuffer({
+      size: Math.max(16, barColorsByteLength),
+      usage: USAGE.STORAGE | USAGE.COPY_SRC,
+    })
+    : undefined;
   let dispatches = 0;
   let readbackBytes = 0;
   let summaryReadbackBytes = 0;
   const derivedAllocationBytes = counts.size + barVertices.size +
-    tileVertices.size + summary.size;
+    tileVertices.size + summary.size +
+    (palette ? palette.size + barColors!.size : 0);
+  const passesPerDispatch = palette ? 7 : 6;
   const params = uniform(device, packed.params);
   const clearParams = uniform(
     device,
@@ -218,6 +221,17 @@ export function createResidentHistogram1DFromSources(
       entryPoint: "main",
     },
   });
+  const colorize = palette
+    ? device.createComputePipeline({
+      layout: "auto",
+      compute: {
+        module: device.createShaderModule({
+          code: GRID_BAR_VERTEX_COLORS_WGSL,
+        }),
+        entryPoint: "main",
+      },
+    })
+    : undefined;
   const clearBind = device.createBindGroup({
     layout: clear.getBindGroupLayout(0),
     entries: [{ binding: 0, resource: { buffer: counts } }, {
@@ -255,8 +269,21 @@ export function createResidentHistogram1DFromSources(
       { binding: 0, resource: { buffer: counts } },
       { binding: 1, resource: { buffer: barVertices } },
       { binding: 2, resource: { buffer: params } },
+      // Dodge slotting reads per-group totals; the summary pass runs earlier
+      // in the same encoder, so this pass observes the current totals.
+      { binding: 3, resource: { buffer: summary } },
     ],
   });
+  const colorBind = colorize
+    ? device.createBindGroup({
+      layout: colorize.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: palette! } },
+        { binding: 1, resource: { buffer: barColors! } },
+        { binding: 2, resource: { buffer: params } },
+      ],
+    })
+    : undefined;
   const tilesBind = device.createBindGroup({
     layout: tiles.getBindGroupLayout(0),
     entries: [
@@ -269,28 +296,16 @@ export function createResidentHistogram1DFromSources(
     ],
   });
 
-  async function readBuffer<T extends Uint32Array | Float32Array>(
+  const read = <T extends Uint32Array | Float32Array>(
     source: GPUBuffer,
     bytes: number,
     create: (buffer: ArrayBuffer) => T,
-  ): Promise<T> {
-    const staging = device.createBuffer({
-      size: Math.max(4, bytes),
-      usage: USAGE.COPY_DST | USAGE.MAP_READ,
-    });
-    const encoder = device.createCommandEncoder();
-    encoder.copyBufferToBuffer(source, 0, staging, 0, staging.size);
-    device.queue.submit([encoder.finish()]);
-    await staging.mapAsync(0x0001);
-    const result = create(staging.getMappedRange().slice(0, bytes));
-    staging.unmap();
-    staging.destroy();
-    return result;
-  }
+  ): Promise<T> => readBuffer(device, source, bytes, create);
 
   return {
     counts,
     barVertices,
+    barColors,
     tileVertices,
     summary,
     bins: packed.bins,
@@ -327,12 +342,22 @@ export function createResidentHistogram1DFromSources(
       tilePass.setBindGroup(0, tilesBind);
       tilePass.dispatchWorkgroups(Math.ceil(packed.countsLength / 64));
       tilePass.end();
+      if (colorize && colorBind) {
+        // One vertex-color invocation per cell, after the bar-vertex pass so it
+        // shares the same encoder submission; reads only the params group/width
+        // fields plus the per-group palette.
+        const colorPass = encoder.beginComputePass();
+        colorPass.setPipeline(colorize);
+        colorPass.setBindGroup(0, colorBind);
+        colorPass.dispatchWorkgroups(Math.ceil(packed.countsLength / 64));
+        colorPass.end();
+      }
       device.queue.submit([encoder.finish()]);
       dispatches++;
     },
     async readback() {
       const bytes = packed.countsLength * Uint32Array.BYTES_PER_ELEMENT;
-      const result = await readBuffer(
+      const result = await read(
         counts,
         bytes,
         (buffer) => new Uint32Array(buffer),
@@ -343,8 +368,19 @@ export function createResidentHistogram1DFromSources(
     async readbackBarVertices() {
       const bytes = packed.countsLength * 4 * 2 *
         Float32Array.BYTES_PER_ELEMENT;
-      const result = await readBuffer(
+      const result = await read(
         barVertices,
+        bytes,
+        (buffer) => new Float32Array(buffer),
+      );
+      readbackBytes += bytes;
+      return result;
+    },
+    async readbackBarColors() {
+      if (!barColors) return new Float32Array(0);
+      const bytes = barColorsByteLength;
+      const result = await read(
+        barColors,
         bytes,
         (buffer) => new Float32Array(buffer),
       );
@@ -354,7 +390,7 @@ export function createResidentHistogram1DFromSources(
     async readbackTileVertices() {
       const bytes = packed.countsLength * 4 * 2 *
         Float32Array.BYTES_PER_ELEMENT;
-      const result = await readBuffer(
+      const result = await read(
         tileVertices,
         bytes,
         (buffer) => new Float32Array(buffer),
@@ -363,7 +399,7 @@ export function createResidentHistogram1DFromSources(
       return result;
     },
     async readbackSummary() {
-      const values = await readBuffer(
+      const values = await read(
         summary,
         summaryLength * Uint32Array.BYTES_PER_ELEMENT,
         (buffer) => new Uint32Array(buffer),
@@ -380,7 +416,7 @@ export function createResidentHistogram1DFromSources(
         inputUploadBytes,
         derivedAllocationBytes,
         dispatches,
-        computePasses: dispatches * 6,
+        computePasses: dispatches * passesPerDispatch,
         readbackBytes,
         summaryReadbackBytes,
       };
@@ -388,6 +424,8 @@ export function createResidentHistogram1DFromSources(
     destroy() {
       counts.destroy();
       barVertices.destroy();
+      barColors?.destroy();
+      palette?.destroy();
       tileVertices.destroy();
       summary.destroy();
       params.destroy();

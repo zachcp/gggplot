@@ -1,3 +1,13 @@
+/**
+ * The semantic data layer. Columns keep their boxed public shape
+ * (`Array<number|null>` / `Array<string|null>`) so NaN-vs-null semantics stay
+ * intact across every stat. `typedArrayForColumn` (below) is Phase A of the
+ * GPU-native plan's GPUDataFrame representation: a canonical typed
+ * (Float32Array / Uint32Array) view of a column, cached on the column object's
+ * identity, that GPU lowering and the reductions boundary consume without
+ * re-crossing the boxed→typed boundary per call site. Phase B — storing
+ * `values` themselves as typed arrays plus validity masks — is future work.
+ */
 export type MissingValue = null | undefined;
 
 export interface NumericColumn {
@@ -194,7 +204,10 @@ function copyFactorColumn(
  * WeakMap is the only supported invalidation path). A host that must mutate
  * ingested data in place should call `packCache.invalidate(column)` itself
  * (compile/pack_cache.ts) as the explicit escape hatch — see that module's
- * doc comment for the invalidation contract.
+ * doc comment for the invalidation contract. The same in-place-mutation
+ * contract governs `typedArrayForColumn`: its typed view is computed once and
+ * cached on the Column's identity, so mutating a column's `values` after that
+ * view is first taken is likewise unsupported.
  */
 export function ingest(
   data: InputData,
@@ -344,4 +357,30 @@ export function numericBuffer(column: NumericColumn): Float32Array {
     out[i] = column.values[i] ?? Number.NaN;
   }
   return out;
+}
+
+const typedArrays = new WeakMap<Column, Float32Array | Uint32Array>();
+
+/**
+ * Canonical typed (GPU-lowering) representation of a column, cached on the
+ * column object's identity: numeric → Float32Array (null → NaN, exactly what
+ * `numericBuffer` builds); factor → Uint32Array level ids (0xffffffff for
+ * null, exactly `factorIds`). Computed on first access and retained thereafter,
+ * so a column reused across compiles/uploads yields the SAME typed array
+ * (identity is the coherence signal — see ingest()'s doc comment). Because the
+ * view is cached on identity, mutating a column's boxed `values` IN PLACE after
+ * this accessor has run is unsupported. `numericBuffer`/`factorIds` remain the
+ * uncached builders this delegates to. Phase A of the GPUDataFrame plan; Phase
+ * B (typed `values` storage) is future work.
+ */
+export function typedArrayForColumn(
+  column: Column,
+): Float32Array | Uint32Array {
+  const cached = typedArrays.get(column);
+  if (cached) return cached;
+  const array = column.type === "numeric"
+    ? numericBuffer(column)
+    : factorIds(column);
+  typedArrays.set(column, array);
+  return array;
 }

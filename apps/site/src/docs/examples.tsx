@@ -17,6 +17,7 @@ import {
   geomText,
   geomTile,
   geomVline,
+  execution,
   ggplot,
   labels,
   scaleColorViridis,
@@ -98,13 +99,13 @@ export const histogramStatBin: DocExample = {
   dslSource: `const data = await loadStaticDataset("mpg");
 ggplot(data, { x: "displ" })
   .add(geomHistogram({ bins: 18, fill: "#3b82f6" }))
-  .add(theme({ resident: false }))
+  .add(execution({ resident: false }))
   .build();`,
   dataSource: { id: "mpg" },
   buildSpec: (data) =>
     ggplot(data, { x: "displ" })
       .add(geomHistogram({ bins: 18, fill: "#3b82f6" }))
-      .add(theme({ resident: false }))
+      .add(execution({ resident: false }))
       .build(),
 };
 

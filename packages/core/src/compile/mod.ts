@@ -1,9 +1,13 @@
 // Pipeline orchestration. Lowering, coordinate, guide, and facet details live in focused modules.
-import type { GGSpec } from "../ir/types.ts";
+import type { AesName, GGSpec } from "../ir/types.ts";
 import { node, type RenderNode } from "./rendertree.ts";
 import { applyStat } from "../stat/mod.ts";
-import { trainScales } from "../scale/mod.ts";
-import { facetCellLayouts } from "./facet_layout.ts";
+import { trainScales, type TrainedScale } from "../scale/mod.ts";
+import {
+  facetPanelGeometry,
+  facetPanelGuideOverlays,
+  facetStripLabelNodes,
+} from "./facet_layout.ts";
 
 import { GEOM_REGISTRY, lowerLayer } from "../geom/mod.ts";
 import type { LayerContext } from "../geom/mod.ts";
@@ -14,7 +18,6 @@ import {
   legendNodes,
   plotLabelNodes,
   type TextMeasurer,
-  themeFaceProps,
 } from "./guides.ts";
 import { buildFacetPanels } from "./facets.ts";
 import {
@@ -122,6 +125,27 @@ export function compile(
     ? { ...yScale, domain: yDomain }
     : yScale;
 
+  // One trained-scale record keyed by aesthetic, shared by guide layout,
+  // legends, and each panel's LayerContext. The non-position scales are
+  // plot-wide; `guideScales` carries the guide (widened-domain) x/y for axis
+  // and legend layout, while each panel spreads `aestheticScales` over its own
+  // (possibly free-scaled) x/y when building its LayerContext.
+  const aestheticScales = {
+    color: colorScale,
+    fill: fillScale,
+    size: sizeScale,
+    alpha: alphaScale,
+    shape: shapeScale,
+    linetype: linetypeScale,
+    linewidth: linewidthScale,
+    stroke: strokeScale,
+  };
+  const guideScales: Partial<Record<AesName, TrainedScale>> = {
+    x: xGuideScale,
+    y: yGuideScale,
+    ...aestheticScales,
+  };
+
   // ④ coord → view component
   // "axes" is a swizzle string applied to Cartesian/Polar's output after the
   // range-to-clip-space matrix is built — the same trait on both view
@@ -140,17 +164,7 @@ export function compile(
     theme,
     labels,
     spec.mapping,
-    xGuideScale,
-    yGuideScale,
-    [
-      colorScale,
-      fillScale,
-      sizeScale,
-      alphaScale,
-      shapeScale,
-      linetypeScale,
-      linewidthScale,
-    ],
+    guideScales,
   );
 
   /** Build one panel's Cartesian/Polar view node (guides + this panel's marks). */
@@ -192,14 +206,7 @@ export function compile(
       scales: {
         x: panelXScale,
         y: panelYScale,
-        color: colorScale,
-        fill: fillScale,
-        size: sizeScale,
-        alpha: alphaScale,
-        shape: shapeScale,
-        linetype: linetypeScale,
-        linewidth: linewidthScale,
-        stroke: strokeScale,
+        ...aestheticScales,
       },
       theme,
       xDomain: panelXDomain,
@@ -409,6 +416,16 @@ export function compile(
           tickCount,
         ),
         ...plotLabelNodes(labels, theme),
+        // A fill/color-mapped resident bar chart trains a discrete fill scale
+        // exactly like the CPU path; emit the same legend so a standalone
+        // resident view shows the swatches its bar colors correspond to.
+        ...legendNodes(
+          guideScales,
+          labels,
+          theme,
+          panelBounds,
+          options.layout?.width,
+        ),
       ]);
     }
     return node("Embedded", { normalize: true }, [
@@ -433,13 +450,7 @@ export function compile(
         : []),
       ...plotLabelNodes(labels, theme),
       ...legendNodes(
-        colorScale,
-        fillScale,
-        sizeScale,
-        alphaScale,
-        shapeScale,
-        linetypeScale,
-        linewidthScale,
+        guideScales,
         labels,
         theme,
         panelBounds,
@@ -451,11 +462,6 @@ export function compile(
   // A faceted plot keeps one outer Embedded/Plot reconciler. FacetGrid applies
   // a normalized PanelViewport matrix to each transparent FacetPanel group,
   // so all cell marks and plot-level text share one virtual-layer submission.
-  //
-  // Strip Labels live in the plot-level overlay rather than a cell Embedded:
-  // cell-local glyph bindings are zero-sized in UseGPU's nested font layout.
-  // Their normalized positions are derived from the panel row/column, so they
-  // remain independent of each panel's trained data domain.
   const embeds = panels.map((_panel, i) => {
     // Empty crossed combinations still receive the same panel field, guides,
     // and axes; only their mark list is empty. This keeps the visual grid
@@ -464,95 +470,14 @@ export function compile(
   });
   const facetGap = theme.panelSpacing ?? 24;
   const facetStripHeight = theme.stripHeight ?? 24;
-  const facetWidth = Math.max(
-    (options.layout?.width ?? 800) * (panelBounds[2] - panelBounds[0]) / 2,
-    1,
-  );
-  const facetHeight = Math.max(
-    (options.layout?.height ?? 600) * (panelBounds[3] - panelBounds[1]) / 2,
-    1,
-  );
-  const facetLayouts = facetCellLayouts(
-    facetWidth,
-    facetHeight,
+  const facetGeometry = facetPanelGeometry(
+    panelBounds,
     nrow,
     ncol,
     facetGap,
     facetStripHeight,
+    options.layout,
   );
-  const stripLabels = panels.filter((panel) => panel.label).map((panel) => {
-    const strip = facetLayouts[panel.row * ncol + panel.col].strip;
-    const x = panelBounds[0] + (strip[0] + strip[2]) / 2 / facetWidth *
-        (panelBounds[2] - panelBounds[0]);
-    const y = panelBounds[1] + (strip[1] + strip[3]) / 2 / facetHeight *
-        (panelBounds[3] - panelBounds[1]);
-    const stripWidth = strip[2] - strip[0];
-    const stripSize = Math.max(
-      8,
-      Math.min(
-        theme.fontSize ?? 13,
-        stripWidth / Math.max(panel.label.length * 0.62, 1),
-      ),
-    );
-    return node("Label", {
-      positions: [[x, y]],
-      labels: [panel.label],
-      color: theme.textColor ?? "#0b0b0b",
-      size: stripSize,
-      zBias: 2,
-      ...themeFaceProps(theme),
-    });
-  });
-  const freeMode = spec.facet.scales ?? "fixed";
-  const panelTickCount = Math.max(2, Math.ceil(tickCount / ncol));
-  const panelGuideOverlays = panels.map((panel, i) => {
-    const rect = facetLayouts[panel.row * ncol + panel.col].panel;
-    const bounds: [number, number, number, number] = [
-      panelBounds[0] + rect[0] / facetWidth * (panelBounds[2] - panelBounds[0]),
-      panelBounds[1] +
-      rect[1] / facetHeight * (panelBounds[3] - panelBounds[1]),
-      panelBounds[0] + rect[2] / facetWidth * (panelBounds[2] - panelBounds[0]),
-      panelBounds[1] +
-      rect[3] / facetHeight * (panelBounds[3] - panelBounds[1]),
-    ];
-    const localScales = freeMode === "fixed"
-      ? scales
-      : trainScales(spec, panelLayers[i]);
-    const localX = freeMode === "free" || freeMode === "free_x"
-      ? localScales.get("x")
-      : xGuideScale;
-    const localY = freeMode === "free" || freeMode === "free_y"
-      ? localScales.get("y")
-      : yGuideScale;
-    const hasPanelBelow = panels.some((other) =>
-      other.col === panel.col && other.row > panel.row
-    );
-    const horizontalTicks = freeMode === "free" || freeMode === "free_x" ||
-      !hasPanelBelow;
-    const verticalTicks = freeMode === "free" || freeMode === "free_y" ||
-      panel.col === 0;
-    return axisGuideOverlay(
-      labels,
-      spec.mapping,
-      theme,
-      localX,
-      localY,
-      project,
-      bounds,
-      panelTickCount,
-      {
-        horizontalTicks,
-        verticalTicks,
-        titles: false,
-        width: options.layout?.width,
-        height: options.layout?.height,
-        tickSize: Math.max(
-          8,
-          Math.min((theme.fontSize ?? 13) - 2, facetWidth / ncol / 18),
-        ),
-      },
-    );
-  });
   return node("Embedded", { normalize: true }, [
     node("FacetGrid", {
       nrow,
@@ -562,8 +487,22 @@ export function compile(
       axisPolicy: spec.facet.scales ?? "fixed",
       bounds: panelBounds,
     }, embeds),
-    ...stripLabels,
-    ...panelGuideOverlays,
+    ...facetStripLabelNodes(panels, facetGeometry, panelBounds, ncol, theme),
+    ...facetPanelGuideOverlays(panels, facetGeometry, {
+      spec,
+      panelLayers,
+      scales,
+      xGuideScale,
+      yGuideScale,
+      labels,
+      mapping: spec.mapping,
+      theme,
+      project,
+      bounds: panelBounds,
+      tickCount,
+      ncol,
+      layout: options.layout,
+    }),
     axisGuideOverlay(
       labels,
       spec.mapping,
@@ -577,13 +516,7 @@ export function compile(
     ),
     ...plotLabelNodes(labels, theme),
     ...legendNodes(
-      colorScale,
-      fillScale,
-      sizeScale,
-      alphaScale,
-      shapeScale,
-      linetypeScale,
-      linewidthScale,
+      guideScales,
       labels,
       theme,
       panelBounds,

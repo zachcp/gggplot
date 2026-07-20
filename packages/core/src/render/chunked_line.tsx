@@ -45,55 +45,24 @@
 // pattern, satisfying the node-split rule); solid (no dash) lines never
 // touch MaterialContext and render exactly as before.
 
-import * as Live from "@use-gpu/live";
-import * as Workbench from "@use-gpu/workbench";
 import type { LiveElement } from "@use-gpu/live";
 import { wgsl } from "@use-gpu/shader/wgsl";
 import { getWorldScale } from "@use-gpu/wgsl/use/view.wgsl";
 import type { FlatTensor, MarkTopology } from "../compile/rendertree.ts";
 import { withMarkAttribution } from "./gpu_instrument.ts";
-
-// The public Workbench barrel exports these with broad generic signatures;
-// a small structural adapter is clearer at this boundary (same convention as
-// render/rotated_label.tsx and runtime/resident_bar.tsx).
-const { createElement, provide, useMemo } = Live as unknown as {
-  createElement: (type: unknown, props: Record<string, unknown>) => LiveElement;
-  provide: (
-    context: unknown,
-    value: unknown,
-    calls: LiveElement,
-  ) => LiveElement;
-  useMemo: <T>(fn: () => T, deps: readonly unknown[]) => T;
-};
-const {
+import {
+  createElement,
   LineLayer,
+  MaterialContext,
+  provide,
   useLineSegmentsSource,
-  useRawTensorSource,
+  useMaterialContext,
+  useMemo,
   useNoRawTensorSource,
+  useRawTensorSource,
   useShader,
   useShaderRef,
-  useMaterialContext,
-  MaterialContext,
-} = Workbench as unknown as {
-  LineLayer: unknown;
-  useLineSegmentsSource: (
-    args: { chunks: Uint32Array; groups: null; loops: boolean },
-  ) => { count: number; segments: unknown };
-  useRawTensorSource: (data: {
-    array: Float32Array;
-    format: string;
-    size: number[];
-    version: number;
-  }) => unknown;
-  useNoRawTensorSource: () => void;
-  useShader: (shader: unknown, values: unknown[]) => unknown;
-  useShaderRef: (value: unknown) => unknown;
-  useMaterialContext: () => {
-    solid: Record<string, unknown>;
-    [key: string]: unknown;
-  };
-  MaterialContext: unknown;
-};
+} from "../runtime/usegpu_compat.ts";
 
 const MAX_DASH_SEGMENTS = 4;
 

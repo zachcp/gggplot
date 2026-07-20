@@ -1,6 +1,10 @@
 /** @jsxRuntime classic */
 /** @jsx createElement */
-// A standalone auto-domain Cartesian view for the first resident histogram.
+// A standalone auto-x-domain Cartesian view for the resident tile grid: a dense
+// [group, bin] heatmap strip (x = binned continuous axis, y = factor group
+// row). Unlike the histogram view it needs no stacked-maximum summary — the y
+// range is simply the group-row count the tile kernel emits (y0=group,
+// y1=group+1) — so it resolves only the x domain before mounting.
 
 import type { LiveElement } from "@use-gpu/live";
 import type { TypedDataFrame } from "../data/mod.ts";
@@ -11,11 +15,13 @@ import {
   type ResidentDomainProduct,
   ResidentDomainProvider,
 } from "./resident_domain_live.tsx";
-import { paletteToRgbaF32, ResidentHistogramBars } from "./resident_bar.tsx";
+import { paletteToRgbaF32 } from "./resident_bar.tsx";
+import { ResidentHistogramTiles } from "./resident_tile.tsx";
 import {
   type ResidentHistogramProduct,
   ResidentHistogramProvider,
 } from "./resident_live.tsx";
+import { histogramRange } from "./resident_view.tsx";
 import type { GPUStorageSource } from "./types.ts";
 import {
   Axis,
@@ -26,75 +32,28 @@ import {
   useMemo,
 } from "./usegpu_compat.ts";
 
-export function histogramRange(min: number, max: number): [number, number] {
-  return min === max ? [min - 0.5, max + 0.5] : [min, max];
-}
-
-export interface ResidentHistogramViewProps {
+export interface ResidentTileViewProps {
   data: TypedDataFrame;
   x: string;
   group?: string;
   options: ResidentHistogramOptions;
   color: string;
   opacity?: number;
-  /** Factor-level hex colors (level order) for a fill/color-mapped bar layer. */
+  /** Factor-level hex colors (level order) for a fill/color-mapped group axis. */
   paletteColors?: string[];
   axes: string;
   theme: Theme;
 }
 
-interface AwaitDomainProps extends Omit<ResidentHistogramViewProps, "data"> {
+interface AwaitTileDomainProps extends Omit<ResidentTileViewProps, "data"> {
   xSource: GPUStorageSource;
   groupSource?: GPUStorageSource;
   domain: ResidentDomainProduct;
 }
 
-interface AwaitSummaryProps extends Omit<AwaitDomainProps, "domain"> {
-  product: ResidentHistogramProduct;
-  xRange: [number, number];
-}
-
-const AwaitSummaryView = (
-  { product, xRange, color, opacity, axes, theme }: AwaitSummaryProps,
-): LiveElement => {
-  const [summary, error] = useAwait(() => product.readSummary(), [
-    product.summary.version,
-  ]);
-  if (error) throw error;
-  if (!summary) return null as never;
-  const yRange: [number, number] = [0, Math.max(1, summary.stackedMaximum)];
-  const guides = [
-    theme.grid === false ? null : createElement(Grid, {
-      axes,
-      width: theme.gridWidth ?? 1,
-      zBias: -1,
-      ...(theme.gridColor ? { color: theme.gridColor } : {}),
-    }),
-    createElement(Axis, {
-      axis: "x",
-      width: theme.axisWidth ?? 2,
-      zBias: 0,
-      ...(theme.axisColor ? { color: theme.axisColor } : {}),
-    }),
-    createElement(Axis, {
-      axis: "y",
-      width: theme.axisWidth ?? 2,
-      zBias: 0,
-      ...(theme.axisColor ? { color: theme.axisColor } : {}),
-    }),
-    createElement(ResidentHistogramBars, {
-      product,
-      color,
-      opacity,
-      colors: product.barColors,
-    }),
-  ].filter(Boolean);
-  return createElement(Cartesian, { range: [xRange, yRange], axes }, ...guides);
-};
-
-const AwaitDomainView = (
+const AwaitTileDomainView = (
   { domain, xSource, groupSource, options, color, opacity, axes, theme }:
-    AwaitDomainProps,
+    AwaitTileDomainProps,
 ): LiveElement => {
   const [bounds, error] = useAwait(() => domain.readDomain(), [
     domain.domain.version,
@@ -107,26 +66,47 @@ const AwaitDomainView = (
     hi: bounds.max,
     autoDomain: undefined,
   } as never;
+  const groupsCount = Math.max(1, options.groupsCount ?? 1);
+  const xRange = histogramRange(bounds.min, bounds.max);
+  const yRange: [number, number] = [0, groupsCount];
   return createElement(ResidentHistogramProvider, {
     x: xSource,
     group: groupSource,
     options: resolved,
-    children: (product: ResidentHistogramProduct) =>
-      createElement(AwaitSummaryView, {
-        product,
-        xRange: histogramRange(bounds.min, bounds.max),
-        color,
-        opacity,
-        axes,
-        theme,
-      }),
+    children: (product: ResidentHistogramProduct) => {
+      const guides = [
+        theme.grid === false ? null : createElement(Grid, {
+          axes,
+          width: theme.gridWidth ?? 1,
+          zBias: -1,
+          ...(theme.gridColor ? { color: theme.gridColor } : {}),
+        }),
+        createElement(Axis, {
+          axis: "x",
+          width: theme.axisWidth ?? 2,
+          ...(theme.axisColor ? { color: theme.axisColor } : {}),
+        }),
+        createElement(Axis, {
+          axis: "y",
+          width: theme.axisWidth ?? 2,
+          ...(theme.axisColor ? { color: theme.axisColor } : {}),
+        }),
+        createElement(ResidentHistogramTiles, {
+          product,
+          color,
+          opacity,
+          colors: product.barColors,
+        }),
+      ].filter(Boolean);
+      return createElement(Cartesian, { range: [xRange, yRange], axes }, ...guides);
+    },
   });
 };
 
-/** Awaits bounded domain/summary products before mounting Cartesian and guides. */
-export const ResidentHistogramView = (
+/** Awaits the bounded x domain before mounting the tile grid and guides. */
+export const ResidentTileView = (
   { data, x, group, options, color, opacity, paletteColors, axes, theme }:
-    ResidentHistogramViewProps,
+    ResidentTileViewProps,
 ): LiveElement => {
   const palette = useMemo(
     () =>
@@ -137,7 +117,6 @@ export const ResidentHistogramView = (
     () => (palette ? { ...options, palette } : options),
     [options, palette],
   );
-  options = viewOptions;
   const fields = [
     { name: x, dtype: "f32", shape: "row", dimensions: ["row"] },
     ...(group
@@ -151,11 +130,11 @@ export const ResidentHistogramView = (
       createElement(ResidentDomainProvider, {
         x: sources[x],
         children: (domain: ResidentDomainProduct) =>
-          createElement(AwaitDomainView, {
+          createElement(AwaitTileDomainView, {
             domain,
             xSource: sources[x],
             groupSource: group ? sources[group] : undefined,
-            options,
+            options: viewOptions,
             color,
             opacity,
             axes,

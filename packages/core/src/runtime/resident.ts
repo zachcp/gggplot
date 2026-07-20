@@ -17,12 +17,16 @@ export interface MountedHistogramSourceOptions {
   /** Declared GPU bar-grid layout; no CPU count-row materialization. */
   position?: "identity" | "stack" | "dodge" | "fill";
   groupsCount?: number;
+  /** Per-group RGBA palette (length groupsCount*4, 0..1) for on-GPU bar colors. */
+  palette?: Float32Array;
 }
 
 export interface MountedCountSourceOptions {
   valuesCount: number;
   groupsCount: number;
   position: "identity" | "stack" | "dodge" | "fill";
+  /** Per-group RGBA palette (length groupsCount*4, 0..1) for on-GPU bar colors. */
+  palette?: Float32Array;
 }
 
 export function createMountedResidentCount1D(
@@ -88,6 +92,7 @@ export function histogramSourceInput(
     binwidth: options.binwidth,
     groupsCount: options.groupsCount ?? 1,
     position: options.position,
+    palette: options.palette,
   };
 }
 

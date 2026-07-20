@@ -2,6 +2,7 @@
 // source. This is the literal "transpiler": ggplot spec in, UseGPU JSX out.
 
 import type { ComponentName, RenderNode } from "../compile/rendertree.ts";
+import { facetCellLayouts } from "../compile/facet_layout.ts";
 
 const PLOT_IMPORTS: ComponentName[] = [
   "Plot",
@@ -28,10 +29,19 @@ const FACET_PANEL_SOURCE = `
 const FacetPanel = ({ children }: any): any => createElement(Fragment, {}, children);
 `;
 
+// The emitted FacetGrid embeds the COMPILED facetCellLayouts function itself
+// (gggplot-q24): the grid math exists exactly once, in compile/facet_layout.ts,
+// and the generated module can never drift from the live FacetGrid in
+// render/GGPlot.tsx, which calls the same function. toString() yields the
+// runtime's transpiled (type-stripped) JS, which is valid inside the emitted
+// .tsx module and keeps it standalone.
 const FACET_GRID_SOURCE = `
 // Not a real @use-gpu/plot export -- divides the ambient LayoutContext pixel
 // rect into an nrow x ncol grid and applies a normalized PanelViewport matrix
-// while all panels share the outer Embedded/Plot reconciler.
+// while all panels share the outer Embedded/Plot reconciler. Cell rectangles
+// come from the embedded facetCellLayouts, the same function the live
+// backend's FacetGrid uses.
+${facetCellLayouts.toString()}
 const FacetGrid = ({ nrow, ncol, gap = 24, stripHeight = 24, bounds = [-1, -1, 1, 1], children }: any): any => {
   const kids = Array.isArray(children) ? children : children != null ? [children] : [];
   const [left, top, right, bottom] = useContext(LayoutContext);
@@ -39,27 +49,21 @@ const FacetGrid = ({ nrow, ncol, gap = 24, stripHeight = 24, bounds = [-1, -1, 1
   const hostHeight = Math.max(bottom - top, 1);
   const width = hostWidth * (bounds[2] - bounds[0]) / 2;
   const height = hostHeight * (bounds[3] - bounds[1]) / 2;
-  const cellWidth = Math.max(0, (width - gap * (ncol - 1)) / ncol);
-  const cellHeight = Math.max(0, (height - gap * (nrow - 1)) / nrow);
-  const strip = Math.min(Math.max(0, stripHeight), cellHeight);
-  const cells = createElement(
+  const layouts = facetCellLayouts(width, height, nrow, ncol, gap, stripHeight);
+  return createElement(
     Fragment,
     {},
     ...kids.map((child, i) => {
-      const row = Math.floor(i / ncol);
-      const col = i % ncol;
-      const x0 = col * (cellWidth + gap);
-      const y0 = row * (cellHeight + gap) + strip;
+      const panel = layouts[i].panel;
       const cellBounds = [
-        bounds[0] + x0 / width * (bounds[2] - bounds[0]),
-        bounds[1] + y0 / height * (bounds[3] - bounds[1]),
-        bounds[0] + (x0 + cellWidth) / width * (bounds[2] - bounds[0]),
-        bounds[1] + (row * (cellHeight + gap) + cellHeight) / height * (bounds[3] - bounds[1]),
+        bounds[0] + panel[0] / width * (bounds[2] - bounds[0]),
+        bounds[1] + panel[1] / height * (bounds[3] - bounds[1]),
+        bounds[0] + panel[2] / width * (bounds[2] - bounds[0]),
+        bounds[1] + panel[3] / height * (bounds[3] - bounds[1]),
       ];
       return createElement(PanelViewport, { bounds: cellBounds }, child);
     }),
   );
-  return cells;
 };
 `;
 

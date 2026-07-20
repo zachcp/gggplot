@@ -12,6 +12,7 @@
     "build": "deno task --cwd apps/site build",
     "preview": "deno task --cwd apps/site preview",
     "check": "deno check packages/core/src/mod.ts && deno check packages/3d/src/mod.ts && deno check packages/mark/src/mod.ts && deno task --cwd apps/site check",
+    "test": "deno test -A packages/core/tests/ packages/reductions/tests/ packages/3d/tests/ packages/mark/tests/",
     "check:core": "deno check packages/core/src/mod.ts",
     "check:site": "deno task --cwd apps/site check",
     "demo": "deno run packages/core/examples/emit-demo.ts",

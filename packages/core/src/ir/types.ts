@@ -259,6 +259,21 @@ export interface PlotLabels {
   [key: string]: string | undefined;
 }
 
+/**
+ * Spec-level execution policy — how the plot may be executed, not how it
+ * looks. Typed home for what was previously a stringly `theme.resident` key
+ * smuggled through Theme's index signature (gggplot-4se).
+ */
+export interface ExecutionPolicy {
+  /**
+   * false → never lower eligible layers to GPU-resident products; the CPU
+   * compiler stays authoritative (e.g. to keep computed stat rows
+   * inspectable). Host-level gating lives on CompileOptions.resident;
+   * this is the per-spec opt-out, serialized with the spec.
+   */
+  resident?: boolean;
+}
+
 /** The complete plot specification — input to compile(). */
 export interface GGSpec {
   data: DataFrame;
@@ -269,4 +284,5 @@ export interface GGSpec {
   facet: Facet;
   labels: PlotLabels;
   theme: Theme;
+  execution?: ExecutionPolicy;
 }

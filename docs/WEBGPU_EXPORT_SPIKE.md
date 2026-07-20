@@ -1,5 +1,7 @@
 # Deterministic WebGPU plot export spike
 
+**Status: historical (spike complete).** Export findings are reflected in `EXPORTING.md` and `export/png.ts`.
+
 Date: 2026-07-17
 
 ## Result

@@ -1,5 +1,7 @@
 # WGPU `stat_bin` Spike
 
+**Status: historical (spike complete).** The proven grouped stat_bin kernel shipped as `packages/reductions/src/gpu/resident_histogram.ts`; see `RESIDENCY_MATRIX.md` for the live eligibility gates.
+
 This closes the narrow spike tracked by `gggplot-vmv`: prove the grouped
 histogram kernel shape for `stat_bin` without changing the public stat API.
 
