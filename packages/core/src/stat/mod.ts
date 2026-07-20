@@ -9,7 +9,9 @@ import {
   statUniqueProduct,
   statWaffleProduct,
 } from "./binning.ts";
-import { statQuantileProduct, statSmooth, statSummary } from "./smoothing.ts";
+import { statSmooth } from "./smoothing.ts";
+import { statQuantileProduct } from "./quantile.ts";
+import { statSummary } from "./summary.ts";
 import {
   statBin2d,
   statBoxplot,
@@ -19,13 +21,15 @@ import {
 } from "./distributions.ts";
 import {
   statConnectProduct,
-  statContour,
-  statContourFilled,
-  statDensity2dProduct,
   statEllipse,
   statFunctionProduct,
   statQqProduct,
 } from "./analytic.ts";
+import {
+  statContour,
+  statContourFilled,
+  statDensity2dProduct,
+} from "./contours.ts";
 import { type StatFn, statIdentity, type StatResult } from "./shared.ts";
 import { statAlign } from "./alignment.ts";
 
@@ -40,8 +44,11 @@ export {
 export * from "./shared.ts";
 export * from "./binning.ts";
 export * from "./smoothing.ts";
+export * from "./quantile.ts";
+export * from "./summary.ts";
 export * from "./distributions.ts";
 export * from "./analytic.ts";
+export * from "./contours.ts";
 export * from "./alignment.ts";
 
 const REGISTRY: Record<Layer["stat"], StatFn> = {

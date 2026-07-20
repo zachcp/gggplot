@@ -54,10 +54,19 @@ Deno.test("every public geom constructor has a live documentation example", asyn
     );
   }
 
-  const sources = await Promise.all([
-    Deno.readTextFile(new URL("./examples.tsx", import.meta.url)),
-    Deno.readTextFile(new URL("./geom_examples.tsx", import.meta.url)),
-  ]);
+  // Scan every DocExample source module in this directory, not just the two
+  // barrels, so the coverage check keeps working as example files are split.
+  const docsDir = new URL("./", import.meta.url);
+  const sourceNames: string[] = [];
+  for await (const entry of Deno.readDir(docsDir)) {
+    if (entry.isFile && entry.name.endsWith(".tsx")) {
+      sourceNames.push(entry.name);
+    }
+  }
+  sourceNames.sort();
+  const sources = await Promise.all(
+    sourceNames.map((name) => Deno.readTextFile(new URL(name, docsDir))),
+  );
   const ids = sources.flatMap((source) =>
     [...source.matchAll(/\bid:\s*"([A-Z][A-Za-z0-9]+)"/g)].map((match) =>
       match[1]
