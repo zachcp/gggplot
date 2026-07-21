@@ -4,7 +4,9 @@
   "exports": {
     ".": "./src/mod.ts",
     "./plan": "./src/plan/mod.ts",
-    "./export": "./src/export/png.ts"
+    "./export": "./src/export/png.ts",
+    "./geom_3d": "./src/geom_3d/mod.ts",
+    "./geom_3d/render": "./src/geom_3d/render.tsx"
   },
   "imports": {
     "@gggplot/reductions": "../reductions/src/mod.ts",

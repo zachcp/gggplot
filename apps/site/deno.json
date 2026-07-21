@@ -12,6 +12,8 @@
     "react/jsx-runtime": "npm:react@^18.3.1/jsx-runtime",
     "react-dom": "npm:react-dom@^18.3.1",
     "react-dom/client": "npm:react-dom@^18.3.1/client",
+    "@gggplot/core/geom_3d/render": "../../packages/core/src/geom_3d/render.tsx",
+    "@gggplot/core/geom_3d": "../../packages/core/src/geom_3d/mod.ts",
     "@gggplot/core": "../../packages/core/src/mod.ts",
     "@gggplot/3d": "../../packages/3d/src/mod.ts",
     "@use-gpu/core": "npm:@use-gpu/core@^0.20.0",

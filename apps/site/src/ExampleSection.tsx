@@ -108,7 +108,7 @@ export function ExampleSection({
   );
 }
 
-function Panel(
+export function Panel(
   { title, children }: { title: string; children: React.ReactNode },
 ) {
   return (
