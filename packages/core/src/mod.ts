@@ -34,6 +34,10 @@ export {
   GEOM_REGISTRY,
   type GeomDefinition,
   type GeomDocMeta,
+  type GeomMode,
+  type PlotDimension,
+  resolvePlotDimension,
+  selectGeomMode,
 } from "./geom/mod.ts";
 
 // Backends

@@ -253,23 +253,40 @@ export function legendNodes(
 }
 
 /** Root-overlay title-family text; axis labels stage with their view guides. */
+/**
+ * Plot-level text in the flat guide space, where **y grows DOWNWARD**: -1 is
+ * the top edge and +1 the bottom. That is the same convention `guideLayout`
+ * uses (it maps the TOP margin onto `-1 + 2*topPx/height`) and that
+ * `axisGuideOverlay` relies on when it places x tick labels — which sit low on
+ * a chart — at the numerically larger `panelBounds[3]`.
+ *
+ * Title and subtitle therefore belong at NEGATIVE y and the caption at
+ * positive. They were inverted until gggplot-4q2.11 put the first plot title on
+ * screen (via the 3D overlay) and showed the title rendering along the bottom.
+ */
 export function plotLabelNodes(labels: PlotLabels, theme: Theme): RenderNode[] {
   const nodes: RenderNode[] = [];
   if (labels.title) {
     nodes.push(
-      labelNode(-0.92, 0.92, [labels.title], theme, (theme.fontSize ?? 14) + 4),
+      labelNode(
+        -0.92,
+        -0.92,
+        [labels.title],
+        theme,
+        (theme.fontSize ?? 14) + 4,
+      ),
     );
   }
   if (labels.subtitle) {
     nodes.push(
-      labelNode(-0.92, 0.84, [labels.subtitle], theme, theme.fontSize ?? 14),
+      labelNode(-0.92, -0.84, [labels.subtitle], theme, theme.fontSize ?? 14),
     );
   }
   if (labels.caption) {
     nodes.push(
       labelNode(
         -0.92,
-        -0.92,
+        0.92,
         [labels.caption],
         theme,
         Math.max((theme.fontSize ?? 13) - 1, 8),
@@ -278,7 +295,7 @@ export function plotLabelNodes(labels: PlotLabels, theme: Theme): RenderNode[] {
   }
   if (labels.tag) {
     nodes.push(
-      labelNode(0.92, 0.92, [labels.tag], theme, theme.fontSize ?? 14),
+      labelNode(0.92, -0.92, [labels.tag], theme, theme.fontSize ?? 14),
     );
   }
   return nodes;

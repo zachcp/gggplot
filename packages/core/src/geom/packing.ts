@@ -104,6 +104,63 @@ export interface PackedMarkRows {
   alphas?: FlatTensor;
 }
 
+export interface PackPoints3dInput {
+  xs: number[];
+  ys: number[];
+  zs: number[];
+  colors?: string[];
+  sizes?: number[];
+  alphas?: number[];
+}
+
+export interface PackedPoints3d {
+  mask: Uint8Array;
+  positions: FlatTensor;
+  colors?: FlatTensor;
+  sizes?: FlatTensor;
+}
+
+/** Shared row-mask packing widened to homogeneous vec4 [x,y,z,1]. */
+export function packPoints3d(input: PackPoints3dInput): PackedPoints3d {
+  const { xs, ys, zs, colors, sizes, alphas } = input;
+  const length = Math.min(xs.length, ys.length, zs.length);
+  const mask = new Uint8Array(length);
+  let kept = 0;
+  for (let row = 0; row < length; row++) {
+    if (
+      Number.isFinite(xs[row]) && Number.isFinite(ys[row]) &&
+      Number.isFinite(zs[row])
+    ) {
+      mask[row] = 1;
+      kept++;
+    }
+  }
+  const array = new Float32Array(kept * 4);
+  let output = 0;
+  for (let row = 0; row < length; row++) {
+    if (!mask[row]) continue;
+    array[output * 4] = xs[row];
+    array[output * 4 + 1] = ys[row];
+    array[output * 4 + 2] = zs[row];
+    array[output * 4 + 3] = 1;
+    output++;
+  }
+  const positions: FlatTensor = {
+    array,
+    format: "vec4",
+    dims: 4,
+    length: kept,
+    size: [kept],
+    version: 0,
+  };
+  return {
+    mask,
+    positions,
+    ...(colors ? { colors: packColorsRGBA(colors, mask, alphas) } : {}),
+    ...(sizes ? { sizes: packScalar(sizes, mask) } : {}),
+  };
+}
+
 /**
  * SOURCE-ROW SELECTION: the sole mask builder. Computes one retained-row
  * mask (finite x AND finite y — matching the drop semantics geom_line
@@ -291,7 +348,14 @@ export function concatFlatTensors(tensors: FlatTensor[]): FlatTensor {
     array.set(t.array, offset * dims);
     offset += t.length;
   }
-  return { array, format, dims, length: totalLength, size: [totalLength], version: 0 };
+  return {
+    array,
+    format,
+    dims,
+    length: totalLength,
+    size: [totalLength],
+    version: 0,
+  };
 }
 
 /**

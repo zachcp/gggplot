@@ -10,6 +10,7 @@
 import {
   createElement,
   Fragment,
+  makeContext,
   provide,
   useAwait,
   useContext,
@@ -27,24 +28,30 @@ import {
   Point,
   Polar,
   Polygon,
+  Tick,
 } from "@use-gpu/plot";
 import {
+  FlatCamera,
   FontLoader,
   LayoutContext,
   MatrixContext,
+  OrbitCamera,
+  Pass,
   TransformContext,
   useCombinedMatrixTransform,
   useDeviceContext,
   useFontContext,
   useNoDeviceContext,
 } from "@use-gpu/workbench";
+import { OrbitControls } from "@use-gpu/interact";
 import { RangeContext } from "@use-gpu/plot/mjs/providers/range-provider.mjs";
 import { mat4 } from "gl-matrix";
 import { resolveResidentProduct } from "../runtime/mod.ts";
 import type { ComponentName, RenderNode } from "../compile/rendertree.ts";
 import type { FlatTensor } from "../compile/rendertree.ts";
-import type { GGSpec } from "../ir/types.ts";
+import type { Camera3D, GGSpec } from "../ir/types.ts";
 import { compile, createPackCache } from "../compile/mod.ts";
+import { cameraNearOrigin3d } from "../compile/guides_3d.ts";
 import { RotatedLabel } from "./rotated_label.tsx";
 import { ChunkedLine } from "./chunked_line.tsx";
 import { ChunkedFace } from "./chunked_face.tsx";
@@ -263,6 +270,218 @@ export const FacetGrid = (props: FacetGridProps) => {
   return cells;
 };
 
+interface CameraOrbitState {
+  bearing: number;
+  pitch: number;
+}
+
+const CameraOrbitContext = makeContext<CameraOrbitState>(
+  { bearing: 0, pitch: 0 },
+  "CameraOrbitContext",
+);
+
+const axisIndex3d = (axis: string): 0 | 1 | 2 =>
+  axis === "x" ? 0 : axis === "y" ? 1 : 2;
+
+/** Keep the complete axis guide on the camera-near cube edge while orbiting. */
+export const CameraAxis3D = (props: Record<string, unknown>) => {
+  const { bearing, pitch } = useContext(CameraOrbitContext);
+  const axis = props.axis as "x" | "y" | "z";
+  const axisIndex = axisIndex3d(axis);
+  const domains = props.domains as [
+    [number, number],
+    [number, number],
+    [number, number],
+  ];
+  const range = props.range as [number, number];
+  const values = props.values as number[];
+  const origin = cameraNearOrigin3d(domains, bearing, pitch);
+  const positions = values.map((value) => {
+    const position: [number, number, number, number] = [...origin, 1];
+    position[axisIndex] = value;
+    return position;
+  });
+  const offsetIndex = axis === "y" ? 0 : 1;
+  const offsetSign = origin[offsetIndex] === domains[offsetIndex][0] ? -1 : 1;
+  const offset = [0, 0, 0, 0];
+  offset[offsetIndex] = offsetSign;
+  const spacing = positions.length > 1
+    ? (range[1] - range[0]) / (positions.length - 1)
+    : 1;
+  const tangent = [0, 0, 0, 0];
+  tangent[axisIndex] = spacing;
+  const labelOffset = axis === "y" ? [offsetSign * 7, 0] : [0, offsetSign * 7];
+  const titleDistance = 5 + Number(props.fontSize) * 2.5;
+  const titleOffset = axis === "y"
+    ? [offsetSign * titleDistance, 0]
+    : [0, offsetSign * titleDistance];
+  const labelFace = {
+    ...(props.family ? { family: props.family } : {}),
+    ...(props.weight ? { weight: props.weight } : {}),
+    ...(props.style ? { style: props.style } : {}),
+  };
+  const titlePosition: [number, number, number, number] = [...origin, 1];
+  titlePosition[axisIndex] = (range[0] + range[1]) / 2;
+  return createElement(
+    Fragment,
+    {},
+    createElement(Axis, {
+      axis,
+      origin,
+      range,
+      color: props.axisColor,
+      width: props.axisWidth,
+      zBias: 0,
+    }),
+    positions.length
+      ? createElement(Tick, {
+        positions,
+        offset,
+        tangent,
+        size: 5,
+        color: props.axisColor,
+        width: props.axisWidth,
+        depth: 0,
+        zBias: 1,
+      })
+      : null,
+    positions.length
+      ? createElement(Label, {
+        positions,
+        labels: props.labels,
+        color: props.textColor,
+        size: props.tickSize,
+        depth: 0,
+        placement: props.placement,
+        offset: labelOffset,
+        zBias: 2,
+        ...labelFace,
+      })
+      : null,
+    props.title
+      ? createElement(Label, {
+        position: titlePosition,
+        label: props.title,
+        color: props.textColor,
+        size: props.fontSize,
+        depth: 0,
+        placement: props.placement,
+        offset: titleOffset,
+        zBias: 2,
+        ...labelFace,
+      })
+      : null,
+  );
+};
+
+/** RenderTree's two-branch 3D wrapper: scene first, flat overlay second. */
+export const Scene3D = (
+  { camera, children, interactive = true }: {
+    camera: Camera3D;
+    interactive?: boolean;
+    children?: unknown[] | unknown;
+  },
+) => {
+  const kids = Array.isArray(children)
+    ? children
+    : children != null
+    ? [children]
+    : [];
+  const scene = kids[0] ?? null;
+  const overlay = kids[1] ?? null;
+  const cameraScene = !interactive
+    ? createElement(
+      OrbitCamera,
+      {
+        radius: camera.radius,
+        bearing: camera.bearing,
+        pitch: camera.pitch,
+        target: camera.target,
+        fov: camera.fov,
+        near: camera.near,
+        far: camera.far,
+      },
+      createElement(
+        Pass,
+        {},
+        provide(
+          CameraOrbitContext,
+          { bearing: camera.bearing, pitch: camera.pitch },
+          scene as never,
+        ),
+      ),
+    )
+    : createElement(
+      OrbitControls,
+      {
+        radius: camera.radius,
+        bearing: camera.bearing,
+        pitch: camera.pitch,
+        target: camera.target,
+      },
+      (
+        radius: number,
+        bearing: number,
+        pitch: number,
+        target: ArrayLike<number>,
+      ) =>
+        createElement(
+          OrbitCamera,
+          {
+            radius,
+            bearing,
+            pitch,
+            target,
+            fov: camera.fov,
+            near: camera.near,
+            far: camera.far,
+          },
+          createElement(
+            Pass,
+            {},
+            provide(CameraOrbitContext, { bearing, pitch }, scene as never),
+          ),
+        ),
+    );
+  return createElement(
+    Fragment,
+    {},
+    cameraScene,
+    createElement(
+      FlatCamera,
+      {},
+      createElement(Pass, { overlay: true }, overlay as never),
+    ),
+  );
+};
+
+/** vec4 point tensors need the explicit WGSL source format used by use.gpu. */
+const PointNode = (props: Record<string, unknown>) => {
+  const positions = props.positions as FlatTensor | undefined;
+  const markSource = (tensor: FlatTensor): Record<string, unknown> => ({
+    ...tensor,
+    format: tensor.format === "vec4"
+      ? "vec4<f32>"
+      : tensor.format === "vec2"
+      ? "vec2<f32>"
+      : "f32",
+  });
+  return createElement(Point, {
+    ...props,
+    ...(positions?.dims === 4
+      ? {
+        positions: markSource(positions),
+        ...(props.colors
+          ? { colors: markSource(props.colors as FlatTensor) }
+          : {}),
+        ...(props.sizes
+          ? { sizes: markSource(props.sizes as FlatTensor) }
+          : {}),
+      }
+      : {}),
+  });
+};
+
 // deno-lint-ignore no-explicit-any
 const REGISTRY: Partial<Record<ComponentName, any>> = {
   Plot,
@@ -270,8 +489,11 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
   Cartesian,
   Polar,
   Axis,
+  Tick,
   Grid,
-  Point,
+  GuideLines: Line,
+  CameraAxis3D,
+  Point: PointNode,
   Line,
   Polygon,
   // ChunkedLine (gggplot-tzc.3) is NOT a @use-gpu/plot export — see
@@ -306,6 +528,7 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
   FacetPanel: Fragment,
   PanelViewport,
   RadialViewport,
+  Scene3D,
 };
 
 /** Mark-tensor prop names carried by Point-family RenderNodes (see
@@ -353,12 +576,16 @@ export function renderTree(n: RenderNode): unknown {
 
 export interface GGPlotProps {
   spec: GGSpec;
+  /** Disable runtime controls for static export hosts that have no event context. */
+  interactive?: boolean;
   /** Compatibility shorthand; prefer fontResources for readiness/validation. */
   fonts?: FontFaceResource[];
   fontResources?: FontResources;
 }
 
-const GlyphMeasuredPlot = ({ spec }: { spec: GGSpec }) => {
+const GlyphMeasuredPlot = (
+  { spec, interactive = true }: { spec: GGSpec; interactive?: boolean },
+) => {
   const rustText = useFontContext();
   const measureText = useMemo(
     () => createGlyphTextMeasurer(rustText),
@@ -393,10 +620,11 @@ const GlyphMeasuredPlot = ({ spec }: { spec: GGSpec }) => {
     useOne(() => {
       installGpuInstrumentation(device);
       if (typeof window !== "undefined") {
-        (window as unknown as Record<string, unknown>).__gggplotGpuInstrument = {
-          getCounters: getGpuMarkCounters,
-          reset: resetGpuMarkCounters,
-        };
+        (window as unknown as Record<string, unknown>).__gggplotGpuInstrument =
+          {
+            getCounters: getGpuMarkCounters,
+            reset: resetGpuMarkCounters,
+          };
       }
       return true;
     });
@@ -413,7 +641,10 @@ const GlyphMeasuredPlot = ({ spec }: { spec: GGSpec }) => {
     [spec, width, height, measureText],
   );
   // deno-lint-ignore no-explicit-any
-  return renderTree(tree) as any;
+  const renderedTree = tree.component === "Scene3D"
+    ? { ...tree, props: { ...tree.props, interactive } }
+    : tree;
+  return renderTree(renderedTree) as any;
 };
 
 /**
@@ -426,7 +657,9 @@ const GlyphMeasuredPlot = ({ spec }: { spec: GGSpec }) => {
  * SDFFontProvider, which throws if no FontContext ancestor exists. Text
  * renders visibly when the host supplies real font sources.
  */
-export const GGPlot = ({ spec, fonts, fontResources }: GGPlotProps) => {
+export const GGPlot = (
+  { spec, interactive, fonts, fontResources }: GGPlotProps,
+) => {
   const resources = useMemo(
     () => fontResources ?? (fonts?.length ? createFontResources(fonts) : null),
     [fontResources, fonts],
@@ -447,6 +680,6 @@ export const GGPlot = ({ spec, fonts, fontResources }: GGPlotProps) => {
   return createElement(
     FontLoader,
     { fonts: resources?.faces ?? fonts },
-    createElement(GlyphMeasuredPlot, { spec }) as any,
+    createElement(GlyphMeasuredPlot, { spec, interactive }) as any,
   );
 };

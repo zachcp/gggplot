@@ -5,6 +5,18 @@
 // data with no UseGPU or DOM dependencies.
 
 import type { TypedDataFrame } from "../data/mod.ts";
+import type { Camera3D } from "./camera.ts";
+export {
+  camera3DFromLookAt,
+  DEFAULT_CAMERA_3D,
+  resolveCamera3D,
+} from "./camera.ts";
+export type {
+  Camera3D,
+  Camera3DOptions,
+  CameraVec3,
+  LookAtCamera3D,
+} from "./camera.ts";
 
 /**
  * Column-oriented data frame carried through the semantic pipeline. Numeric
@@ -164,6 +176,10 @@ export interface Scale {
    * expansion(mult, add). Off (no padding) unless set.
    */
   expand?: [number, number];
+  /** Explicit guide breaks in data space. These take precedence over nBreaks. */
+  breaks?: unknown[];
+  /** Preferred number of automatically generated guide breaks. */
+  nBreaks?: number;
   guide?: Guide;
 }
 
@@ -175,22 +191,17 @@ export interface Guide {
 
 export type CoordKind = "cartesian" | "polar";
 
-/** A position aesthetic — the only kind a coord projection can assign to a physical axis. */
-export type PositionAxis = "x" | "y";
+/** A grammar-visible position aesthetic; homogeneous w is never exposed. */
+export type PositionAxis = "x" | "y" | "z";
 
 export interface Coord {
   kind: CoordKind;
   /**
-   * Which position aesthetic renders along which physical axis:
-   * [first, second] = [horizontal axis for cartesian, or angle/theta for
-   * polar; vertical axis for cartesian, or radius for polar]. Defaults to
-   * ["x", "y"]. `coordFlip()` is sugar for a cartesian coord with
-   * `project: ["y", "x"]`; the same swap on a polar coord reassigns theta to
-   * y instead of x (ggplot2's `coord_polar(theta = "y")`), generalizing what
-   * used to be a cartesian-only "flip" coord kind into one projection model
-   * shared by every coord kind.
+   * Output-axis swizzle. 2D specs use "xy"/"yx"; 3D widening accepts a
+   * permutation of "xyz" and pins homogeneous w internally. `coordFlip()` and
+   * `coordPolar({theta:"y"})` are sugar for axes:"yx".
    */
-  project?: [PositionAxis, PositionAxis];
+  axes?: string;
   params?: Record<string, unknown>;
 }
 
@@ -222,6 +233,10 @@ export interface Theme {
   gridWidth?: number;
   axisColor?: string;
   axisWidth?: number;
+  /** Set false to omit axis rules, ticks, and tick labels. Default true. */
+  axes?: boolean;
+  /** Set false to omit axis titles while retaining axes/ticks. Default true. */
+  axisTitles?: boolean;
   /** CSS-pixel gap between facet cells. */
   panelSpacing?: number;
   /** CSS-pixel height reserved for each facet strip. */
@@ -250,6 +265,7 @@ export interface PlotLabels {
   tag?: string;
   x?: string;
   y?: string;
+  z?: string;
   color?: string;
   fill?: string;
   size?: string;
@@ -284,5 +300,7 @@ export interface GGSpec {
   facet: Facet;
   labels: PlotLabels;
   theme: Theme;
+  /** One plot-wide serialized initial view; meaningful only for a 3D plot. */
+  camera?: Camera3D;
   execution?: ExecutionPolicy;
 }

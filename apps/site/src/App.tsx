@@ -209,57 +209,55 @@ export function App() {
             />
           ))}
 
-          {activePage.threeD
-            ? (
+          {(activePage.threeD ?? []).map((threeD) => (
+            <section
+              key={threeD.id}
+              data-doc-example={threeD.id}
+              style={styles.example}
+            >
+              <div style={styles.exampleHeader}>
+                <div style={styles.exampleIndex}>3D</div>
+                <div>
+                  <h3 style={styles.exampleTitle}>{threeD.title}</h3>
+                  <p style={styles.exampleDescription}>
+                    {threeD.description}
+                  </p>
+                </div>
+              </div>
+              <div style={styles.detailGrid}>
+                <Panel title="Lowered node">
+                  <p style={styles.metaCopy}>{threeD.summary}</p>
+                </Panel>
+              </div>
               <section
-                data-doc-example={activePage.threeD.id}
-                style={styles.example}
+                style={{
+                  ...styles.grid,
+                  ...(compact ? styles.gridCompact : {}),
+                }}
               >
-                <div style={styles.exampleHeader}>
-                  <div style={styles.exampleIndex}>3D</div>
-                  <div>
-                    <h3 style={styles.exampleTitle}>
-                      {activePage.threeD.title}
-                    </h3>
-                    <p style={styles.exampleDescription}>
-                      {activePage.threeD.description}
-                    </p>
-                  </div>
-                </div>
-                <div style={styles.detailGrid}>
-                  <Panel title="Lowered node">
-                    <p style={styles.metaCopy}>{activePage.threeD.summary}</p>
-                  </Panel>
-                </div>
-                <section
-                  style={{
-                    ...styles.grid,
-                    ...(compact ? styles.gridCompact : {}),
-                  }}
-                >
-                  <Panel title="ggplot3d DSL (sketch)">
-                    <pre style={styles.pre}>{activePage.threeD.dslSource}</pre>
-                  </Panel>
-                  <Panel title="live WebGPU render (3D)">
-                    <ChartCanvas3D
-                      spec={activePage.threeD.spec}
-                      label={activePage.threeD.description}
-                    />
-                    <p style={styles.note}>
-                      Requires a WebGPU browser. Positions are data-space vec4;
-                      the perspective camera projects them on the GPU.
-                    </p>
-                  </Panel>
-                </section>
-                <details style={styles.details}>
-                  <summary style={styles.summary}>
-                    Emitted UseGPU source
-                  </summary>
-                  <pre style={styles.pre}>{activePage.threeD.emitted}</pre>
-                </details>
+                <Panel title="ggplot 3D spec">
+                  <pre style={styles.pre}>{threeD.dslSource}</pre>
+                </Panel>
+                <Panel title="live WebGPU render (3D)">
+                  <ChartCanvas3D
+                    spec={threeD.spec}
+                    label={threeD.description}
+                  />
+                  <p style={styles.note}>
+                    Requires a WebGPU browser. Drag to orbit. Positions are
+                    data-space vec4; the perspective camera projects them on the
+                    GPU.
+                  </p>
+                </Panel>
               </section>
-            )
-            : null}
+              <details style={styles.details}>
+                <summary style={styles.summary}>
+                  Emitted UseGPU source
+                </summary>
+                <pre style={styles.pre}>{threeD.emitted}</pre>
+              </details>
+            </section>
+          ))}
         </main>
       </div>
     </div>

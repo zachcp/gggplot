@@ -1,12 +1,8 @@
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { ggsave, type GgSaveOptions, pngDimensions } from "@gggplot/core";
-import {
-  ggsavePointCloud,
-  POINT_CLOUD_EXTENSION_ID,
-  type PointCloudSpec,
-} from "@gggplot/3d";
 import { scatterLine } from "./docs/examples.tsx";
+import { helix3dSpec } from "./docs/example_3d.ts";
 import { InstrumentProbe } from "./InstrumentProbe.tsx";
 
 declare global {
@@ -22,23 +18,6 @@ declare global {
 const exportProbeMode = new URLSearchParams(location.search).get(
   "export-probe",
 );
-const pointCloudProbe: PointCloudSpec = {
-  extension: POINT_CLOUD_EXTENSION_ID,
-  data: {
-    x: [-0.8, -0.3, 0.2, 0.7, 0],
-    y: [-0.5, 0.55, -0.25, 0.4, 0],
-    z: [0.4, -0.1, 0.8, -0.5, 0],
-    color: ["#ef4444", "#22c55e", "#3b82f6", "#f59e0b", "#a855f7"],
-    size: [18, 22, 26, 30, 34],
-  },
-  mapping: { x: "x", y: "y", z: "z", color: "color", size: "size" },
-  camera: {
-    projection: "perspective",
-    position: [0, 0, 3],
-    target: [0, 0, 0],
-    aspect: 1.6,
-  },
-};
 if (exportProbeMode) {
   const probe = async (width: number, height: number, physical = false) => {
     const before = [...document.querySelectorAll("canvas")].map((canvas) => [
@@ -52,7 +31,7 @@ if (exportProbeMode) {
       backgroundColor: [1, 1, 1, 1],
     };
     const blob = exportProbeMode === "3d"
-      ? await ggsavePointCloud(pointCloudProbe, options)
+      ? await ggsave(helix3dSpec, options)
       : await ggsave(scatterLine.spec!, options);
     const bytes = new Uint8Array(await blob.arrayBuffer());
     return {

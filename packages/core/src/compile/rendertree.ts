@@ -10,7 +10,12 @@ export type ComponentName =
   | "Cartesian"
   | "Polar"
   | "Axis"
+  | "Tick"
   | "Grid"
+  /** Explicit grid segments for irregular authoritative scale breaks. */
+  | "GuideLines"
+  /** Runtime camera-aware x/y/z axis, ticks, labels, and title. */
+  | "CameraAxis3D"
   | "Point"
   | "Line"
   /**
@@ -58,6 +63,8 @@ export type ComponentName =
   | "PanelViewport"
   /** Centers a square viewport inside the host before a Polar view. */
   | "RadialViewport"
+  /** Two-pass 3D scene: child 0 is orbit-camera content, child 1 flat overlay. */
+  | "Scene3D"
   /**
    * Not a real @use-gpu/plot export — a small custom Live component (defined
    * in render/GGPlot.tsx, inlined by emit/mod.ts) that divides the ambient

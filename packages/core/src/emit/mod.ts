@@ -10,6 +10,7 @@ const PLOT_IMPORTS: ComponentName[] = [
   "Cartesian",
   "Polar",
   "Axis",
+  "Tick",
   "Grid",
   "Point",
   "Line",
@@ -17,6 +18,105 @@ const PLOT_IMPORTS: ComponentName[] = [
   "Polygon",
   "Label",
 ];
+
+const SCENE_3D_SOURCE = `
+const CameraOrbitContext = makeContext({ bearing: 0, pitch: 0 }, "CameraOrbitContext");
+const axisIndex3d = (axis: string): 0 | 1 | 2 => axis === "x" ? 0 : axis === "y" ? 1 : 2;
+
+const CameraAxis3D = (props: any): any => {
+  const { bearing, pitch } = useContext(CameraOrbitContext);
+  const axis = props.axis;
+  const axisIndex = axisIndex3d(axis);
+  const { domains, range, values } = props;
+  const direction = [
+    Math.sin(bearing) * Math.cos(pitch),
+    Math.sin(pitch),
+    Math.cos(bearing) * Math.cos(pitch),
+  ];
+  const origin = domains.map((domain: [number, number], index: number) =>
+    direction[index] >= 0 ? domain[1] : domain[0]
+  );
+  const positions = values.map((value: number) => {
+    const position = [...origin, 1];
+    position[axisIndex] = value;
+    return position;
+  });
+  const offsetIndex = axis === "y" ? 0 : 1;
+  const offsetSign = origin[offsetIndex] === domains[offsetIndex][0] ? -1 : 1;
+  const offset = [0, 0, 0, 0];
+  offset[offsetIndex] = offsetSign;
+  const tangent = [0, 0, 0, 0];
+  tangent[axisIndex] = positions.length > 1
+    ? (range[1] - range[0]) / (positions.length - 1)
+    : 1;
+  const labelOffset = axis === "y" ? [offsetSign * 7, 0] : [0, offsetSign * 7];
+  const titleDistance = 5 + props.fontSize * 2.5;
+  const titleOffset = axis === "y"
+    ? [offsetSign * titleDistance, 0]
+    : [0, offsetSign * titleDistance];
+  const face = {
+    ...(props.family ? { family: props.family } : {}),
+    ...(props.weight ? { weight: props.weight } : {}),
+    ...(props.style ? { style: props.style } : {}),
+  };
+  const titlePosition = [...origin, 1];
+  titlePosition[axisIndex] = (range[0] + range[1]) / 2;
+  return createElement(
+    Fragment,
+    {},
+    createElement(Axis, { axis, origin, range, color: props.axisColor, width: props.axisWidth, zBias: 0 }),
+    positions.length ? createElement(Tick, {
+      positions, offset, tangent, size: 5, color: props.axisColor,
+      width: props.axisWidth, depth: 0, zBias: 1,
+    }) : null,
+    positions.length ? createElement(Label, {
+      positions, labels: props.labels, color: props.textColor,
+      size: props.tickSize, depth: 0, placement: props.placement,
+      offset: labelOffset, zBias: 2, ...face,
+    }) : null,
+    props.title ? createElement(Label, {
+      position: titlePosition, label: props.title, color: props.textColor,
+      size: props.fontSize, depth: 0, placement: props.placement,
+      offset: titleOffset, zBias: 2, ...face,
+    }) : null,
+  );
+};
+
+// RenderTree's first child is the camera-space scene; its second is the flat
+// page-furniture overlay. One canonical camera seeds runtime-only controls.
+const Scene3D = ({ camera, children }: any): any => {
+  const kids = Array.isArray(children) ? children : children != null ? [children] : [];
+  const scene = kids[0] ?? null;
+  const overlay = kids[1] ?? null;
+  return createElement(
+    Fragment,
+    {},
+    createElement(
+      OrbitControls,
+      { radius: camera.radius, bearing: camera.bearing, pitch: camera.pitch, target: camera.target },
+      (radius: number, bearing: number, pitch: number, target: any) =>
+        createElement(
+          OrbitCamera,
+          { radius, bearing, pitch, target, fov: camera.fov, near: camera.near, far: camera.far },
+          createElement(
+            Pass,
+            {},
+            provide(CameraOrbitContext, { bearing, pitch }, scene),
+          ),
+        ),
+    ),
+    createElement(FlatCamera, {}, createElement(Pass, { overlay: true }, overlay)),
+  );
+};
+`;
+
+const POINT_3D_SOURCE = `
+// use.gpu's vec4 data trait consumes an explicit WGSL format.
+const Point3D = (props: any): any => createElement(Point, {
+  ...props,
+  positions: { ...props.positions, format: "vec4<f32>" },
+});
+`;
 
 // "FacetGrid" isn't a real @use-gpu/plot export (see rendertree.ts and
 // render/GGPlot.tsx's Live implementation, which this mirrors) — when a
@@ -172,7 +272,9 @@ function serializeValue(value: unknown, indent: string): string {
   if (ArrayBuffer.isView(value) && !(value instanceof DataView)) {
     // Any integer typed array (Uint32Array chunks/indices, etc.).
     const ctor = (value as { constructor: { name: string } }).constructor.name;
-    return `new ${ctor}(${fmtTypedArray(value as unknown as ArrayLike<number>, indent)})`;
+    return `new ${ctor}(${
+      fmtTypedArray(value as unknown as ArrayLike<number>, indent)
+    })`;
   }
   if (Array.isArray(value)) {
     return `[${value.map((v) => serializeValue(v, indent)).join(", ")}]`;
@@ -416,12 +518,16 @@ function emitNode(n: RenderNode, indent: string): string {
   const props = Object.entries(n.props)
     .map(([k, v]) => formatProp(k, v, indent))
     .join(" ");
-  const open = props ? `${n.component} ${props}` : n.component;
+  const component = n.component === "Point" &&
+      (n.props.positions as { dims?: number } | undefined)?.dims === 4
+    ? "Point3D"
+    : n.component;
+  const open = props ? `${component} ${props}` : component;
 
   if (n.children.length === 0) return `${indent}<${open} />`;
 
   const children = n.children.map((c) => emitNode(c, indent + "  ")).join("\n");
-  return `${indent}<${open}>\n${children}\n${indent}</${n.component}>`;
+  return `${indent}<${open}>\n${children}\n${indent}</${component}>`;
 }
 
 /** Collect the plot component names actually used, for a tidy import line. */
@@ -445,10 +551,21 @@ export function emitSource(root: RenderNode, name = "GGChart"): string {
     );
   }
   const all = usedComponents(root);
-  const used = PLOT_IMPORTS.filter((c) => all.has(c));
+  const guideLines = all.has("GuideLines");
+  const cameraAxis3d = all.has("CameraAxis3D");
+  const used = PLOT_IMPORTS.filter((c) =>
+    all.has(c) || (c === "Line" && guideLines) ||
+    (cameraAxis3d && (c === "Axis" || c === "Tick" || c === "Label"))
+  );
   const faceted = all.has("FacetGrid");
   const radial = all.has("RadialViewport");
   const panelViewport = faceted || all.has("PanelViewport");
+  const scene3d = all.has("Scene3D");
+  const point3d = (current: RenderNode): boolean =>
+    (current.component === "Point" &&
+      (current.props.positions as { dims?: number } | undefined)?.dims === 4) ||
+    current.children.some(point3d);
+  const hasPoint3d = point3d(root);
   // gggplot-xc9: ChunkedLine's dash material needs 'provide' (to scope its
   // MaterialContext override to just its own LineLayer) and 'useMemo' (to
   // memoize the dash-uniform/arc-length derivation) from @use-gpu/live, the
@@ -456,11 +573,12 @@ export function emitSource(root: RenderNode, name = "GGChart"): string {
   // reasons — folded into one de-duplicated import list below.
   const chunkedLine = all.has("ChunkedLine");
 
-  const needsContext = faceted || radial || panelViewport;
-  const needsProvideAndMemo = radial || panelViewport || chunkedLine;
+  const needsContext = faceted || radial || panelViewport || cameraAxis3d;
+  const needsProvideAndMemo = radial || panelViewport || chunkedLine || scene3d;
   const liveImportNames = [
     "createElement",
     "Fragment",
+    ...(scene3d ? ["makeContext"] : []),
     ...(needsProvideAndMemo ? ["provide"] : []),
     "useAwait",
     ...(needsContext ? ["useContext"] : []),
@@ -469,6 +587,7 @@ export function emitSource(root: RenderNode, name = "GGChart"): string {
   const liveImports = liveImportNames.join(", ");
   const workbenchImports = [
     "FontLoader",
+    ...(scene3d ? ["FlatCamera", "OrbitCamera", "Pass"] : []),
     ...(faceted || radial ? ["LayoutContext"] : []),
     ...(radial || panelViewport
       ? ["MatrixContext", "TransformContext", "useCombinedMatrixTransform"]
@@ -476,6 +595,9 @@ export function emitSource(root: RenderNode, name = "GGChart"): string {
   ];
   const workbenchImport = workbenchImports.length
     ? `\nimport { ${workbenchImports.join(", ")} } from "@use-gpu/workbench";`
+    : "";
+  const interactImport = scene3d
+    ? `\nimport { OrbitControls } from "@use-gpu/interact";`
     : "";
   // FacetPanel is emitted for ANY tree that carries a FacetPanel node — a
   // single-panel chart still wraps its axis labels in one — so its definition
@@ -487,6 +609,9 @@ export function emitSource(root: RenderNode, name = "GGChart"): string {
   const facetGridDef = faceted ? `\n${FACET_GRID_SOURCE}` : "";
   const radialViewportDef = radial ? `\n${RADIAL_VIEWPORT_SOURCE}` : "";
   const panelViewportDef = panelViewport ? `\n${PANEL_VIEWPORT_SOURCE}` : "";
+  const scene3dDef = scene3d ? `\n${SCENE_3D_SOURCE}` : "";
+  const point3dDef = hasPoint3d ? `\n${POINT_3D_SOURCE}` : "";
+  const guideLinesDef = guideLines ? "\nconst GuideLines = Line;\n" : "";
 
   // ChunkedLine/ChunkedFace are RenderTree mark ComponentNames, NOT
   // @use-gpu/plot exports — inline their standalone definitions (mirroring the
@@ -529,15 +654,17 @@ export function emitSource(root: RenderNode, name = "GGChart"): string {
   // REGISTRY typing render/GGPlot.tsx dispatches through live — so the emitted
   // module type-checks while the runtime import stays @use-gpu/plot as before.
   const plotBindings = used.length
-    ? `\nconst { ${used.join(", ")} } = Plot as unknown as Record<string, any>;`
+    ? `\nconst { ${
+      used.join(", ")
+    } } = PlotComponents as unknown as Record<string, any>;`
     : "";
 
   return `/** @jsxRuntime classic */
 /** @jsx createElement */
 /** @jsxFrag Fragment */
 import { ${liveImports} } from "@use-gpu/live";
-import * as Plot from "@use-gpu/plot";${workbenchImport}${workbenchNamespaceImport}${chunkedLineImport}${plotBindings}
-${FONT_HOST_SOURCE}${facetPanelDef}${facetGridDef}${radialViewportDef}${panelViewportDef}${chunkedDefs}
+import * as PlotComponents from "@use-gpu/plot";${workbenchImport}${interactImport}${workbenchNamespaceImport}${chunkedLineImport}${plotBindings}
+${FONT_HOST_SOURCE}${facetPanelDef}${facetGridDef}${radialViewportDef}${panelViewportDef}${scene3dDef}${point3dDef}${guideLinesDef}${chunkedDefs}
 // Generated by @gggplot/core. Do not edit by hand.
 export const ${name} = ({ fontResources }: any = {}) => (
   <EmittedFontHost fontResources={fontResources}>

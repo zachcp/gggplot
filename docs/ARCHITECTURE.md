@@ -41,8 +41,8 @@ Design rules:
   column-store data and normalizes it with `ingest()` into a `TypedDataFrame`
   (`GGSpec.data`) of typed numeric/factor columns. `asFactor()` and
   `asNumeric()` let callers override inference for numeric-coded categories and
-  numeric strings; `typedArrayForColumn` exposes each column's GPU-ready
-  typed array.
+  numeric strings; `typedArrayForColumn` exposes each column's GPU-ready typed
+  array.
 
 ### The IR (`src/ir/types.ts`)
 
@@ -84,7 +84,7 @@ _lowering_, not a rendering engine.
 | ----------------------------- | ------------------------------------------------------------------------------------------------- |
 | `ggplot()` root               | `<Embedded normalize>` wrapping a view                                                            |
 | `coord_cartesian()`           | `<Cartesian range={[[x0,x1],[y0,y1]]} axes>`                                                      |
-| `coord_flip()`                | `<Cartesian axes="yx">` (`Coord.project: ["y","x"]`)                                              |
+| `coord_flip()`                | `<Cartesian axes="yx">` (`Coord.axes: "yx"`)                                                      |
 | `coord_polar()`               | `<Polar>` plus pre-munched polygon edges; `theta:"y"` reuses the same `axes="yx"` projection swap |
 | `geom_point()`                | `<Point positions colors/sizes shape>`                                                            |
 | `geom_line/path()`            | `<Line positions color/colors width>`                                                             |
@@ -202,12 +202,11 @@ Implemented and tested:
 5. **Scales**: continuous/discrete x/y, log/sqrt transforms, expand/domain
    overrides, independent color/fill palettes, continuous size, alpha training,
    and discrete shape palettes.
-6. **Coords**: cartesian and polar, with a shared `Coord.project` field
-   (`[PositionAxis, PositionAxis]`) generalizing axis assignment — `coordFlip()`
-   and `coordPolar({ theta: "y" })` both reduce to the same `["y","x"]` swap.
-   Polar grids are explicit ring/spoke `Line` guides; polygon marks are
-   subdivided before the nonlinear polar transform so bars/areas can draw curved
-   wedges.
+6. **Coords**: cartesian and polar, with a shared `Coord.axes` swizzle
+   generalizing axis assignment — `coordFlip()` and `coordPolar({ theta: "y" })`
+   both reduce to `"yx"`. Polar grids are explicit ring/spoke `Line` guides;
+   polygon marks are subdivided before the nonlinear polar transform so
+   bars/areas can draw curved wedges.
 7. **Facets**: `facet_wrap` and `facet_grid` partition plot data into fixed
    shared-scale panels using `FacetGrid` and per-panel `Embedded` children.
 8. **Theme**: panel background, grid/axis color and width, grid omission, text
@@ -218,23 +217,21 @@ Implemented and tested:
 10. **Backends**: live WebGPU rendering and emitted UseGPU Live source share the
     same RenderTree.
 
-The GPU-first trajectory and what remains on the CPU (with the reason for
-each deviation) live in one reviewable place: `RESIDENCY_MATRIX.md`. The
-execution model it implements is described in §4 below. In brief, as of the
-current tree:
+The GPU-first trajectory and what remains on the CPU (with the reason for each
+deviation) live in one reviewable place: `RESIDENCY_MATRIX.md`. The execution
+model it implements is described in §4 below. In brief, as of the current tree:
 
-- `GGSpec.data` stores `TypedDataFrame` directly; `typedArrayForColumn`
-  exposes each column's canonical `Float32Array`/`Uint32Array` for GPU
-  lowering. Storing typed `values` with validity masks in place of the boxed
-  arrays is still open.
+- `GGSpec.data` stores `TypedDataFrame` directly; `typedArrayForColumn` exposes
+  each column's canonical `Float32Array`/`Uint32Array` for GPU lowering. Storing
+  typed `values` with validity masks in place of the boxed arrays is still open.
 - Marks pack once into flat `FlatTensor`/`MarkTopology` and bind as stable
   `RawData` sources; the pack cache gives reference-identity reuse so an
   unchanged spec re-renders with zero re-upload. Eligible `stat_bin`/
   `stat_count` bar and tile layers run fully GPU-resident (grid, vertex
-  expansion, per-group palette, bounded summary readback only); everything
-  else is a documented CPU deviation (see the residency matrix).
-- Text/label layout uses a real glyph-measurement pass (`FontResources`),
-  which drives legend boxes, `geom_label` backgrounds, and guide placement.
+  expansion, per-group palette, bounded summary readback only); everything else
+  is a documented CPU deviation (see the residency matrix).
+- Text/label layout uses a real glyph-measurement pass (`FontResources`), which
+  drives legend boxes, `geom_label` backgrounds, and guide placement.
 
 Fine-grained future work remains tracked in beads rather than duplicated here.
 
@@ -243,27 +240,27 @@ Fine-grained future work remains tracked in beads rather than duplicated here.
 ## 4. GPU-native execution model
 
 gggplot stays a high-level grammar-of-graphics DSL, but the live backend
-compiles plot *semantics* into a persistent GPU dataflow rather than compiling
+compiles plot _semantics_ into a persistent GPU dataflow rather than compiling
 rows into JSX value props. The compiler has two explicit execution domains:
 
 ```
-                   control plane (small, CPU)
- GGSpec ──► semantic plan ──► layout + guide metadata
-                  │                    ▲
-                  ▼                    │ compact summaries only
-              GPU execution plan ──────┘
-                  │
-                  ▼
-              data plane (large, GPU)
- raw columns → transforms → groups/stats → mark sources → Use.GPU layers
+                  control plane (small, CPU)
+GGSpec ──► semantic plan ──► layout + guide metadata
+                 │                    ▲
+                 ▼                    │ compact summaries only
+             GPU execution plan ──────┘
+                 │
+                 ▼
+             data plane (large, GPU)
+raw columns → transforms → groups/stats → mark sources → Use.GPU layers
 ```
 
 **The CPU control plane** owns the small, irregular parts of plotting: schema
-inference, factor dictionaries, DSL validation, plot/facet layout, text
-shaping, and guide labels. **The GPU data plane** owns large numeric columns,
-derived fields, reductions, topology, and mark attributes. This is not a plan
-to port every JavaScript function to WGSL — the split is deliberate, and the
-CPU stays a first-class, non-WebGPU backend for compile/emit/tests.
+inference, factor dictionaries, DSL validation, plot/facet layout, text shaping,
+and guide labels. **The GPU data plane** owns large numeric columns, derived
+fields, reductions, topology, and mark attributes. This is not a plan to port
+every JavaScript function to WGSL — the split is deliberate, and the CPU stays a
+first-class, non-WebGPU backend for compile/emit/tests.
 
 ### Two compiler products
 
@@ -280,9 +277,9 @@ CPU stays a first-class, non-WebGPU backend for compile/emit/tests.
   validity masks, derived `ShaderSource`s for transforms and mark accessors,
   persistent scratch/output storage for compute operators, and Use.GPU
   `Point`/`Line`/`Polygon`/`Axis`/`Grid` layers consuming those handles.
-  Resources keep stable identity until their input *version* changes.
+  Resources keep stable identity until their input _version_ changes.
 
-React/Live reconciles source *handles*, not freshly-created vertex arrays on
+React/Live reconciles source _handles_, not freshly-created vertex arrays on
 each render. `GPUPlotRuntime` is the sole hook-owning adapter boundary for
 Use.GPU imports; stats and geoms depend on gggplot's field interfaces, not on
 Use.GPU component props.
@@ -299,8 +296,8 @@ Use.GPU component props.
 - **Every GPU operator has a CPU reference.** CPU and GPU are equivalent
   executors of the same logical schema, factor/group ordering, missing-value
   policy, and output shape; choosing CPU changes residency, not plot semantics.
-  CPU is the fallback for unsupported devices, custom JS functions, and small
-  or view-ineligible data.
+  CPU is the fallback for unsupported devices, custom JS functions, and small or
+  view-ineligible data.
 - **Composable dataflow.** The execution plan is a DAG of typed products, not
   per-layer arrays. One `stat_bin` count grid can feed a bar geom, a tile geom,
   and a compact summary at once; one raw `x/y/groupId` product can feed both a
@@ -315,35 +312,35 @@ A reducer does **not** return a `DataFrame`. It returns typed fields with a
 declared logical shape (e.g. a grouped 1-D histogram is `n: u32[groups, bins]`,
 axes `["group","bin"]`, with empty groups/bins still present) and a residency
 guarantee. Shape is part of correctness: a downstream geom indexes cells
-directly instead of rebuilding sparse rows. Work is demand-driven — GPU
-dispatch begins only at a terminal consumer (a draw, a requested summary, or an
-explicit export). Readback is opt-in and bounded; `materialize()` to a row
-frame is an explicit export/debug boundary, never a live-geom step.
+directly instead of rebuilding sparse rows. Work is demand-driven — GPU dispatch
+begins only at a terminal consumer (a draw, a requested summary, or an explicit
+export). Readback is opt-in and bounded; `materialize()` to a row frame is an
+explicit export/debug boundary, never a live-geom step.
 
 ## 5. Phased trajectory & status
 
 The migration is dependency-ordered; no GPU reducer lands before its semantic
 and mounted-runtime contracts exist. Current status:
 
-1. **Typed columns through the semantic IR** — *done.* `GGSpec.data` and
+1. **Typed columns through the semantic IR** — _done._ `GGSpec.data` and
    `Layer.data` are typed-column objects end-to-end; row/column arrays are
    ingested only at public input boundaries.
-2. **Persistent source-backed marks** — *done.* Final mark attributes lower
-   once into flat typed arrays bound as stable Use.GPU sources and reused
-   across rerenders (the pack cache), with segment topology replacing
-   per-group `Line` nodes where the primitive permits.
-3. **Shader-accessible scales and view updates** — *partial.* Continuous
-   domain→pixel mapping already routes through the view node's `range` prop
-   (a view-only change re-packs nothing); moving continuous transforms and
-   discrete factor/palette lookup into derived shader sources is still open.
-4. **Resident aggregate-to-mark pipelines** — *partial.* Unweighted
-   `stat_bin`/`stat_count` bar and tile layers run fully resident (atomic
-   count grid → on-device vertex expansion, stack/dodge/fill in the vertex
-   pass, bounded summaries only). `bin2d`/density and weighted reductions are
-   open (weighted bin deliberately stays on the deterministic CPU reducer).
-5. **Advanced topology and spatial operators** — *open.* GPU compaction,
-   sort/segment generation, density grids, contours, and polar tessellation
-   land only when profiling shows the prior phase is the bottleneck.
+2. **Persistent source-backed marks** — _done._ Final mark attributes lower once
+   into flat typed arrays bound as stable Use.GPU sources and reused across
+   rerenders (the pack cache), with segment topology replacing per-group `Line`
+   nodes where the primitive permits.
+3. **Shader-accessible scales and view updates** — _partial._ Continuous
+   domain→pixel mapping already routes through the view node's `range` prop (a
+   view-only change re-packs nothing); moving continuous transforms and discrete
+   factor/palette lookup into derived shader sources is still open.
+4. **Resident aggregate-to-mark pipelines** — _partial._ Unweighted
+   `stat_bin`/`stat_count` bar and tile layers run fully resident (atomic count
+   grid → on-device vertex expansion, stack/dodge/fill in the vertex pass,
+   bounded summaries only). `bin2d`/density and weighted reductions are open
+   (weighted bin deliberately stays on the deterministic CPU reducer).
+5. **Advanced topology and spatial operators** — _open._ GPU compaction,
+   sort/segment generation, density grids, contours, and polar tessellation land
+   only when profiling shows the prior phase is the bottleneck.
 
 **Guardrails.** Do not put strings, arbitrary JS callbacks, or the theme system
 in WGSL; do not read GPU results back merely to rebuild a row `DataFrame`; do

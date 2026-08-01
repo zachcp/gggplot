@@ -6,17 +6,14 @@
 import type { Aes, DataFrame, GeomKind, Layer } from "../ir/types.ts";
 import type { RenderNode } from "../compile/rendertree.ts";
 import type { GeomDefinition, GeomDocMeta, LayerContext } from "./types.ts";
+import { resolvePlotDimension as resolveDimension } from "./dimension.ts";
 
 import { lowerPoint } from "./point.ts";
 import { lowerLine } from "./line.ts";
 import { barDomainContribution, barResidentPlan, lowerBar } from "./bar.ts";
 import { areaDomainContribution, lowerArea } from "./area.ts";
 import { lowerPolygon } from "./polygon.ts";
-import {
-  lowerTile,
-  tileDomainContribution,
-  tileResidentPlan,
-} from "./tile.ts";
+import { lowerTile, tileDomainContribution, tileResidentPlan } from "./tile.ts";
 import { lowerHex } from "./hex.ts";
 import { lowerInterval } from "./errorbar.ts";
 import { lowerBoxplot } from "./boxplot.ts";
@@ -31,7 +28,19 @@ import { lowerRug } from "./rug.ts";
 import { lowerBlank } from "./blank.ts";
 import { lowerSmooth } from "./smooth.ts";
 
-export type { GeomDefinition, GeomDocMeta, LayerContext } from "./types.ts";
+export type {
+  GeomDefinition,
+  GeomDocMeta,
+  GeomMode,
+  LayerContext,
+  PlotDimension,
+} from "./types.ts";
+export {
+  effectiveLayerMapping,
+  type PlotDimensionResolution,
+  type ResolvedLayerMode,
+  selectGeomMode,
+} from "./dimension.ts";
 // Helpers consumed by compile/mod.ts, compile/guides.ts, and compile/coordinates.ts.
 export {
   colorWithAlpha,
@@ -58,6 +67,17 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
   point: {
     defaultStat: "identity",
     lower: lowerPoint,
+    dimensionalParams: ["sizeMode"],
+    modes: [
+      { dimensions: 2, requiredPosition: ["x", "y"] },
+      {
+        dimensions: 3,
+        requiredPosition: ["x", "y", "z"],
+        stats: ["identity"],
+        positions: ["identity"],
+        params: { sizeMode: ["constant", "perspective"] },
+      },
+    ],
     doc: doc("Draw points at x/y positions.", ["x", "y"], [
       ...visual,
       "size",
@@ -82,6 +102,15 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
   line: {
     defaultStat: "identity",
     lower: lowerLine,
+    modes: [
+      { dimensions: 2, requiredPosition: ["x", "y"] },
+      {
+        dimensions: 3,
+        requiredPosition: ["x", "y", "z"],
+        stats: ["identity"],
+        positions: ["identity"],
+      },
+    ],
     doc: doc("Connect observations in ascending x order.", ["x", "y"], [
       ...lineVisual,
       "group",
@@ -90,6 +119,15 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
   path: {
     defaultStat: "identity",
     lower: lowerLine,
+    modes: [
+      { dimensions: 2, requiredPosition: ["x", "y"] },
+      {
+        dimensions: 3,
+        requiredPosition: ["x", "y", "z"],
+        stats: ["identity"],
+        positions: ["identity"],
+      },
+    ],
     doc: doc("Connect observations in input order.", ["x", "y"], [
       ...lineVisual,
       "group",
@@ -350,9 +388,17 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
   blank: {
     defaultStat: "identity",
     lower: lowerBlank,
+    contributesDimension: false,
     doc: doc("Train scales without drawing marks.", [], ["x", "y", "group"]),
   },
 };
+
+/** Resolve dimensional modes against the built-in geom registry. */
+export function resolvePlotDimension(
+  spec: import("../ir/types.ts").GGSpec,
+): import("./dimension.ts").PlotDimensionResolution {
+  return resolveDimension(spec, GEOM_REGISTRY);
+}
 
 /** Map one geom layer to its RenderNode(s) — one per group for connected geoms. */
 export function lowerLayer(

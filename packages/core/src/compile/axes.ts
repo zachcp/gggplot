@@ -1,13 +1,7 @@
-import type {
-  Aes,
-  AesName,
-  PlotLabels,
-  PositionAxis,
-  Theme,
-} from "../ir/types.ts";
+import type { Aes, AesName, PlotLabels, Theme } from "../ir/types.ts";
+import type { Axes2D } from "./coordinates.ts";
 import { node, type RenderNode } from "./rendertree.ts";
 import type { TrainedScale } from "../scale/mod.ts";
-import { linspace } from "./coordinates.ts";
 import {
   labelFor,
   labelNode,
@@ -23,15 +17,85 @@ const DEFAULT_PANEL_BOUNDS: [number, number, number, number] = [
   0.68,
 ];
 
-function axisTickValues(
+/**
+ * Break values for one axis. Exported so in-scene 3D guides generate ticks
+ * the same way the 2D overlay does —
+ * duplicating the rule would let 2D and 3D drift apart, and it keeps
+ * gggplot-42n (grid lines vs labelled breaks) a single-point fix.
+ */
+export function axisTickValues(
   scale: TrainedScale | undefined,
   count = 5,
 ): unknown[] {
   if (!scale) return [];
+  if (scale.breaks) return scale.breaks;
+  count = scale.nBreaks ?? count;
   if (scale.kind === "discrete") return scale.domain as string[];
   const [lo, hi] = scale.domain as [number, number];
   if (lo === hi) return [lo];
-  return linspace([lo, hi], count);
+  return prettyBreaks(lo, hi, count);
+}
+
+/**
+ * Human-friendly decimal breaks contained by (or negligibly outside) a
+ * continuous domain. The small endpoint tolerance turns sampled extrema such
+ * as -0.9992 into the intended -1 break without widening ordinary domains.
+ */
+export function prettyBreaks(lo: number, hi: number, count = 5): number[] {
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return [];
+  if (lo === hi || count <= 1) return [lo];
+  if (lo > hi) [lo, hi] = [hi, lo];
+
+  const rawStep = (hi - lo) / Math.max(1, count - 1);
+  const power = 10 ** Math.floor(Math.log10(rawStep));
+  const fraction = rawStep / power;
+  const niceFraction = fraction <= 1
+    ? 1
+    : fraction <= 2
+    ? 2
+    : fraction <= 2.5
+    ? 2.5
+    : fraction <= 5
+    ? 5
+    : 10;
+  const step = niceFraction * power;
+  const tolerance = step * 0.01;
+  const first = Math.ceil((lo - tolerance) / step);
+  const last = Math.floor((hi + tolerance) / step);
+  if (first > last) return [lo, hi];
+  return Array.from(
+    { length: last - first + 1 },
+    (_, index) => Number(((first + index) * step).toPrecision(14)),
+  );
+}
+
+export interface GridDivision {
+  range: [number, number];
+  props: { nice: false; divide: number };
+}
+
+/**
+ * Convert shared breaks to use.gpu Grid's scale vocabulary when it can
+ * represent them exactly. Irregular/custom breaks return null so callers can
+ * emit explicit lines instead.
+ */
+export function gridDivision(values: readonly unknown[]): GridDivision | null {
+  const breaks = values.filter((value): value is number =>
+    typeof value === "number" && Number.isFinite(value)
+  );
+  if (breaks.length !== values.length || breaks.length < 2) return null;
+  const step = breaks[1] - breaks[0];
+  if (!(step > 0)) return null;
+  const tolerance = Math.abs(step) * 1e-9;
+  if (
+    breaks.some((value, index) =>
+      Math.abs(value - (breaks[0] + index * step)) > tolerance
+    )
+  ) return null;
+  return {
+    range: [breaks[0], breaks[breaks.length - 1]],
+    props: { nice: false, divide: breaks.length - 1 },
+  };
 }
 
 export function guideLayout(
@@ -185,7 +249,8 @@ function axisTickPosition(
     : lo + (Number(value) - domainLo) / (domainHi - domainLo) * (hi - lo);
 }
 
-const tickLabel = (value: unknown): string =>
+/** Shared by 2D and 3D guides so break labels remain identical. */
+export const tickLabel = (value: unknown): string =>
   typeof value === "number"
     ? String(Number(value.toPrecision(4)))
     : String(value);
@@ -197,7 +262,7 @@ export function axisGuideOverlay(
   theme: Theme,
   xScale: TrainedScale | undefined,
   yScale: TrainedScale | undefined,
-  project: [PositionAxis, PositionAxis],
+  axes: Axes2D,
   panelBounds: [number, number, number, number],
   tickCount: number,
   options: {
@@ -210,8 +275,8 @@ export function axisGuideOverlay(
   } = {},
 ): RenderNode {
   const [left, bottom, right, top] = panelBounds;
-  const horizontal = project[0];
-  const vertical = project[1];
+  const horizontal = axes[0] as "x" | "y";
+  const vertical = axes[1] as "x" | "y";
   const horizontalScale = horizontal === "x" ? xScale : yScale;
   const verticalScale = vertical === "y" ? yScale : xScale;
   const horizontalValues = axisTickValues(horizontalScale, tickCount);

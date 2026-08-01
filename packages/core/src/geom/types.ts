@@ -11,6 +11,7 @@ import type {
   DataFrame,
   GGSpec,
   Layer,
+  PositionAxis,
   PositionKind,
   StatKind,
   Theme,
@@ -23,7 +24,10 @@ import type { TextMeasurer } from "../compile/guides.ts";
 export interface LayerContext {
   /** Trained scales keyed by aesthetic — replaces 8 positional scale params. */
   scales: Partial<Record<AesName, TrainedScale>>;
+  /** Canonical position domains, including z for 3D modes. */
+  domains: Partial<Record<PositionAxis, [number, number]>>;
   theme: Theme;
+  /** 2D compatibility conveniences; new shared lowering should use domains. */
   xDomain: [number, number];
   yDomain: [number, number];
   panelPixels: { width: number; height: number };
@@ -48,8 +52,11 @@ export interface ResidentProductProps {
 
 /** Inputs a domainContribution hook needs to widen a panel's trained x/y domains. */
 export interface DomainContributionCtx {
+  scales: Partial<Record<PositionAxis, TrainedScale>>;
+  domains: Partial<Record<PositionAxis, [number, number]>>;
   xScale?: TrainedScale;
   yScale?: TrainedScale;
+  zScale?: TrainedScale;
   xDomain: [number, number];
   yDomain: [number, number];
 }
@@ -61,6 +68,21 @@ export interface GeomDocMeta {
   ggplot2Equivalent?: string;
 }
 
+export type PlotDimension = 2 | 3;
+
+/** One dimensional realization exposed behind a public geom definition. */
+export interface GeomMode {
+  dimensions: PlotDimension;
+  /** Position aesthetics that must be mapped for this realization. */
+  requiredPosition: readonly AesName[];
+  /** Omit to preserve the geom's ordinary stat surface. */
+  stats?: readonly StatKind[];
+  /** Omit to preserve the geom's ordinary position surface. */
+  positions?: readonly PositionKind[];
+  /** Allowed values for params whose validity differs by dimensional mode. */
+  params?: Readonly<Record<string, readonly unknown[]>>;
+}
+
 export interface GeomDefinition {
   /** Serializable reference metadata consumed by documentation tooling only. */
   doc: GeomDocMeta;
@@ -68,6 +90,15 @@ export interface GeomDefinition {
   defaultStat: StatKind;
   /** Default position used by the DSL layer builder (default "identity"). */
   defaultPosition?: PositionKind;
+  /**
+   * Public dimensional realizations. Omit for an ordinary 2D-only geom.
+   * Shared geoms declare both modes without growing a second GeomKind.
+   */
+  modes?: readonly GeomMode[];
+  /** Params that must be accepted by the selected mode rather than globally. */
+  dimensionalParams?: readonly string[];
+  /** False for scale-training-only layers such as geomBlank. */
+  contributesDimension?: boolean;
   /** Lower one geom layer to its RenderNode(s) — one per group for connected geoms. */
   lower(
     layer: Layer,
@@ -89,7 +120,7 @@ export interface GeomDefinition {
     mapping: Aes,
     data: DataFrame,
     ctx: DomainContributionCtx,
-  ): { x?: [number, number]; y?: [number, number] } | undefined;
+  ): Partial<Record<PositionAxis, [number, number]>> | undefined;
   /**
    * Optional per-geom GPU-resident capability declaration. When compile() is
    * asked for resident lowering (CompileOptions.resident), it consults this

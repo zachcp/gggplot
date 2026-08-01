@@ -62,6 +62,20 @@ Current core call sites live in `packages/core/src/stat/mod.ts`:
 `groupedBoxplot1d`, `groupedDensity1d`, and `groupedHistogram2d` are ready for
 future grammar work, but no public geom/stat calls them yet.
 
+## 3D boundary
+
+The current 3D point, line, and path modes do not require new reducers: mapping
+`z` changes position and rendering, not their statistical product. Existing 2D
+reducers may produce a surface height or a glyph positioned at z without
+becoming a distinct 3D reduction.
+
+No `groupedHistogram3d`, volumetric density, or isosurface reducer is added yet.
+Those products need an explicit voxel/volume grammar, occlusion and scale
+semantics, and a renderer capable of consuming the result without compulsory
+CPU readback. Once that contract exists, its canonical CPU reference and
+GPU-resident implementation belong in this package under the same parity rules
+as the current reducers.
+
 ## CPU/GPU Boundary
 
 The CPU reducers are the canonical reference. GPU reducers are allowed to be

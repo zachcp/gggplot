@@ -1,8 +1,19 @@
 # Design: 3D geoms in core (`core/src/geom_3d`)
 
-**Status: design spike (`gggplot-4q2.1`).** Proposal for review — no
-implementation has landed. Supersedes the "3D is a separate extension package"
-posture of `ADR_002` (see §7).
+> Historical design spike. The parallel `core/src/geom_3d` implementation was
+> retired by `gggplot-4q2.13`; see [MIGRATING_3D_API.md](MIGRATING_3D_API.md)
+> for the unified `GGSpec`/`compile`/`GGPlot`/`emitSource` API. The superseded
+> `packages/3d` CPU-projection extension was retired by `gggplot-4q2.5`.
+
+**Status: design spike (`gggplot-4q2.1`).** Supersedes the "3D is a separate
+extension package" posture of `ADR_002` (see §7).
+
+**Scope note:** this file covers the **data** path (pack → lower → render →
+emit), which has landed. Everything 3D adds that the 2D grammar has no analog
+for — transforms, cameras, depth/occlusion, mark sizing, 3D guides — is
+deliberately _not_ settled here; see **`DESIGN_3D_CONSIDERATIONS.md`**
+(`gggplot-4q2.8`) for that open planning work. Several behaviours in the shipped
+slice are accidental rather than designed and are audited there.
 
 ## 1. Goal and constraints
 
@@ -90,11 +101,11 @@ if it proves to be the same shape.
 
 ## 6. Camera as a coord
 
-`Coord` today is
-`{ kind: "cartesian"|"polar", project:[PositionAxis,PositionAxis] }` with
-`PositionAxis = "x"|"y"`. For 3D:
+`Coord` uses `{ kind: "cartesian"|"polar", axes?: string }`, with `"xy"` and
+`"yx"` as the 2D swizzles and `PositionAxis = "x"|"y"|"z"`. For 3D:
 
-- add `"z"` to `PositionAxis`;
+- validate `Coord.axes` as a permutation of `xyz` (homogeneous `w` stays
+  internal);
 - model the camera as a coord — either a new `CoordKind` (`"cartesian3d"`) or a
   `camera` param block on a cartesian coord:
   `{ projection, position, target,
@@ -109,17 +120,18 @@ if it proves to be the same shape.
 
 `ADR_002` scoped 3D as a _separate extension package_ behind the plan registry,
 to keep core's `GeomKind`/renderer 2D. Bringing 3D into core reverses that for
-the **geom/render** boundary while keeping the extension registry itself (still
-demonstrated by whatever remains of `packages/3d`). This doc supersedes that
-part of ADR_002; `gggplot-4q2.5` will update the ADR and decide `packages/3d`'s
-fate (fold `camera.ts` in; retire or thin-shim the PointCloud extension).
+the **geom/render** boundary while keeping the extension registry itself (now
+covered by synthetic core conformance tests). This doc superseded that part of
+ADR_002; `gggplot-4q2.5` amended the ADR and retired `packages/3d` rather than
+preserve its parallel spec, camera, CPU projection, and emitter.
 
 ## 8. Reductions
 
 3D stats that are heavy and griddable (3D binning/voxel density, 3D KDE for
 `ImplicitSurface`) belong in `packages/reductions` next to the 1D/2D reducers,
 following the CPU-reference-then-resident pattern. Out of scope for the first
-geom; tracked in `gggplot-4q2.3`/`.5`.
+geom. `gggplot-4q2.5` added no reducer: a true volumetric grammar/render product
+must be specified first; see `REDUCTIONS_COMPONENTS.md`.
 
 ## 9. First slice (`gggplot-4q2.2`)
 
@@ -139,7 +151,8 @@ reducers, `packages/3d` migration) follows once this slice validates the shape.
 - **B. RESOLVED (2026-07-20):** camera lives as an optional `camera` param block
   on a **cartesian** coord (no new `CoordKind`), lowering to a view·projection
   `mat4` pushed into `MatrixContext`.
-- **C.** How much of `packages/3d` to keep — deferred to `gggplot-4q2.5`.
+- **C. RESOLVED (2026-08-01):** retire `packages/3d`; retain the independently
+  tested generic extension registry.
 - **D.** DSL ergonomics (`geomPoint3d`, `coordCamera`/`scaleZ` naming) — settle
   as the DSL surface lands.
 

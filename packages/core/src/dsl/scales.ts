@@ -10,6 +10,10 @@ export const scaleYContinuous = (opts: Partial<Scale> = {}): SpecPart => ({
   tag: "scale",
   value: { aes: "y", kind: "continuous", ...opts },
 });
+export const scaleZContinuous = (opts: Partial<Scale> = {}): SpecPart => ({
+  tag: "scale",
+  value: { aes: "z", kind: "continuous", ...opts },
+});
 export const scaleXDiscrete = (opts: Partial<Scale> = {}): SpecPart => ({
   tag: "scale",
   value: { aes: "x", kind: "discrete", ...opts },
@@ -17,6 +21,10 @@ export const scaleXDiscrete = (opts: Partial<Scale> = {}): SpecPart => ({
 export const scaleYDiscrete = (opts: Partial<Scale> = {}): SpecPart => ({
   tag: "scale",
   value: { aes: "y", kind: "discrete", ...opts },
+});
+export const scaleZDiscrete = (opts: Partial<Scale> = {}): SpecPart => ({
+  tag: "scale",
+  value: { aes: "z", kind: "discrete", ...opts },
 });
 export const scaleXLog10 = (opts: Partial<Scale> = {}): SpecPart => ({
   tag: "scale",
@@ -26,6 +34,10 @@ export const scaleYLog10 = (opts: Partial<Scale> = {}): SpecPart => ({
   tag: "scale",
   value: { aes: "y", kind: "log", ...opts },
 });
+export const scaleZLog10 = (opts: Partial<Scale> = {}): SpecPart => ({
+  tag: "scale",
+  value: { aes: "z", kind: "log", ...opts },
+});
 export const scaleXSqrt = (opts: Partial<Scale> = {}): SpecPart => ({
   tag: "scale",
   value: { aes: "x", kind: "sqrt", ...opts },
@@ -33,6 +45,10 @@ export const scaleXSqrt = (opts: Partial<Scale> = {}): SpecPart => ({
 export const scaleYSqrt = (opts: Partial<Scale> = {}): SpecPart => ({
   tag: "scale",
   value: { aes: "y", kind: "sqrt", ...opts },
+});
+export const scaleZSqrt = (opts: Partial<Scale> = {}): SpecPart => ({
+  tag: "scale",
+  value: { aes: "z", kind: "sqrt", ...opts },
 });
 export const scaleColor = (opts: Partial<Scale> = {}): SpecPart => ({
   tag: "scale",

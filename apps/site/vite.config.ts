@@ -20,16 +20,7 @@ export default defineConfig({
         __dirname,
         "../../packages/core/src/plan/mod.ts",
       ),
-      "@gggplot/core/geom_3d/render": resolve(
-        __dirname,
-        "../../packages/core/src/geom_3d/render.tsx",
-      ),
-      "@gggplot/core/geom_3d": resolve(
-        __dirname,
-        "../../packages/core/src/geom_3d/mod.ts",
-      ),
       "@gggplot/core": resolve(__dirname, "../../packages/core/src/mod.ts"),
-      "@gggplot/3d": resolve(__dirname, "../../packages/3d/src/mod.ts"),
       "@gggplot/reductions": resolve(
         __dirname,
         "../../packages/reductions/src/mod.ts",

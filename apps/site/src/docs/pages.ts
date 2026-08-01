@@ -1,11 +1,6 @@
 import type { DocPage } from "./types.ts";
 import { geomReferenceEntries } from "./geom_reference.ts";
-import {
-  helix3dDslSource,
-  helix3dEmitted,
-  helix3dSpec,
-  helix3dSummary,
-} from "./example_3d.ts";
+import { threeDShowcases } from "./example_3d.ts";
 import {
   alignedStackedArea,
   areaAndRibbon,
@@ -300,25 +295,16 @@ export const docPages: DocPage[] = [
     section: "internals",
     title: "3D (preview)",
     summary:
-      "geom_point_3d brings a third position dimension into the same flat-native pipeline: x/y/z pack into vec4 tensors and the use.gpu camera projects them on the GPU.",
+      "Map z on ordinary geomPoint, geomLine, or geomPath to select their 3D mode; x/y/z pack into vec4 tensors and the use.gpu camera projects them on the GPU.",
     narrative: [
       {
         heading: "Same pipeline, one more axis",
         body:
-          "Unlike the retired packages/3d point cloud (which projected every point to screen space on the CPU), geom_3d keeps positions in data space and hands the use.gpu Cartesian view a 3-axis range plus a camera. Projection stays on the GPU, and emission follows the same static-import pattern as the 2D geoms.",
+          "The shared compiler keeps positions in data space and hands the use.gpu Cartesian view a 3-axis range plus the plot's single camera. Projection stays on the GPU, and compile, GGPlot, and emitSource are the same entry points used for 2D.",
       },
     ],
     examples: [],
-    threeD: {
-      id: "Helix3D",
-      title: "3D helix point cloud",
-      description:
-        "160 points tracing a helix (x/z circle, y climbs), colored by height band, rendered under a perspective OrbitCamera.",
-      dslSource: helix3dDslSource,
-      spec: helix3dSpec,
-      emitted: helix3dEmitted,
-      summary: helix3dSummary,
-    },
+    threeD: threeDShowcases,
   },
   {
     slug: "faq",

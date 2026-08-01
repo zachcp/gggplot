@@ -1,11 +1,11 @@
 import React from "react";
 import { LiveCanvas } from "@use-gpu/react";
-import type { Point3DSpec } from "@gggplot/core/geom_3d";
+import type { GGSpec } from "@gggplot/core";
 import { Scene3D } from "./scene3d.tsx";
 
-/** WebGPU host for a 3D geom_3d scene (mirrors the 2D ChartCanvas). */
+/** WebGPU host for an ordinary GGSpec whose mapped positions include z. */
 export function ChartCanvas3D(
-  { spec, label }: { spec: Point3DSpec; label: string },
+  { spec, label }: { spec: GGSpec; label: string },
 ) {
   return (
     <ChartErrorBoundary>
@@ -53,7 +53,10 @@ const styles: Record<string, React.CSSProperties> = {
   frame: {
     position: "relative",
     width: "100%",
-    height: "clamp(320px, 40vw, 460px)",
+    // A block canvas needs an explicit height. Framing itself is now resolution-
+    // independent (gggplot-4q2.8.3: pixel-constant sizing, no OrbitCamera.scale),
+    // so this is a plain layout choice, not a framing workaround.
+    height: 300,
     borderRadius: 8,
     overflow: "hidden",
     border: "1px solid #1e1e30",

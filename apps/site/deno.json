@@ -5,19 +5,18 @@
     "check": "deno check src/index.tsx",
     "preview": "deno run -A npm:vite preview",
     "test:visual": "deno task build && deno run -A scripts/visual_smoke.ts",
-    "test:gpu-instrument": "deno task build && deno run -A scripts/gpu_instrument_check.ts"
+    "test:gpu-instrument": "deno task build && deno run -A scripts/gpu_instrument_check.ts",
+    "test:draw-calls": "deno task build && deno run -A scripts/draw_call_check.ts"
   },
   "imports": {
     "react": "npm:react@^18.3.1",
     "react/jsx-runtime": "npm:react@^18.3.1/jsx-runtime",
     "react-dom": "npm:react-dom@^18.3.1",
     "react-dom/client": "npm:react-dom@^18.3.1/client",
-    "@gggplot/core/geom_3d/render": "../../packages/core/src/geom_3d/render.tsx",
-    "@gggplot/core/geom_3d": "../../packages/core/src/geom_3d/mod.ts",
     "@gggplot/core": "../../packages/core/src/mod.ts",
-    "@gggplot/3d": "../../packages/3d/src/mod.ts",
     "@use-gpu/core": "npm:@use-gpu/core@^0.20.0",
     "@use-gpu/react": "npm:@use-gpu/react@^0.20.0",
+    "@use-gpu/interact": "npm:@use-gpu/interact@^0.20.0",
     "@use-gpu/live": "npm:@use-gpu/live@^0.20.0",
     "@use-gpu/webgpu": "npm:@use-gpu/webgpu@^0.20.0",
     "@use-gpu/workbench": "npm:@use-gpu/workbench@^0.20.0",

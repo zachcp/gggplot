@@ -1,13 +1,15 @@
 import type { DataFrame, GGSpec } from "@gggplot/core";
-import type { Point3DSpec } from "@gggplot/core/geom_3d";
 
-/** A geom_3d preview on a docs page (separate from the 2D DocExample flow). */
+/** A 3D GGSpec preview on a docs page. */
 export interface ThreeDShowcase {
   id: string;
   title: string;
   description: string;
+  /**
+   * The real shared builder expression that produced this showcase.
+   */
   dslSource: string;
-  spec: Point3DSpec;
+  spec: GGSpec;
   /** Real emitted use.gpu source for the lowered node. */
   emitted: string;
   /** One-line summary of the lowered node (point count, ranges, camera). */
@@ -78,6 +80,6 @@ export interface DocPage {
   narrative?: DocNarrative[];
   geomReferences?: GeomReferenceEntry[];
   examples: DocExample[];
-  /** Optional rendering 3D preview (geom_3d), shown below the 2D examples. */
-  threeD?: ThreeDShowcase;
+  /** Optional 3D previews shown below the 2D examples. */
+  threeD?: ThreeDShowcase[];
 }

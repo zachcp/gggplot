@@ -15,6 +15,8 @@ import {
   valuesOf,
 } from "./shared.ts";
 import type { MarkTopology } from "../compile/rendertree.ts";
+import { scalePosition } from "../scale/mod.ts";
+import { packPoints3d } from "./packing.ts";
 
 const POINTS_TOPOLOGY: MarkTopology = { kind: "points" };
 
@@ -25,6 +27,7 @@ export function lowerPoint(
   data: DataFrame,
   ctx: LayerContext,
 ): RenderNode[] {
+  if (mapping.z) return lowerPoint3d(layer, mapping, data, ctx);
   const xScale = ctx.scales.x;
   const yScale = ctx.scales.y;
   const opacity = layer.params.alpha as number | undefined;
@@ -189,4 +192,58 @@ export function lowerPoint(
 
   // Plain path: every row kept, in order — xs/ys go straight to packMarkRows.
   return [emitPoint(xs, ys, xs.map((_, i) => i), {})];
+}
+
+function lowerPoint3d(
+  layer: Layer,
+  mapping: Aes,
+  data: DataFrame,
+  ctx: LayerContext,
+): RenderNode[] {
+  const xValues = valuesOf(data, mapping.x);
+  const yValues = valuesOf(data, mapping.y);
+  const zValues = valuesOf(data, mapping.z);
+  if (!xValues || !yValues || !zValues) {
+    throw new Error("[gggplot] 3D geom_point mapped columns must exist");
+  }
+  if (xValues.length !== yValues.length || xValues.length !== zValues.length) {
+    throw new Error("[gggplot] 3D geom_point columns must have equal length");
+  }
+  const color = (layer.params.color as string) ?? "#3b82f6";
+  const mappedColors = colorsOf(
+    mapping,
+    data,
+    ctx.scales.color,
+    ctx.scales.fill,
+    "colorOrFill",
+  );
+  const mappedSizes = sizesOf(mapping, data, ctx.scales.size);
+  const mappedAlphas = alphasOf(mapping, data, ctx.scales.alpha);
+  const packed = packPoints3d({
+    xs: xValues.map((value) => scalePosition(ctx.scales.x, value)),
+    ys: yValues.map((value) => scalePosition(ctx.scales.y, value)),
+    zs: zValues.map((value) => scalePosition(ctx.scales.z, value)),
+    ...(mappedColors || mappedAlphas
+      ? { colors: mappedColors ?? xValues.map(() => color) }
+      : {}),
+    ...(mappedSizes ? { sizes: mappedSizes } : {}),
+    ...(mappedAlphas ? { alphas: mappedAlphas } : {}),
+  });
+  if (!packed.positions.length) return [];
+  const opacity = (layer.params.alpha as number) ?? 1;
+  const transparent = opacity < 1 ||
+    mappedAlphas?.some((alpha) => alpha < 1) === true;
+  return [node("Point", {
+    positions: packed.positions,
+    topology: POINTS_TOPOLOGY,
+    ...(packed.colors ? { colors: packed.colors } : { color }),
+    ...(packed.sizes
+      ? { sizes: packed.sizes }
+      : { size: (layer.params.size as number) ?? 6 }),
+    opacity,
+    depth: layer.params.sizeMode === "perspective" ? 1 : 0,
+    depthTest: (layer.params.depthTest as boolean) ?? true,
+    depthWrite: !transparent,
+    ...(transparent ? { mode: "transparent" } : {}),
+  })];
 }

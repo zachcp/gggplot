@@ -4,6 +4,8 @@
 
 import type {
   Aes,
+  Camera3D,
+  Camera3DOptions,
   Coord,
   DataFrame,
   ExecutionPolicy,
@@ -14,6 +16,11 @@ import type {
   Scale,
   Theme,
 } from "../ir/types.ts";
+import {
+  camera3DFromLookAt,
+  type LookAtCamera3D,
+  resolveCamera3D,
+} from "../ir/camera.ts";
 import { ingest, type IngestOptions, type InputData } from "../data/mod.ts";
 
 /** Identity helper — `aes({ x: "wt", y: "mpg" })` reads like ggplot. */
@@ -27,7 +34,20 @@ export type SpecPart =
   | { tag: "facet"; value: Facet }
   | { tag: "labels"; value: PlotLabels }
   | { tag: "theme"; value: Theme }
+  | { tag: "camera"; value: Camera3D }
   | { tag: "execution"; value: ExecutionPolicy };
+
+/** One plot-wide serialized initial 3D view, resolved against stable defaults. */
+export const camera3d = (options: Camera3DOptions = {}): SpecPart => ({
+  tag: "camera",
+  value: resolveCamera3D(options),
+});
+
+/** Explicit migration sugar from look-at input to the canonical orbit camera. */
+export const camera3dFromLookAt = (input: LookAtCamera3D): SpecPart => ({
+  tag: "camera",
+  value: camera3DFromLookAt(input),
+});
 
 /** Spec-level execution policy, e.g. `execution({ resident: false })`. */
 export const execution = (value: ExecutionPolicy): SpecPart => ({
@@ -91,6 +111,11 @@ export class GG {
           // calls layer new fields over earlier ones instead of replacing
           // the whole theme object.
           this.spec.theme = { ...this.spec.theme, ...part.value };
+          break;
+        case "camera":
+          // Singleton like coord/facet: a later camera replaces the earlier
+          // declaration, so GGSpec can contain at most one plot-wide camera.
+          this.spec.camera = part.value;
           break;
         case "execution":
           this.spec.execution = { ...this.spec.execution, ...part.value };

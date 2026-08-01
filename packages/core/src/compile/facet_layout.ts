@@ -1,15 +1,9 @@
-import type {
-  Aes,
-  DataFrame,
-  GGSpec,
-  PlotLabels,
-  PositionAxis,
-  Theme,
-} from "../ir/types.ts";
+import type { Aes, DataFrame, GGSpec, PlotLabels, Theme } from "../ir/types.ts";
 import { node, type RenderNode } from "./rendertree.ts";
-import { trainScales, type TrainedScale } from "../scale/mod.ts";
+import { type TrainedScale, trainScales } from "../scale/mod.ts";
 import { axisGuideOverlay, themeFaceProps } from "./guides.ts";
 import type { FacetPanel } from "./facets.ts";
+import type { Axes2D } from "./coordinates.ts";
 
 export interface FacetCellLayout {
   row: number;
@@ -148,7 +142,7 @@ export interface FacetPanelGuideContext {
   labels: PlotLabels;
   mapping: Aes;
   theme: Theme;
-  project: [PositionAxis, PositionAxis];
+  axes: Axes2D;
   bounds: [number, number, number, number];
   tickCount: number;
   ncol: number;
@@ -177,7 +171,7 @@ export function facetPanelGuideOverlays(
     labels,
     mapping,
     theme,
-    project,
+    axes,
     bounds,
     tickCount,
     ncol,
@@ -217,7 +211,7 @@ export function facetPanelGuideOverlays(
       theme,
       localX,
       localY,
-      project,
+      axes,
       panelBoundsRect,
       panelTickCount,
       {

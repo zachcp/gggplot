@@ -1,30 +1,37 @@
 // Pipeline orchestration. Lowering, coordinate, guide, and facet details live in focused modules.
-import type {
-  Aes,
-  AesName,
-  DataFrame,
-  GGSpec,
-  Layer,
-} from "../ir/types.ts";
+import type { Aes, AesName, DataFrame, GGSpec, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "./rendertree.ts";
 import { applyStat } from "../stat/mod.ts";
-import { trainScales, type TrainedScale } from "../scale/mod.ts";
+import { type TrainedScale, trainScales } from "../scale/mod.ts";
 import {
   facetPanelGeometry,
   facetPanelGuideOverlays,
   facetStripLabelNodes,
 } from "./facet_layout.ts";
 
-import { GEOM_REGISTRY, lowerLayer } from "../geom/mod.ts";
+import {
+  GEOM_REGISTRY,
+  lowerLayer,
+  resolvePlotDimension,
+} from "../geom/mod.ts";
 import type { LayerContext } from "../geom/mod.ts";
-import { numericRange, polarGridLines } from "./coordinates.ts";
+import {
+  numericRange,
+  polarGridLines,
+  resolveAxes2d,
+  resolveAxes3d,
+} from "./coordinates.ts";
 import {
   axisGuideOverlay,
+  axisTickValues,
+  gridDivision,
   guideLayout,
   legendNodes,
   plotLabelNodes,
   type TextMeasurer,
 } from "./guides.ts";
+import { guideNodes3d } from "./guides_3d.ts";
+import { resolveCamera3D } from "../ir/camera.ts";
 import { buildFacetPanels } from "./facets.ts";
 import {
   PackCache,
@@ -75,7 +82,14 @@ function widenDomains(
       layer,
       mapping,
       data,
-      { xScale, yScale, xDomain, yDomain },
+      {
+        scales: { x: xScale, y: yScale },
+        domains: { x: xDomain, y: yDomain },
+        xScale,
+        yScale,
+        xDomain,
+        yDomain,
+      },
     );
     if (contrib?.x) xDomain = contrib.x;
     if (contrib?.y) yDomain = contrib.y;
@@ -83,10 +97,91 @@ function widenDomains(
   return [xDomain, yDomain];
 }
 
+function nonDegenerate(domain: [number, number]): [number, number] {
+  return domain[0] === domain[1] ? [domain[0] - 0.5, domain[1] + 0.5] : domain;
+}
+
+function compileThreeDimensionalPlot(
+  spec: GGSpec,
+  perLayer: ReadonlyArray<{
+    layer: Layer;
+    data: DataFrame;
+    mapping: Aes;
+  }>,
+  scales: Map<string, TrainedScale>,
+  options: CompileOptions,
+): RenderNode {
+  const x = scales.get("x");
+  const y = scales.get("y");
+  const z = scales.get("z");
+  if (!x || !y || !z) {
+    throw new Error("[gggplot] a 3D plot requires trained x, y, and z scales");
+  }
+  const domains = {
+    x: nonDegenerate(numericRange(x) ?? [0, 1]),
+    y: nonDegenerate(numericRange(y) ?? [0, 1]),
+    z: nonDegenerate(numericRange(z) ?? [0, 1]),
+  };
+  const scaleRecord = Object.fromEntries(scales) as Partial<
+    Record<AesName, TrainedScale>
+  >;
+  const context: LayerContext = {
+    scales: scaleRecord,
+    domains,
+    theme: spec.theme,
+    xDomain: domains.x,
+    yDomain: domains.y,
+    panelPixels: {
+      width: options.layout?.width ?? 800,
+      height: options.layout?.height ?? 600,
+    },
+    measureText: options.layout?.measureText,
+  };
+  const marks = perLayer.flatMap(({ layer, mapping, data }) =>
+    lowerLayer(layer, mapping, data, context)
+  );
+  const positionScales = { x, y, z };
+  const scene = node("Plot", {}, [
+    node(
+      "Cartesian",
+      {
+        ...(spec.coord.params ?? {}),
+        range: [domains.x, domains.y, domains.z, [1, 1]],
+        axes: resolveAxes3d(spec.coord),
+      },
+      [
+        ...guideNodes3d(
+          positionScales,
+          domains,
+          perLayer[0]?.mapping ?? spec.mapping,
+          spec.labels,
+          spec.theme,
+        ),
+        ...marks,
+      ],
+    ),
+  ]);
+  const overlay = node("Embedded", { normalize: true }, [
+    ...plotLabelNodes(spec.labels, spec.theme),
+    ...legendNodes(
+      scaleRecord,
+      spec.labels,
+      spec.theme,
+      [-1, -1, 0.62, 1],
+      options.layout?.width,
+    ),
+  ]);
+  return node("Scene3D", { camera: spec.camera ?? resolveCamera3D() }, [
+    scene,
+    overlay,
+  ]);
+}
+
 export function compile(
   spec: GGSpec,
   options: CompileOptions = {},
 ): RenderNode {
+  const dimensionality = resolvePlotDimension(spec);
   const labels = spec.labels ?? {};
 
   // ③ facet → panels, partitioned before stats so stat_count/stat_bin/etc.
@@ -127,6 +222,9 @@ export function compile(
   // scales aren't implemented).
   const allPerLayer = panelLayers.flat();
   const scales = trainScales(spec, allPerLayer);
+  if (dimensionality.dimensions === 3) {
+    return compileThreeDimensionalPlot(spec, allPerLayer, scales, options);
+  }
   const xScale = scales.get("x");
   const yScale = scales.get("y");
   const colorScale = scales.get("color");
@@ -179,8 +277,7 @@ export function compile(
   // (coord_flip) and polar theta/radius reassignment (coord_polar(theta="y"))
   // without touching mark positions or the trained domains.
   const view = spec.coord.kind === "polar" ? "Polar" : "Cartesian";
-  const project = spec.coord.project ?? ["x", "y"];
-  const axes = project[0] === "y" ? "yx" : "xy";
+  const axes = resolveAxes2d(spec.coord);
 
   const theme = spec.theme;
   const { bounds: panelBounds, tickCount } = guideLayout(
@@ -194,7 +291,10 @@ export function compile(
   );
 
   /** Build one panel's Cartesian/Polar view node (guides + this panel's marks). */
-  function buildPanel(perLayer: typeof allPerLayer, panelIndex = 0): RenderNode {
+  function buildPanel(
+    perLayer: typeof allPerLayer,
+    panelIndex = 0,
+  ): RenderNode {
     const free = spec.facet.scales ?? "fixed";
     const panelScales = free === "fixed" ? scales : trainScales(spec, perLayer);
     const panelXScale = free === "free" || free === "free_x"
@@ -226,6 +326,7 @@ export function compile(
         y: panelYScale,
         ...aestheticScales,
       },
+      domains: { x: panelXDomain, y: panelYDomain },
       theme,
       xDomain: panelXDomain,
       yDomain: panelYDomain,
@@ -250,34 +351,36 @@ export function compile(
     // panelPixels directly for packed output, so they're always lowered
     // fresh rather than grow the key with those dependencies. Absent
     // packCache -> byte-identical to the pre-tzc.5 uncached path.
-    const marks = perLayer.flatMap(({ layer, data, mapping, resident }, layerIndex) => {
-      if (resident) {
-        return [
-          node("ResidentProduct", {
-            product: resident.product,
-            ...resident.props,
-          }),
-        ];
-      }
-      if (!options.packCache || UNCACHEABLE_GEOMS.has(layer.geom)) {
-        return lowerLayer(layer, mapping, data, ctx);
-      }
-      const { primary, key } = stageAKey(
-        options.packCache,
-        layer,
-        layerIndex,
-        panelIndex,
-        mapping,
-        data,
-        ctx.scales,
-      );
-      return options.packCache.stageA(
-        primary,
-        key,
-        () => lowerLayer(layer, mapping, data, ctx),
-      );
-    });
-    const thetaAxis: 0 | 1 = project[0] === "x" ? 0 : 1;
+    const marks = perLayer.flatMap(
+      ({ layer, data, mapping, resident }, layerIndex) => {
+        if (resident) {
+          return [
+            node("ResidentProduct", {
+              product: resident.product,
+              ...resident.props,
+            }),
+          ];
+        }
+        if (!options.packCache || UNCACHEABLE_GEOMS.has(layer.geom)) {
+          return lowerLayer(layer, mapping, data, ctx);
+        }
+        const { primary, key } = stageAKey(
+          options.packCache,
+          layer,
+          layerIndex,
+          panelIndex,
+          mapping,
+          data,
+          ctx.scales,
+        );
+        return options.packCache.stageA(
+          primary,
+          key,
+          () => lowerLayer(layer, mapping, data, ctx),
+        );
+      },
+    );
+    const thetaAxis: 0 | 1 = axes[0] === "x" ? 0 : 1;
     const thetaDomain = thetaAxis === 0 ? panelXDomain : panelYDomain;
     const coordParams = spec.coord.params ?? {};
     const requestedStart = typeof coordParams.start === "number"
@@ -360,16 +463,71 @@ export function compile(
       }));
     }
     if (theme.grid !== false) {
-      guides.push(
-        view === "Polar"
-          ? polarGridLines(viewXDomain, viewYDomain, theme)
-          : node("Grid", {
+      const xBreaks = axisTickValues(panelXScale, tickCount);
+      const yBreaks = axisTickValues(panelYScale, tickCount);
+      const xGrid = gridDivision(xBreaks);
+      const yGrid = gridDivision(yBreaks);
+      const gridStyle = {
+        width: theme.gridWidth ?? 1,
+        zBias: -1,
+        ...(theme.gridColor ? { color: theme.gridColor } : {}),
+      };
+      const explicitGridPositions: [number, number][][] = [
+        ...(xGrid
+          ? []
+          : xBreaks.filter((v): v is number => typeof v === "number").map(
+            (
+              x,
+            ): [number, number][] => [[x, panelYDomain[0]], [
+              x,
+              panelYDomain[1],
+            ]],
+          )),
+        ...(yGrid
+          ? []
+          : yBreaks.filter((v): v is number => typeof v === "number").map(
+            (
+              y,
+            ): [number, number][] => [[panelXDomain[0], y], [
+              panelXDomain[1],
+              y,
+            ]],
+          )),
+      ];
+      if (view === "Polar") {
+        guides.push(polarGridLines(viewXDomain, viewYDomain, theme));
+      } else {
+        const xFirst = axes[0] === "x";
+        const yFirst = axes[0] === "y";
+        if (xGrid) {
+          guides.push(node("Grid", {
             axes,
-            width: theme.gridWidth ?? 1,
-            zBias: -1,
-            ...(theme.gridColor ? { color: theme.gridColor } : {}),
-          }),
-      );
+            range: xFirst
+              ? [xGrid.range, panelYDomain]
+              : [panelYDomain, xGrid.range],
+            first: xFirst ? xGrid.props : null,
+            second: xFirst ? null : xGrid.props,
+            ...gridStyle,
+          }));
+        }
+        if (yGrid) {
+          guides.push(node("Grid", {
+            axes,
+            range: yFirst
+              ? [yGrid.range, panelXDomain]
+              : [panelXDomain, yGrid.range],
+            first: yFirst ? yGrid.props : null,
+            second: yFirst ? null : yGrid.props,
+            ...gridStyle,
+          }));
+        }
+        if (explicitGridPositions.length) {
+          guides.push(node("GuideLines", {
+            positions: explicitGridPositions,
+            ...gridStyle,
+          }));
+        }
+      }
     }
     if (theme.axes !== false) {
       guides.push(
@@ -426,7 +584,7 @@ export function compile(
           theme,
           xGuideScale,
           yGuideScale,
-          project,
+          axes,
           panelBounds,
           tickCount,
         ),
@@ -457,7 +615,7 @@ export function compile(
             theme,
             xGuideScale,
             yGuideScale,
-            project,
+            axes,
             panelBounds,
             tickCount,
           ),
@@ -512,7 +670,7 @@ export function compile(
       labels,
       mapping: spec.mapping,
       theme,
-      project,
+      axes,
       bounds: panelBounds,
       tickCount,
       ncol,
@@ -524,7 +682,7 @@ export function compile(
       theme,
       xGuideScale,
       yGuideScale,
-      project,
+      axes,
       panelBounds,
       tickCount,
       { horizontalTicks: false, verticalTicks: false, titles: true },

@@ -47,7 +47,10 @@ import {
 } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
-import { cases, residentCases } from "../../../scripts/capture_geom_fixtures.ts";
+import {
+  cases,
+  residentCases,
+} from "../../../scripts/capture_geom_fixtures.ts";
 
 function findAllRaw(
   tree: RenderNode,
@@ -70,7 +73,10 @@ function findAllRaw(
  * node(s) only, the same scoping nested_array_tripwire_test.ts uses for the
  * same reason.
  */
-function findAll(tree: RenderNode, component: RenderNode["component"]): RenderNode[] {
+function findAll(
+  tree: RenderNode,
+  component: RenderNode["component"],
+): RenderNode[] {
   const panels = [
     ...findAllRaw(tree, "Cartesian"),
     ...findAllRaw(tree, "Polar"),
@@ -119,7 +125,10 @@ Deno.test("node budget: single geom_bar layer, grouped by fill, is exactly 1 Chu
 });
 
 Deno.test("node budget: single geom_col layer is exactly 1 ChunkedFace node", () => {
-  const spec = ggplot({ cls: ["a", "b", "c"], n: [3, 5, 2] }, aes({ x: "cls", y: "n" }))
+  const spec = ggplot(
+    { cls: ["a", "b", "c"], n: [3, 5, 2] },
+    aes({ x: "cls", y: "n" }),
+  )
     .add(geomCol()).build();
   assertEquals(findAll(compile(spec), "ChunkedFace").length, 1);
 });
@@ -142,7 +151,11 @@ Deno.test("node budget: single geom_ribbon layer is exactly 1 ChunkedFace node",
 
 Deno.test("node budget: single geom_polygon layer (multi-group) is exactly 1 ChunkedFace node", () => {
   const spec = ggplot(
-    { x: [0, 1, 0, 5, 6, 5], y: [0, 1, 1, 0, 1, 1], g: ["a", "a", "a", "b", "b", "b"] },
+    {
+      x: [0, 1, 0, 5, 6, 5],
+      y: [0, 1, 1, 0, 1, 1],
+      g: ["a", "a", "a", "b", "b", "b"],
+    },
     aes({ x: "x", y: "y", group: "g" }),
   ).add(geomPolygon()).build();
   assertEquals(findAll(compile(spec), "ChunkedFace").length, 1);
@@ -193,7 +206,10 @@ Deno.test("node budget: single geom_smooth layer (fitted line + SE ribbon) is ex
 
 Deno.test("node budget: single geom_boxplot layer is exactly 1 ChunkedFace (box) + 1 Line (median/whisker) — a DIFFERENT style batch, not an over-split; both now carry FlatTensor positions (gggplot-cct)", () => {
   const spec = ggplot(
-    { grp: ["a", "a", "a", "a", "b", "b", "b", "b"], v: [1, 2, 3, 10, 2, 3, 4, 12] },
+    {
+      grp: ["a", "a", "a", "a", "b", "b", "b", "b"],
+      v: [1, 2, 3, 10, 2, 3, 4, 12],
+    },
     aes({ x: "grp", y: "v" }),
   ).add(geomBoxplot()).build();
   const tree = compile(spec);
@@ -248,7 +264,11 @@ Deno.test("node budget: single geom_rug layer is exactly 1 Line node", () => {
 
 Deno.test("node budget SANCTIONED EXCEPTION: geom_point mapped to 3 distinct shapes splits into exactly 3 Point nodes", () => {
   const spec = ggplot(
-    { x: [1, 2, 3, 4, 5, 6], y: [1, 2, 3, 4, 5, 6], s: ["circle", "square", "triangle", "circle", "square", "triangle"] },
+    {
+      x: [1, 2, 3, 4, 5, 6],
+      y: [1, 2, 3, 4, 5, 6],
+      s: ["circle", "square", "triangle", "circle", "square", "triangle"],
+    },
     aes({ x: "x", y: "y", shape: "s" }),
   ).add(geomPoint()).build();
   const tree = compile(spec);
@@ -282,7 +302,20 @@ Deno.test("node budget SANCTIONED EXCEPTION: geom_line grouped by BOTH color and
       x: [1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3],
       y: [1, 2, 1, 3, 4, 3, 5, 6, 5, 7, 8, 7],
       g: ["a", "a", "a", "b", "b", "b", "c", "c", "c", "d", "d", "d"],
-      lt: ["solid", "solid", "solid", "dashed", "dashed", "dashed", "solid", "solid", "solid", "dashed", "dashed", "dashed"],
+      lt: [
+        "solid",
+        "solid",
+        "solid",
+        "dashed",
+        "dashed",
+        "dashed",
+        "solid",
+        "solid",
+        "solid",
+        "dashed",
+        "dashed",
+        "dashed",
+      ],
     },
     aes({ x: "x", y: "y", color: "g", linetype: "lt" }),
   ).add(geomLine()).build();
@@ -296,7 +329,10 @@ Deno.test("node budget SANCTIONED EXCEPTION: geom_line grouped by BOTH color and
 // ---------------------------------------------------------------------------
 
 Deno.test("node budget: a 3-layer spec (area + line + step, matching line_step_area's fixture composition) totals 1 ChunkedFace + 2 ChunkedLine", () => {
-  const spec = ggplot({ x: [1, 2, 3, 4], y: [3, 1, 4, 2] }, aes({ x: "x", y: "y" }))
+  const spec = ggplot(
+    { x: [1, 2, 3, 4], y: [3, 1, 4, 2] },
+    aes({ x: "x", y: "y" }),
+  )
     .add(geomArea({ fill: "#ddd" }))
     .add(geomLine())
     .add(geomStep({ direction: "hv" }))
@@ -308,7 +344,11 @@ Deno.test("node budget: a 3-layer spec (area + line + step, matching line_step_a
 
 Deno.test("node budget: a 2-layer spec (point + grouped line) totals exactly 1 Point + 1 ChunkedLine, no cross-layer bleed", () => {
   const spec = ggplot(
-    { x: [1, 2, 3, 1, 2, 3], y: [1, 2, 3, 4, 5, 6], g: ["a", "a", "a", "b", "b", "b"] },
+    {
+      x: [1, 2, 3, 1, 2, 3],
+      y: [1, 2, 3, 4, 5, 6],
+      g: ["a", "a", "a", "b", "b", "b"],
+    },
     aes({ x: "x", y: "y", color: "g" }),
   ).add(geomPoint()).add(geomLine()).build();
   const tree = compile(spec);
@@ -329,26 +369,47 @@ Deno.test("node budget: every fixture-set spec's mark nodes are drawn from the k
     const unexpected = new Set<string>();
     (function walk(n: RenderNode) {
       if (
-        ["Point", "ChunkedLine", "ChunkedFace"].includes(n.component) === false &&
-        n.component !== "Line" && n.component !== "Polygon" && n.component !== "Label" &&
+        ["Point", "ChunkedLine", "ChunkedFace"].includes(n.component) ===
+          false &&
+        n.component !== "Line" && n.component !== "Polygon" &&
+        n.component !== "Label" &&
         // Guides/structure/panel scaffolding — not mark nodes, not part of
         // this budget rule at all.
-        !["Plot", "Embedded", "Cartesian", "Polar", "Axis", "Grid",
-          "FacetPanel", "PanelViewport", "RadialViewport", "FacetGrid",
-          "ResidentProduct"].includes(n.component)
+        ![
+          "Plot",
+          "Embedded",
+          "Cartesian",
+          "Polar",
+          "Axis",
+          "Grid",
+          "GuideLines",
+          "CameraAxis3D",
+          "FacetPanel",
+          "PanelViewport",
+          "RadialViewport",
+          "FacetGrid",
+          "ResidentProduct",
+        ].includes(n.component)
       ) {
         unexpected.add(n.component);
       }
       n.children.forEach(walk);
     })(tree);
-    assertEquals(unexpected.size, 0, `${name}: unexpected component(s) ${[...unexpected]}`);
+    assertEquals(
+      unexpected.size,
+      0,
+      `${name}: unexpected component(s) ${[...unexpected]}`,
+    );
   }
 });
 
 Deno.test("node budget: every resident-eligible fixture-set spec emits ResidentProduct with NO sibling CPU mark node for the same layer", () => {
   for (const { name, build } of residentCases) {
     const tree = compile(build(), { resident: true });
-    const residentCount = countBy(tree, (n) => n.component === "ResidentProduct");
+    const residentCount = countBy(
+      tree,
+      (n) => n.component === "ResidentProduct",
+    );
     const markCount = findAll(tree, "Point").length +
       findAll(tree, "ChunkedLine").length + findAll(tree, "ChunkedFace").length;
     if (name === "resident_histogram_cpu_fallback") {
@@ -356,7 +417,15 @@ Deno.test("node budget: every resident-eligible fixture-set spec emits ResidentP
       // case; asserted by resident_conformance_test.ts already. Skipped here.
       continue;
     }
-    assertEquals(residentCount >= 1, true, `${name}: expected a ResidentProduct node`);
-    assertEquals(markCount, 0, `${name}: resident layer must not ALSO emit a CPU mark node`);
+    assertEquals(
+      residentCount >= 1,
+      true,
+      `${name}: expected a ResidentProduct node`,
+    );
+    assertEquals(
+      markCount,
+      0,
+      `${name}: resident layer must not ALSO emit a CPU mark node`,
+    );
   }
 });

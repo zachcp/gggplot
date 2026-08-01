@@ -1,25 +1,24 @@
 # ADR 002: 3D grammar and extension boundaries
 
-Status: accepted (architecture only)\
-Date: 2026-07-17
+Status: accepted; amended after unified 3D implementation\
+Date: 2026-07-17; amended 2026-08-01
 
 ## Decision
 
-Core owns the serializable grammar, extension metadata, registry validation,
-camera/projection interfaces, and backend conformance rules. Optional,
-statically imported packages own 3D geoms and renderer adapters. There is no
-runtime package discovery and serialized plots never contain JavaScript
-functions, shader closures, GPU handles, or package URLs.
+Core owns dimensionality as part of the ordinary serializable grammar. A mapped
+positional `z` selects a geom's 3D mode; the same `geomPoint()`, `geomLine()`,
+`geomPath()`, `compile()`, renderer, and `emitSource()` APIs serve 2D and 3D.
+`camera3d()` is the one optional singleton camera component. It resolves a
+complete canonical default and supports partial named overrides, so plots need
+no camera declaration for the common case and serialize exactly one camera
+when customized.
 
-An extension is identified by a versioned string such as
-`@gggplot/3d:geom_point_cloud@1`. A host explicitly imports the package and
-registers its declarative `ExtensionDefinition` plus separately typed CPU, GPU,
-Live-render, and emitted-source adapters. Registration rejects duplicate
-identifiers, unknown major versions, missing capabilities, and metadata that
-does not match the adapter. Minor additions must remain backward compatible; a
-semantic or port-layout change requires a new major identifier. Deserialization
-resolves identifiers against the host registry and fails with an actionable
-missing-extension error.
+The extension registry remains available for specialized geoms whose topology
+or policy does not belong in core, but 3D itself is not an extension boundary.
+There is no runtime package discovery and serialized plots never contain
+JavaScript functions, shader closures, GPU handles, or package URLs. Extension
+registration continues to reject duplicate identifiers, incompatible versions,
+missing capabilities, and metadata that does not match its adapter.
 
 This static model is dependency injection, not a security boundary. Extension
 code has the authority of the importing application. Sandboxing untrusted
@@ -43,54 +42,39 @@ means z does not add a stable visual/statistical contract.
 | QQ and ellipse                                  | N/A by default                           | z requires a separately defined multivariate statistic                            |
 | raster                                          | N/A by default                           | texture placement belongs to a surface primitive                                  |
 
-Positions, facets, scales, and coordinates do not gain generic 3D behavior by
-accepting z. A 3D coordinate declares camera, projection, clipping, handedness,
-depth range, and interaction policy. A 3D position declares all affected axes.
+Position scales share one x/y/z trainer and scale DSL. Coordinates share the
+same `coordCartesian()` component, including validated axis swizzles. Faceted
+3D remains unsupported until its layout/interaction contract is explicit.
+Camera projection, clipping, and interaction are resolved by the singleton
+camera component and runtime scene rather than a parallel coordinate grammar.
 
 ## Point-cloud vertical slice
 
-The first package contract is deliberately narrow:
+The original `@gggplot/3d` point-cloud extension was a useful architecture
+spike, but it CPU-projected coordinates and required a second spec, compiler,
+camera, renderer, emitter, and export API. The unified core path supersedes it:
 
 ```ts
-interface PointCloudLayerIR {
-  extension: "@gggplot/3d:geom_point_cloud@1";
-  mapping: { x: string; y: string; z: string; color?: string; size?: string };
-  params: { opacity?: number; depthTest?: boolean };
-}
-
-interface PointCloudRenderNode {
-  component: "@gggplot/3d:PointCloud@1";
-  props: {
-    positions: Float32Array; // packed xyz
-    colors?: Float32Array;
-    sizes?: Float32Array;
-    camera: {
-      projection: "perspective" | "orthographic";
-      near: number;
-      far: number;
-    };
-  };
-  children: [];
-}
+ggplot(data, { x: "x", y: "y", z: "z", color: "group" })
+  .add(geomPoint(), camera3d({ bearing: 0.8 }))
+  .build();
 ```
 
-The package registers the geom definition, lowering adapter, Live component, and
-emitter import. Core validates x/y/z numeric fields and version/capability
-compatibility. The package owns packed buffers, camera defaults, depth-tested
-point rendering, and its conformance fixture. Export uses the same mounted
-render tree, so it introduces no separate 3D export path.
+Omit `camera3d()` for the standard three-quarter view. Core packs vec4
+positions, trains z with the same position-scale machinery as x/y, projects on
+the GPU, renders depth-tested marks, and emits the same RenderTree. The legacy
+package is retired rather than shimmed because preserving its incompatible
+camera/spec types would make the public API less consistent.
 
 ## Consequences and sequence
 
-1. Implement the static versioned registry and backend adapter contracts
-   (`gggplot-9gj`). `ExtensionRegistry` now implements this boundary: it
-   validates JSON-only definitions, exact major identifiers, declared adapter
-   capabilities, duplicate registration, and shared Live/emitter resolution.
-2. Only then implement the optional point-cloud package and its conformance
-   vertical slice (`gggplot-74p`).
-3. Add further 3D primitives only when their topology, statistic, camera, and
-   occlusion semantics are explicit; adding `z` to every geom is not parity.
-
-This reuses the existing `ExtensionDefinition` and portable plan vocabulary, but
-does not claim that the current registry/runtime implementation is already
-complete.
+1. `ExtensionRegistry` continues to validate JSON-only definitions, exact major
+   identifiers, declared adapter capabilities, duplicate registration, and
+   shared Live/emitter resolution.
+2. The unified core point/line/path slice is the reference 3D contract; see
+   `MIGRATING_3D_API.md` for the removed parallel API.
+3. Add further 3D modes only when topology and occlusion semantics are explicit.
+   A z-positioned 2D stat is not automatically a volumetric statistic.
+4. Do not add a 3D reducer merely for dimensional symmetry. True voxel/bin3d,
+   density-volume, or isosurface work first needs a named grammar product and a
+   renderer that can consume its GPU-resident output.

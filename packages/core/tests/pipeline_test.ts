@@ -257,7 +257,9 @@ function decodeColors(tensor: unknown, withAlpha = false): string[] {
     );
   const out: string[] = [];
   for (let i = 0; i < t.length; i++) {
-    const r = t.array[i * 4], g = t.array[i * 4 + 1], b = t.array[i * 4 + 2],
+    const r = t.array[i * 4],
+      g = t.array[i * 4 + 1],
+      b = t.array[i * 4 + 2],
       a = t.array[i * 4 + 3];
     out.push(
       `#${toHex(r)}${toHex(g)}${toHex(b)}${withAlpha || a < 1 ? toHex(a) : ""}`,
@@ -1213,9 +1215,7 @@ Deno.test("QQ lines and ellipses preserve effective color groups", () => {
       ).add(geomQqLine()).build(),
     ),
     "ChunkedLine",
-  ).flatMap((node) => decodeChunks(node)).filter((chunk) =>
-    chunk.length === 2
-  );
+  ).flatMap((node) => decodeChunks(node)).filter((chunk) => chunk.length === 2);
   assertEquals(groupedQq.length, 2);
   assertEquals(
     groupedQq.map((chunk) => chunk.map((point) => point[1])),
@@ -1234,9 +1234,7 @@ Deno.test("QQ lines and ellipses preserve effective color groups", () => {
       ).add(statEllipse({ n: 8 })).build(),
     ),
     "ChunkedLine",
-  ).flatMap((node) => decodeChunks(node)).filter((chunk) =>
-    chunk.length === 9
-  );
+  ).flatMap((node) => decodeChunks(node)).filter((chunk) => chunk.length === 9);
   assertEquals(groupedEllipse.length, 2);
 });
 
@@ -1507,6 +1505,7 @@ Deno.test("new position products support variable-width dodge2 and fixed nudge",
 Deno.test("coord_flip swizzles rendered axes to yx without touching mark positions or domains", () => {
   const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint(), coordFlip())
     .build();
+  assertEquals(spec.coord, { kind: "cartesian", axes: "yx" });
   const tree = compile(spec);
 
   const panel = plotPanel(tree);
@@ -1519,6 +1518,15 @@ Deno.test("coord_flip swizzles rendered axes to yx without touching mark positio
 
   const grid = panel.children.find((c) => c.component === "Grid");
   assertEquals(grid?.props.axes, "yx");
+});
+
+Deno.test("2D coords accept canonical/full swizzles and reject non-x/y axes", () => {
+  const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint()).build();
+  spec.coord.axes = "yxzw";
+  assertEquals(plotPanel(compile(spec)).props.axes, "yx");
+
+  spec.coord.axes = "xz";
+  assertThrows(() => compile(spec), Error, 'must be "xy", "yx"');
 });
 
 Deno.test("coord_polar selects the Polar view and passes through bend/on params", () => {
@@ -1715,8 +1723,11 @@ Deno.test("gggplot-tzc.3 acceptance: a 3-group solid-dash geom_line layer lowers
   const panel = plotPanel(compile(spec));
   const chunked = panel.children.filter((c) => c.component === "ChunkedLine");
   assertEquals(chunked.length, 1);
-  assertEquals((chunked[0].props.topology as { chunks: Uint32Array }).chunks
-    .length, 3);
+  assertEquals(
+    (chunked[0].props.topology as { chunks: Uint32Array }).chunks
+      .length,
+    3,
+  );
   assertEquals(decodeChunks(chunked[0]).length, 3);
 });
 
@@ -2483,8 +2494,8 @@ Deno.test("measured guide layout reserves glyph-sized margins and adapts ticks",
     child.component === "FacetPanel" &&
     child.children.every((node) => node.component === "Label")
   )!;
-  assertEquals((overlay.children[0].props.labels as string[]).length, 4);
-  assertEquals((overlay.children[1].props.labels as string[]).length, 4);
+  assertEquals((overlay.children[0].props.labels as string[]).length, 3);
+  assertEquals((overlay.children[1].props.labels as string[]).length, 3);
 });
 
 Deno.test("mapped alpha lowers per-point RGBA colors and emits an alpha guide", () => {
@@ -3374,11 +3385,51 @@ Deno.test("default theme renders no background Polygon, unstyled Grid/Axis", () 
     undefined,
   );
   const grid = panel.children.find((c) => c.component === "Grid");
-  assertEquals(grid?.props, { axes: "xy", width: 1, zBias: -1 });
+  assertEquals(grid?.props, {
+    axes: "xy",
+    range: [[0, 2], [10, 30]],
+    first: { nice: false, divide: 4 },
+    second: null,
+    width: 1,
+    zBias: -1,
+  });
   const axis = panel.children.find((c) =>
     c.component === "Axis" && c.props.axis === "x"
   );
   assertEquals(axis?.props, { axis: "x", width: 2, zBias: 0 });
+});
+
+Deno.test("grid rules and labels share pretty or explicit scale breaks", () => {
+  const pretty = compile(
+    ggplot(
+      { x: [-0.9992, 0, 1], y: [0, 1, 2] },
+      { x: "x", y: "y" },
+    ).add(geomPoint()).build(),
+  );
+  const prettyLabels = findNodes(pretty, "Label")
+    .map((label) => label.props.labels as string[] | undefined)
+    .find((values) => values?.includes("-1"));
+  assertEquals(prettyLabels, ["-1", "-0.5", "0", "0.5", "1"]);
+  const prettyXGrid = plotPanel(pretty).children.find((node) =>
+    node.component === "Grid" && node.props.first !== null
+  );
+  assertEquals(prettyXGrid?.props.range, [[-1, 1], [0, 2]]);
+  assertEquals(prettyXGrid?.props.first, { nice: false, divide: 4 });
+
+  const explicit = compile(
+    ggplot({ x: [0, 3, 10], y: [0, 1, 2] }, { x: "x", y: "y" })
+      .add(geomPoint(), scaleXContinuous({ breaks: [0, 3, 10] }))
+      .build(),
+  );
+  const explicitLines = plotPanel(explicit).children.find((node) =>
+    node.component === "GuideLines"
+  );
+  assertEquals(explicitLines?.props.positions, [
+    [[0, 0], [0, 2]],
+    [[3, 0], [3, 2]],
+    [[10, 0], [10, 2]],
+  ]);
+  assertStringIncludes(emitSource(explicit), "const GuideLines = Line;");
 });
 
 Deno.test("themeGrey adds a full-panel background Polygon and a white grid color", () => {
@@ -3847,7 +3898,10 @@ Deno.test("emitSource inlines a standalone FacetGrid definition for faceted spec
   // into emitted source automatically, and the emitted FacetGrid consumes it
   // the same way render/GGPlot.tsx's FacetGrid does (layouts[i].panel).
   assertStringIncludes(src, facetCellLayouts.toString());
-  assertStringIncludes(src, "facetCellLayouts(width, height, nrow, ncol, gap, stripHeight)");
+  assertStringIncludes(
+    src,
+    "facetCellLayouts(width, height, nrow, ncol, gap, stripHeight)",
+  );
   assertStringIncludes(src, "const panel = layouts[i].panel;");
   assertStringIncludes(
     src,
@@ -3882,7 +3936,7 @@ Deno.test("gggplot-tzc.6 guide-vs-mark: an hline annotation emits a plot Line wh
 
   // The hline reference annotation stays a plain plot Line, bound from plot.
   assertStringIncludes(src, "<Line ");
-  assertStringIncludes(src, 'import * as Plot from "@use-gpu/plot"');
+  assertStringIncludes(src, 'import * as PlotComponents from "@use-gpu/plot"');
   const plotBinding = src.split("\n").find((line) =>
     line.startsWith("const {") && line.includes("} = Plot")
   )!;
@@ -4884,9 +4938,8 @@ Deno.test("geomWaffle expands weighted groups into core tiles with ordinary fill
   const tree = compile(spec);
   // gggplot-tzc.4: geomWaffle lowers via geom "tile" → lowerTile, whose
   // cells pack into a single ChunkedFace node.
-  const waffleFace = findNodes(tree, "ChunkedFace").filter((node) =>
-    !node.props.guideKind
-  )[0];
+  const waffleFace =
+    findNodes(tree, "ChunkedFace").filter((node) => !node.props.guideKind)[0];
   const tiles = decodeChunks(waffleFace).filter((loop) => loop.length === 4);
   assertEquals(tiles.length, 100);
   assertEquals(
@@ -5011,7 +5064,14 @@ Deno.test("no RenderTree node ever carries a compiler-internal owners field, acr
       up: [8],
       ymin: [0],
       ymax: [10],
-    }, { x: "x", lower: "lo", middle: "mid", upper: "up", ymin: "ymin", ymax: "ymax" })
+    }, {
+      x: "x",
+      lower: "lo",
+      middle: "mid",
+      upper: "up",
+      ymin: "ymin",
+      ymax: "ymax",
+    })
       .add(geomBoxplot()).build(),
     // errorbar/crossbar box
     ggplot({ x: [1], y: [3], lo: [1], hi: [5] }, {
@@ -5028,7 +5088,11 @@ Deno.test("no RenderTree node ever carries a compiler-internal owners field, acr
       geomSmooth({ n: 5 }),
     ).build(),
     // label box (gggplot-cct)
-    ggplot({ x: [0], y: [0], label: ["hi"] }, { x: "x", y: "y", label: "label" })
+    ggplot({ x: [0], y: [0], label: ["hi"] }, {
+      x: "x",
+      y: "y",
+      label: "label",
+    })
       .add(geomLabel()).build(),
   ];
 
@@ -5046,54 +5110,81 @@ Deno.test("no RenderTree node ever carries a compiler-internal owners field, acr
 
 Deno.test("converted face families emit no nested-Polygon mark nodes", () => {
   const specs: [string, RenderNode][] = [
-    ["bar/col", compile(
-      ggplot({ x: ["a", "b"], y: [1, 2] }, { x: "x", y: "y" }).add(geomCol())
-        .build(),
-    )],
-    ["tile", compile(
-      ggplot({ x: [0, 1], y: [0, 1] }, { x: "x", y: "y" }).add(geomTile())
-        .build(),
-    )],
-    ["area", compile(
-      ggplot({ x: [0, 1, 2], y: [1, 2, 3] }, { x: "x", y: "y" }).add(geomArea())
-        .build(),
-    )],
-    ["polygon", compile(
-      ggplot({ x: [0, 1, 0], y: [0, 0, 1] }, { x: "x", y: "y" }).add(
-        geomPolygon(),
-      ).build(),
-    )],
-    ["boxplot", compile(
-      ggplot({
-        x: [0],
-        lo: [2],
-        mid: [5],
-        up: [8],
-        ymin: [0],
-        ymax: [10],
-      }, {
-        x: "x",
-        lower: "lo",
-        middle: "mid",
-        upper: "up",
-        ymin: "ymin",
-        ymax: "ymax",
-      }).add(geomBoxplot()).build(),
-    )],
-    ["hex", compile(
-      ggplot({ x: [0, 0.1, 0.9, 1], y: [0, 0.1, 0.9, 1] }, { x: "x", y: "y" })
-        .add(geomHex({ bins: 2 })).build(),
-    )],
-    ["label", compile(
-      ggplot({ x: [0], y: [0], label: ["hi"] }, {
-        x: "x",
-        y: "y",
-        label: "label",
-      }).add(geomLabel()).build(),
-    )],
+    [
+      "bar/col",
+      compile(
+        ggplot({ x: ["a", "b"], y: [1, 2] }, { x: "x", y: "y" }).add(geomCol())
+          .build(),
+      ),
+    ],
+    [
+      "tile",
+      compile(
+        ggplot({ x: [0, 1], y: [0, 1] }, { x: "x", y: "y" }).add(geomTile())
+          .build(),
+      ),
+    ],
+    [
+      "area",
+      compile(
+        ggplot({ x: [0, 1, 2], y: [1, 2, 3] }, { x: "x", y: "y" }).add(
+          geomArea(),
+        )
+          .build(),
+      ),
+    ],
+    [
+      "polygon",
+      compile(
+        ggplot({ x: [0, 1, 0], y: [0, 0, 1] }, { x: "x", y: "y" }).add(
+          geomPolygon(),
+        ).build(),
+      ),
+    ],
+    [
+      "boxplot",
+      compile(
+        ggplot({
+          x: [0],
+          lo: [2],
+          mid: [5],
+          up: [8],
+          ymin: [0],
+          ymax: [10],
+        }, {
+          x: "x",
+          lower: "lo",
+          middle: "mid",
+          upper: "up",
+          ymin: "ymin",
+          ymax: "ymax",
+        }).add(geomBoxplot()).build(),
+      ),
+    ],
+    [
+      "hex",
+      compile(
+        ggplot({ x: [0, 0.1, 0.9, 1], y: [0, 0.1, 0.9, 1] }, { x: "x", y: "y" })
+          .add(geomHex({ bins: 2 })).build(),
+      ),
+    ],
+    [
+      "label",
+      compile(
+        ggplot({ x: [0], y: [0], label: ["hi"] }, {
+          x: "x",
+          y: "y",
+          label: "label",
+        }).add(geomLabel()).build(),
+      ),
+    ],
   ];
   for (const [label, tree] of specs) {
     const marks = findNodes(tree, "Polygon").filter((n) => !n.props.guideKind);
-    assertEquals(marks.length, 0, `${label} should not emit a mark 'Polygon' node`);
+    assertEquals(
+      marks.length,
+      0,
+      `${label} should not emit a mark 'Polygon' node`,
+    );
   }
 });

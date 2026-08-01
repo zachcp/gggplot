@@ -1,4 +1,11 @@
-import type { Aes, AesName, DataFrame, GGSpec, Scale } from "../ir/types.ts";
+import type {
+  Aes,
+  AesName,
+  DataFrame,
+  GGSpec,
+  PositionAxis,
+  Scale,
+} from "../ir/types.ts";
 import { columnValues, factorLevelsFor, isFactorColumn } from "../data/mod.ts";
 import { categoricalRange } from "./palette.ts";
 import type { TrainedScale } from "./types.ts";
@@ -88,6 +95,78 @@ function discreteLevels(
     levels.push(level);
   }
   return levels;
+}
+
+function positionGuideFields(
+  declared: Scale | undefined,
+): Pick<Scale, "name" | "breaks" | "nBreaks"> {
+  if (
+    declared?.nBreaks != null &&
+    (!Number.isInteger(declared.nBreaks) || declared.nBreaks < 1)
+  ) {
+    throw new Error("[gggplot] scale nBreaks must be a positive integer");
+  }
+  return {
+    name: declared?.name,
+    ...(declared?.breaks ? { breaks: [...declared.breaks] } : {}),
+    ...(declared?.nBreaks != null ? { nBreaks: declared.nBreaks } : {}),
+  };
+}
+
+/** Train one position aesthetic with the same rules for x, y, and z. */
+export function trainPositionScale(
+  spec: GGSpec,
+  perLayer: { data: DataFrame; mapping: Aes }[],
+  aesName: PositionAxis,
+): TrainedScale | undefined {
+  const declared = spec.scales.find((scale) => scale.aes === aesName);
+  const guideFields = positionGuideFields(declared);
+
+  if (isDiscreteAes(perLayer, aesName, declared)) {
+    const levels = discreteLevels(
+      perLayer,
+      aesName,
+      declared?.domain as string[] | undefined,
+    );
+    return levels.length > 0
+      ? {
+        aes: aesName,
+        kind: "discrete",
+        ...guideFields,
+        domain: levels,
+      }
+      : undefined;
+  }
+
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const { data, mapping } of perLayer) {
+    const cols = aesName === "y"
+      ? [mapping.y, mapping.ymin, mapping.ymax, mapping.yend]
+      : aesName === "x"
+      ? [mapping.x, mapping.xmin, mapping.xmax, mapping.xend]
+      : [mapping.z];
+    for (const col of cols) {
+      if (!col || !(col in data)) continue;
+      const extent = continuousExtent(columnValues(data, col));
+      if (!extent) continue;
+      lo = Math.min(lo, extent[0]);
+      hi = Math.max(hi, extent[1]);
+    }
+  }
+  if (!(lo <= hi)) return undefined;
+
+  const kind = declared?.kind ?? "continuous";
+  const transform = transformFor(kind);
+  const limits = (declared?.domain as [number, number]) ?? [lo, hi];
+  const transformed: [number, number] = [
+    transform(limits[0]),
+    transform(limits[1]),
+  ];
+  const domain = declared?.expand
+    ? expandRange(transformed, declared.expand)
+    : transformed;
+  return { aes: aesName, kind, ...guideFields, domain };
 }
 
 /** Train a continuous size/alpha scale: data extent -> a visual [min,max] range. */
@@ -212,7 +291,7 @@ function trainColorScale(
 }
 
 /**
- * Train scales for x, y, color, fill, size, alpha, shape, linetype and
+ * Train scales for x, y, z, color, fill, size, alpha, shape, linetype and
  * linewidth by unioning each
  * layer's mapped columns. Returns a map keyed by aesthetic name.
  */
@@ -222,63 +301,9 @@ export function trainScales(
 ): Map<string, TrainedScale> {
   const trained = new Map<string, TrainedScale>();
 
-  for (const aesName of ["x", "y"] as const) {
-    const declared = spec.scales.find((s) => s.aes === aesName);
-
-    if (isDiscreteAes(perLayer, aesName, declared)) {
-      const levels = discreteLevels(
-        perLayer,
-        aesName,
-        declared?.domain as string[] | undefined,
-      );
-      if (levels.length > 0) {
-        trained.set(aesName, {
-          aes: aesName,
-          kind: "discrete",
-          name: declared?.name,
-          domain: levels,
-        });
-      }
-      continue;
-    }
-
-    let lo = Infinity;
-    let hi = -Infinity;
-
-    // ymin/ymax (geom_ribbon/geom_area's band edges) and xend/yend/xmin/xmax
-    // (geom_segment/geom_rect annotations) share the x/y aesthetic's domain.
-    for (const { data, mapping } of perLayer) {
-      const cols = aesName === "y"
-        ? [mapping.y, mapping.ymin, mapping.ymax, mapping.yend]
-        : [mapping.x, mapping.xmin, mapping.xmax, mapping.xend];
-      for (const col of cols) {
-        if (!col || !(col in data)) continue;
-        const ext = continuousExtent(columnValues(data, col));
-        if (!ext) continue;
-        lo = Math.min(lo, ext[0]);
-        hi = Math.max(hi, ext[1]);
-      }
-    }
-
-    if (lo <= hi) {
-      const kind = declared?.kind ?? "continuous";
-      const transform = transformFor(kind);
-      const limits = (declared?.domain as [number, number]) ?? [lo, hi];
-      const transformed: [number, number] = [
-        transform(limits[0]),
-        transform(limits[1]),
-      ];
-      const domain = declared?.expand
-        ? expandRange(transformed, declared.expand)
-        : transformed;
-
-      trained.set(aesName, {
-        aes: aesName,
-        kind,
-        name: declared?.name,
-        domain,
-      });
-    }
+  for (const aesName of ["x", "y", "z"] as const) {
+    const scale = trainPositionScale(spec, perLayer, aesName);
+    if (scale) trained.set(aesName, scale);
   }
 
   for (const aesName of ["color", "fill"] as const) {

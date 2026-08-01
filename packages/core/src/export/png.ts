@@ -7,6 +7,7 @@ import { FlatCamera, Pass, Screenshot } from "@use-gpu/workbench";
 import type { GGSpec } from "../ir/types.ts";
 import { GGPlot } from "../render/GGPlot.tsx";
 import type { FontResources } from "../render/font_resources.ts";
+import { resolvePlotDimension } from "../geom/mod.ts";
 import {
   type ExportUnit,
   pngDimensions,
@@ -54,12 +55,13 @@ function liveExportScene(
   onError: (error: Error) => void,
   capture: boolean,
   size: ResolvedExportSize,
+  ownsPasses: boolean,
 ) {
   const plot = renderPlot();
   const frame = Live.createElement(
     Live.Fragment,
     {},
-    Live.createElement(
+    ownsPasses ? plot : Live.createElement(
       FlatCamera,
       {},
       Live.createElement(Pass, {}, plot),
@@ -95,6 +97,7 @@ function ExportCanvas(props: {
   onBlob(blob: Blob): void;
   onError(error: Error): void;
   size: ResolvedExportSize;
+  ownsPasses: boolean;
 }) {
   const [capture, setCapture] = React.useState(false);
   React.useEffect(() => {
@@ -122,6 +125,7 @@ function ExportCanvas(props: {
         props.onError,
         capture,
         props.size,
+        props.ownsPasses,
       ),
   });
 }
@@ -130,6 +134,7 @@ function ExportCanvas(props: {
 export async function saveLivePng(
   renderPlot: () => Live.LiveElement,
   options: GgSaveOptions,
+  scene: { ownsPasses?: boolean } = {},
 ): Promise<Blob> {
   const size = resolveExportSize(options);
   if (typeof document === "undefined" || typeof navigator === "undefined") {
@@ -196,6 +201,7 @@ export async function saveLivePng(
             onBlob: finish,
             onError: finish,
             size,
+            ownsPasses: scene.ownsPasses ?? false,
           }),
         ),
       );
@@ -225,8 +231,10 @@ export function ggsave(spec: GGSpec, options: GgSaveOptions): Promise<Blob> {
     () =>
       Live.createElement(GGPlot, {
         spec,
+        interactive: false,
         fontResources: options.fontResources,
       }),
     options,
+    { ownsPasses: resolvePlotDimension(spec).dimensions === 3 },
   );
 }

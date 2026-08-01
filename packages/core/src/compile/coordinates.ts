@@ -1,4 +1,4 @@
-import type { Aes, GGSpec, Layer, Theme } from "../ir/types.ts";
+import type { Aes, Coord, GGSpec, Layer, Theme } from "../ir/types.ts";
 import {
   type FlatTensor,
   type MarkTopology,
@@ -7,6 +7,42 @@ import {
 } from "./rendertree.ts";
 import { expandRange, scalePosition, type TrainedScale } from "../scale/mod.ts";
 import { expandByOwners, valuesOf } from "../geom/shared.ts";
+
+export type Axes2D = "xy" | "yx";
+
+/** Validate a 2D coord's use.gpu-style output swizzle. */
+export function resolveAxes2d(coord: Coord): Axes2D {
+  const input = (coord.axes ?? "xy").toLowerCase();
+  const axes = input.length === 4 && input.endsWith("zw")
+    ? input.slice(0, 2)
+    : input;
+  if (axes !== "xy" && axes !== "yx") {
+    throw new Error(
+      `[gggplot] 2D coord axes "${coord.axes}" must be "xy", "yx", "xyzw", or "yxzw"`,
+    );
+  }
+  return axes;
+}
+
+/** Resolve a 3D coord swizzle to use.gpu's full form with homogeneous w last. */
+export function resolveAxes3d(coord?: Pick<Coord, "axes">): string {
+  const input = coord?.axes ?? "xyz";
+  const lower = input.toLowerCase();
+  const xyz = lower.length === 4 && lower.endsWith("w")
+    ? lower.slice(0, 3)
+    : lower;
+  if (lower.length === 4 && !lower.endsWith("w")) {
+    throw new Error(
+      `[gggplot] coord axes "${input}" must end in the homogeneous "w" axis`,
+    );
+  }
+  if (xyz.length !== 3 || [...xyz].sort().join("") !== "xyz") {
+    throw new Error(
+      `[gggplot] coord axes "${input}" must be a permutation of "xyz"`,
+    );
+  }
+  return `${xyz}w`;
+}
 
 /**
  * The true y-extent of a stacked/filled bar layer is the summed height per x,

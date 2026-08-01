@@ -7,6 +7,7 @@
     "npm:@types/react@^18.3.12": "18.3.31",
     "npm:@use-gpu/core@0.20": "0.20.0",
     "npm:@use-gpu/glyph@0.20": "0.20.0",
+    "npm:@use-gpu/interact@0.20": "0.20.0",
     "npm:@use-gpu/live@0.20": "0.20.0",
     "npm:@use-gpu/plot@0.20": "0.20.0",
     "npm:@use-gpu/react@0.20": "0.20.0_react@18.3.1_react-dom@18.3.1__react@18.3.1",
@@ -18,6 +19,7 @@
     "npm:@use-gpu/workbench@0.20": "0.20.0",
     "npm:@vitejs/plugin-react@^5.2.0": "5.2.0_vite@7.3.6",
     "npm:gl-matrix@^3.4.4": "3.4.4",
+    "npm:playwright@^1.61.1": "1.61.1",
     "npm:react-dom@^18.3.1": "18.3.1_react@18.3.1",
     "npm:react@^18.3.1": "18.3.1",
     "npm:rollup@^4.24.0": "4.62.2",
@@ -557,6 +559,13 @@
         "@use-gpu/state"
       ]
     },
+    "@use-gpu/interact@0.20.0": {
+      "integrity": "sha512-PUKaX8Z2Ha0vAjLrUXBQgeDokvmcmjfN/8aWq1LZgY3tWzRTBPAZBz9NLNs1wp7YN6cHLZ0IKvzlFTSUN2mFSQ==",
+      "dependencies": [
+        "@use-gpu/plot",
+        "@use-gpu/workbench"
+      ]
+    },
     "@use-gpu/live@0.20.0": {
       "integrity": "sha512-Z8YvLEP1H35sLlZWbZWHlSD1TI03c3XAp7rIoVroCkMy8OQ7St70JtfG8FT/XZ7U9szwIoQxJMAob53swogiTg=="
     },
@@ -786,6 +795,11 @@
     "find-replace@5.0.2": {
       "integrity": "sha512-Y45BAiE3mz2QsrN2fb5QEtO4qb44NcS7en/0y9PEVsg351HsLeVclP8QPMH79Le9sH3rs5RSwJu99W0WPZO43Q=="
     },
+    "fsevents@2.3.2": {
+      "integrity": "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==",
+      "os": ["darwin"],
+      "scripts": true
+    },
     "fsevents@2.3.3": {
       "integrity": "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==",
       "os": ["darwin"],
@@ -861,6 +875,20 @@
     "picomatch@4.0.5": {
       "integrity": "sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A=="
     },
+    "playwright-core@1.61.1": {
+      "integrity": "sha512-h7Qlt6m4REp25qvIdvbDtVmD4LqVXfpRxhORv9L0jzETM05p4fuPJ3dKyuSXQxDSbXnmS79HAgi9589lGSpLkg==",
+      "bin": true
+    },
+    "playwright@1.61.1": {
+      "integrity": "sha512-DWnY5o3YbLWK4GovuAVwpqL+1VwGNdUGrRr++8j8PtQQzvAVZUIMjKQ90fY689sEJZJBbZVw1rXaOKSTitkzPQ==",
+      "dependencies": [
+        "playwright-core"
+      ],
+      "optionalDependencies": [
+        "fsevents@2.3.2"
+      ],
+      "bin": true
+    },
     "postcss@8.5.19": {
       "integrity": "sha512-Mz8SaolMd8nB+G13WkORcxQKHZ/NE4xXevtkJHVuG+guo9/wYKlIMTKAqGdEmYOXR2ijPjTYNHssizdaVSUNdQ==",
       "dependencies": [
@@ -920,7 +948,7 @@
         "@rollup/rollup-win32-ia32-msvc",
         "@rollup/rollup-win32-x64-gnu",
         "@rollup/rollup-win32-x64-msvc",
-        "fsevents"
+        "fsevents@2.3.3"
       ],
       "bin": true
     },
@@ -987,7 +1015,7 @@
         "tinyglobby"
       ],
       "optionalDependencies": [
-        "fsevents"
+        "fsevents@2.3.3"
       ],
       "bin": true
     },
@@ -1005,6 +1033,7 @@
           "npm:@types/react-dom@^18.3.0",
           "npm:@types/react@^18.3.12",
           "npm:@use-gpu/core@0.20",
+          "npm:@use-gpu/interact@0.20",
           "npm:@use-gpu/live@0.20",
           "npm:@use-gpu/plot@0.20",
           "npm:@use-gpu/react@0.20",
@@ -1021,18 +1050,11 @@
           "npm:vite@^7.3.0"
         ]
       },
-      "packages/3d": {
-        "dependencies": [
-          "jsr:@std/assert@1",
-          "npm:@use-gpu/live@0.20",
-          "npm:@use-gpu/plot@0.20",
-          "npm:@use-gpu/workbench@0.20"
-        ]
-      },
       "packages/core": {
         "dependencies": [
           "jsr:@std/assert@1",
           "npm:@use-gpu/glyph@0.20",
+          "npm:@use-gpu/interact@0.20",
           "npm:@use-gpu/live@0.20",
           "npm:@use-gpu/plot@0.20",
           "npm:@use-gpu/react@0.20",
