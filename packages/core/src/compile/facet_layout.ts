@@ -149,6 +149,11 @@ export interface FacetPanelGuideContext {
   layout?: { width: number; height: number };
 }
 
+/** Keep facet grid rules and labels on the same reduced per-panel break count. */
+export function panelGuideTickCount(tickCount: number, ncol: number): number {
+  return Math.max(2, Math.ceil(tickCount / ncol));
+}
+
 /**
  * Per-panel axis tick/guide overlays for a facet grid. Each panel's normalized
  * bounds are derived from its pixel-space panel rect; ticks are drawn only on
@@ -178,7 +183,7 @@ export function facetPanelGuideOverlays(
     layout,
   } = ctx;
   const freeMode = spec.facet.scales ?? "fixed";
-  const panelTickCount = Math.max(2, Math.ceil(tickCount / ncol));
+  const panelTickCount = panelGuideTickCount(tickCount, ncol);
   return panels.map((panel, i) => {
     const rect = layouts[panel.row * ncol + panel.col].panel;
     const panelBoundsRect: [number, number, number, number] = [

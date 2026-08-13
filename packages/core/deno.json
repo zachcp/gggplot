@@ -24,7 +24,7 @@
     "react-dom/client": "npm:react-dom@^18.3.1/client"
   },
   "tasks": {
-    "test": "deno test --allow-read --allow-write tests/"
+    "test": "deno test -A tests/"
   },
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext", "deno.ns"]
