@@ -7,6 +7,7 @@ import {
   facetPanelGeometry,
   facetPanelGuideOverlays,
   facetStripLabelNodes,
+  panelGuideTickCount,
 } from "./facet_layout.ts";
 
 import {
@@ -289,6 +290,9 @@ export function compile(
     spec.mapping,
     guideScales,
   );
+  const panelTickCount = faceted
+    ? panelGuideTickCount(tickCount, ncol)
+    : tickCount;
 
   /** Build one panel's Cartesian/Polar view node (guides + this panel's marks). */
   function buildPanel(
@@ -463,8 +467,8 @@ export function compile(
       }));
     }
     if (theme.grid !== false) {
-      const xBreaks = axisTickValues(panelXScale, tickCount);
-      const yBreaks = axisTickValues(panelYScale, tickCount);
+      const xBreaks = axisTickValues(panelXScale, panelTickCount);
+      const yBreaks = axisTickValues(panelYScale, panelTickCount);
       const xGrid = gridDivision(xBreaks);
       const yGrid = gridDivision(yBreaks);
       const gridStyle = {

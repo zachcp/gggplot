@@ -3432,6 +3432,32 @@ Deno.test("grid rules and labels share pretty or explicit scale breaks", () => {
   assertStringIncludes(emitSource(explicit), "const GuideLines = Line;");
 });
 
+Deno.test("facet grid rules and labels share the reduced per-panel break count", () => {
+  const tree = compile(
+    ggplot(
+      {
+        x: [0, 5, 10, 0, 5, 10],
+        y: [0, 1, 2, 0, 1, 2],
+        panel: ["a", "a", "a", "b", "b", "b"],
+      },
+      { x: "x", y: "y" },
+    ).add(geomPoint(), facetWrap(["panel"], 2)).build(),
+  );
+
+  const xGrids = findNodes(tree, "Grid").filter((grid) =>
+    grid.props.first !== null
+  );
+  assertEquals(xGrids.length, 2);
+  assertEquals(
+    xGrids.map((grid) => grid.props.first),
+    Array(2).fill({ nice: false, divide: 2 }),
+  );
+  const xLabels = findNodes(tree, "Label").filter((label) =>
+    JSON.stringify(label.props.labels) === JSON.stringify(["0", "5", "10"])
+  );
+  assertEquals(xLabels.length, 2);
+});
+
 Deno.test("themeGrey adds a full-panel background Polygon and a white grid color", () => {
   const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint(), themeGrey())
     .build();
