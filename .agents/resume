@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export DENO_INSTALL="${DENO_INSTALL:-$HOME/.deno}"
+export PATH="$DENO_INSTALL/bin:$HOME/.local/bin:$PATH"
+
+command -v deno >/dev/null
+command -v bd >/dev/null
+
+printf 'gggplot orb toolchain is ready.\n'

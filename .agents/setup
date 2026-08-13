@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly DENO_VERSION="2.8.0"
+readonly DENO_INSTALL="${DENO_INSTALL:-$HOME/.deno}"
+export DENO_INSTALL
+export PATH="$DENO_INSTALL/bin:$HOME/.local/bin:$PATH"
+
+step() {
+  local label="$1"
+  shift
+  local started=$SECONDS
+  printf '\n==> %s\n' "$label"
+  "$@"
+  printf '    completed in %ss\n' "$((SECONDS - started))"
+}
+
+install_deno() {
+  local installed=""
+  if command -v deno >/dev/null 2>&1; then
+    installed="$(deno --version | awk 'NR == 1 { print $2 }')"
+  fi
+
+  if [[ "$installed" == "$DENO_VERSION" ]]; then
+    printf 'Deno %s is already installed.\n' "$DENO_VERSION"
+    return
+  fi
+
+  curl -fsSL https://deno.land/install.sh | sh -s -- "v$DENO_VERSION"
+}
+
+install_beads() {
+  if command -v bd >/dev/null 2>&1; then
+    printf 'bd is already installed.\n'
+    return
+  fi
+
+  curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash
+}
+
+configure_login_shell() {
+  local marker="# gggplot orb toolchain"
+  touch "$HOME/.bash_profile"
+  if grep -Fqx "$marker" "$HOME/.bash_profile"; then
+    return
+  fi
+
+  cat >> "$HOME/.bash_profile" <<'EOF'
+
+# gggplot orb toolchain
+export DENO_INSTALL="$HOME/.deno"
+export PATH="$DENO_INSTALL/bin:$HOME/.local/bin:$PATH"
+EOF
+}
+
+install_dependencies() {
+  deno install --frozen
+}
+
+install_chromium() {
+  if find "$HOME/.cache/ms-playwright" -type f \
+    \( -name chrome -o -name headless_shell \) -executable -print -quit \
+    2>/dev/null | grep -q .; then
+    deno run -A npm:playwright@^1.61.1 install chromium
+  else
+    deno run -A npm:playwright@^1.61.1 install --with-deps chromium
+  fi
+}
+
+step "Install Deno" install_deno
+step "Install Beads" install_beads
+step "Configure login shells" configure_login_shell
+step "Install locked dependencies" install_dependencies
+step "Install Playwright Chromium" install_chromium
+
+printf '\nOrb setup complete.\n'
