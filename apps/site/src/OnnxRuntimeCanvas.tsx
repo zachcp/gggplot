@@ -11,12 +11,16 @@ import {
   MODEL_FIXTURES,
 } from "./model_fixtures.ts";
 import { modelScene3dPrisms, modelScene3dSpec } from "./model_scene_3d.ts";
+import { ModelTensorInspector } from "./ModelTensorInspector.tsx";
 import { Panel } from "./ExampleSection.tsx";
 import { styles } from "./styles.ts";
 
 type LoadState =
   | { kind: "loading"; name: string }
-  | { kind: "ready"; document: ModelDocument }
+  // The raw bytes are retained beside the document so a selected tensor can be
+  // read on demand. Parsing never copied the weight payload, so this is the
+  // only thing that makes bounded tensor content available without refetching.
+  | { kind: "ready"; document: ModelDocument; bytes: Uint8Array }
   | { kind: "error"; message: string };
 
 interface LoadedArtifact {
@@ -43,6 +47,9 @@ export function OnnxRuntimeCanvas() {
     name: DEFAULT_MODEL_FIXTURE.label,
   });
   const [fixtureId, setFixtureId] = React.useState(DEFAULT_MODEL_FIXTURE.id);
+  // Selection is owned here so the tensor inspector and any future linked view
+  // resolve the same tensor id rather than each keeping private state.
+  const [selectedTensorId, setSelectedTensorId] = React.useState<string>();
   const loadEpoch = React.useRef(0);
   const selectedFixture = fixtureById(fixtureId);
 
@@ -54,9 +61,11 @@ export function OnnxRuntimeCanvas() {
         const { source, model } = await read();
         const document = await inspectOnnxBytes(source, model);
         if (epoch !== loadEpoch.current) return;
+        setSelectedTensorId(undefined);
         setState({
           kind: "ready",
           document,
+          bytes: new Uint8Array(model),
         });
       } catch (error) {
         if (epoch !== loadEpoch.current) return;
@@ -159,6 +168,17 @@ export function OnnxRuntimeCanvas() {
             prismInstances={modelScene3dPrisms(state.document)}
             label={"3D ONNX tensor and connector scene for " +
               state.document.name}
+          />
+          <p style={styles.metaCopy}>
+            Selecting a tensor reads a bounded range from the same bytes the
+            graph was parsed from. The content policy decides whether that
+            becomes exact cells, a tile, a downsample, or a summary.
+          </p>
+          <ModelTensorInspector
+            document={state.document}
+            modelBytes={state.bytes}
+            selectedTensorId={selectedTensorId}
+            onSelectTensor={setSelectedTensorId}
           />
         </>
       )}

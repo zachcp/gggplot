@@ -3,6 +3,8 @@
   "version": "0.0.1",
   "exports": {
     ".": "./src/mod.ts",
+    "./dsl": "./src/dsl/mod.ts",
+    "./compile": "./src/compile/mod.ts",
     "./plan": "./src/plan/mod.ts",
     "./export": "./src/export/png.ts"
   },

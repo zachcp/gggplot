@@ -89,6 +89,14 @@ export default defineConfig({
         __dirname,
         "../../packages/core/src/plan/mod.ts",
       ),
+      "@gggplot/core/dsl": resolve(
+        __dirname,
+        "../../packages/core/src/dsl/mod.ts",
+      ),
+      "@gggplot/core/compile": resolve(
+        __dirname,
+        "../../packages/core/src/compile/mod.ts",
+      ),
       "@gggplot/core": resolve(__dirname, "../../packages/core/src/mod.ts"),
       "@gggplot/reductions": resolve(
         __dirname,

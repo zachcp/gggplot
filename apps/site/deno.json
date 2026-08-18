@@ -13,6 +13,8 @@
     "react/jsx-runtime": "npm:react@^18.3.1/jsx-runtime",
     "react-dom": "npm:react-dom@^18.3.1",
     "react-dom/client": "npm:react-dom@^18.3.1/client",
+    "@gggplot/core/dsl": "../../packages/core/src/dsl/mod.ts",
+    "@gggplot/core/compile": "../../packages/core/src/compile/mod.ts",
     "@gggplot/core": "../../packages/core/src/mod.ts",
     "@gggplot/model-inspect": "../../packages/model-inspect/src/mod.ts",
     "onnxruntime-web/webgpu": "npm:onnxruntime-web@^1.27.0/webgpu",
