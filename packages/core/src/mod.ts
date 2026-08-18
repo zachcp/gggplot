@@ -60,6 +60,10 @@ export {
   renderTree,
 } from "./render/GGPlot.tsx";
 export {
+  type PrismInstance3D,
+  PrismInstances3D,
+} from "./render/prism_instances_3d.tsx";
+export {
   approximateTextMeasurer,
   createFontResources,
   createGlyphTextMeasurer,
