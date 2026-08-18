@@ -522,6 +522,48 @@ matrix, and attention views should remain package-owned components exposed
 through explicit Live/emitted adapters. They should not be forced into
 `GeomKind` or the core 2D/3D dimension resolver.
 
+## PyTorch bridge format decision
+
+Recorded 2026-08-18 for `gggplot-i5m.4`. Implementation in
+`tools/pytorch_bridge/`.
+
+**The bridge accepts a `state_dict` and emits SafeTensors plus a
+`gggplot.model@1` document.** It deliberately does not define a new
+interchange format: the inspector already parses two portable ones, and a third
+would be a format to maintain rather than a capability to gain.
+
+It runs host-side only. Reading a PyTorch artifact means unpickling, unpickling
+executes code from the file, and that belongs on a trusted machine — never in a
+browser and never against a user-supplied artifact. `weights_only=True` is the
+default; full unpickling requires an explicit flag and warns before proceeding.
+The browser side never sees a `.pt`.
+
+PT2 `ExportedProgram` is **not** accepted. It would require executing or
+unpickling a program graph for structure that `torch.onnx.export` already
+provides in a portable form the package parses statically.
+
+### A state_dict has no graph
+
+A `state_dict` maps names to weights and records nothing about how they were
+wired. The emitted document therefore has no nodes and no edges, and marks that
+explicitly with `graphStructure: "none"` plus a reason. A consumer has to be
+able to distinguish "this model has no topology" from "we failed to read the
+topology", and only an explicit statement makes that possible. Export to ONNX
+when structure matters.
+
+### Tested across the language boundary
+
+The Python writer is deterministic, so `--demo` produces a byte-reproducible
+fixture that is committed under `packages/model-inspect/tests/fixtures/` and
+read back by `bridge_fixture_test.ts`. That test asserts the two sides agree on
+names, dtypes, shapes, and byte ranges, and that the values Python wrote are
+the values TypeScript reads. A contract break on either side fails there rather
+than in a browser.
+
+Verifying the bridge against a real `.pt` requires PyTorch, which is not
+installed in this repository's toolchain; the torch-reading path is therefore
+covered by its refusal behaviour and by review, not by an executed test.
+
 ## Artifact and trust policy
 
 | Input | First-class status | Reason |
