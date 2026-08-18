@@ -347,6 +347,61 @@ same-device shared buffer is worthwhile for this repository's actual useGPU
 runtime. The capability report and upload instrumentation belong in
 `gggplot-i5m.10` and `gggplot-i5m.7`.
 
+### Decision: the first supported runtime path
+
+Recorded 2026-08-18 for `gggplot-i5m.10`.
+
+**Static ONNX parsing is the first supported path, and no inference runtime is
+a dependency of inspection.** `inspectOnnx` reads the portable artifact
+directly and yields the full operator graph, initializer ranges, and provenance
+without executing the model. That is strictly better than obtaining structure
+from a runtime session: it is faster, it needs no GPU, it runs in Deno and Node
+as readily as a browser, and it never executes untrusted model code. It is also
+what the docs route ships today.
+
+| Path | Graph structure | Activations | Cost to inspect | Verdict |
+| --- | --- | --- | --- | --- |
+| Direct ONNX parse (`inspectOnnx`) | Full operator graph | None — static only | Zero runtime deps | **Default.** Structure authority |
+| ONNX Runtime Web | Full, but only via a session | Selected outputs; shared GPU tensors possible | 14–24 MB WASM, WebGPU device | Opt-in, for activation capture |
+| Transformers.js | Partial; hides internal modules | Task outputs, embeddings | ORT underneath, plus hub loading | Not adopted |
+| `fixtureRuntimeAdapter` | Whatever the fixture declares | Pre-recorded | None | Contract tests and reference |
+
+Transformers.js is **not adopted**. It sits on top of ONNX Runtime Web, so it
+adds its cost without adding graph fidelity — it reports `graphMetadata:
+"partial"` precisely because its pipeline abstraction hides the internal
+modules an inspector exists to show. Where its task-level outputs are wanted
+later, it can arrive as another `ModelRuntimeAdapter` behind the same contract;
+nothing in the package needs to change to accommodate it. Its capability
+profile is retained in `TRANSFORMERS_JS_WEBGPU_CAPABILITIES` so the comparison
+stays executable rather than living only in this document.
+
+A runtime is therefore needed for exactly one thing: **capturing activations**,
+which static parsing cannot provide. ONNX Runtime Web is the choice there, kept
+behind a dynamic import so the inspection route never pays for it (see the
+runtime bundle budget above).
+
+### What the fixture adapter is for
+
+`fixtureRuntimeAdapter` implements the full `ModelRuntimeAdapter` contract,
+including the `capture` half that every real runtime leaves untested in CI
+because it needs a browser, a device, and a large WASM payload. It executes no
+model code and runs anywhere Deno or Node does, so the rules an adapter must
+enforce are asserted on every test run:
+
+- A capture over `maxBytes` **fails** rather than returning a short read, so
+  partial data is never presented as a whole tensor.
+- A capture may not answer for a different `nodeId` or `tensorId` than the one
+  requested, which would corrupt the stable-ID linkage products rely on.
+- `runtime-shared` is granted only when the runtime reports `gpuTensorInterop:
+  "shared"` *and* the binding passes `sharedTensorCompatibility`; anything else
+  degrades to `runtime-copy-on-demand` rather than silently sharing.
+- The granted ownership is reported on the output, so a consumer never has to
+  infer the mode from whether a GPU binding happens to be populated.
+
+Validating a genuinely same-device shared tensor still requires a real WebGPU
+device and a real ORT session, which no headless test can stand in for. That
+remains browser QA rather than something the fixture can honestly claim.
+
 ## Products and visual surfaces
 
 The package should expose products that are derived from the document. Products

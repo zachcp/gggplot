@@ -39,6 +39,14 @@ export interface RuntimeTensorOutput {
   artifact: RuntimeArtifact;
   source?: TensorSource;
   gpu?: RuntimeGpuTensorBinding;
+  /**
+   * Ownership the adapter actually granted, which is not always the ownership
+   * the caller asked for: a runtime may decline to share and answer with a
+   * bounded copy instead. Reporting it keeps the negotiation visible to the
+   * consumer rather than leaving it to infer the mode from whether `gpu` is
+   * populated.
+   */
+  ownership?: TensorOwnership;
 }
 
 export interface RuntimeOutputRequest {

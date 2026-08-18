@@ -67,6 +67,15 @@ export {
   type Scene3DTensorSlab,
 } from "./scene3d.ts";
 export {
+  FIXTURE_CAPABILITIES,
+  type FixtureCapture,
+  FixtureCaptureError,
+  type FixtureRuntimeAdapter,
+  fixtureRuntimeAdapter,
+  type FixtureRuntimeOptions,
+  type FixtureRuntimeTensorOutput,
+} from "./fixture_runtime.ts";
+export {
   dimensionFromOnnx,
   loadOnnxRuntimeWebModel,
   modelDocumentFromOnnxSession,
