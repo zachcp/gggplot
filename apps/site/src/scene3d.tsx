@@ -4,12 +4,19 @@
 // and flat-overlay passes. Callers provide only GGSpec, exactly as in 2D.
 import { createElement } from "@use-gpu/live";
 import { AutoCanvas, WebGPU } from "@use-gpu/webgpu";
-import { createFontResources, GGPlot, type GGSpec } from "@gggplot/core";
+import {
+  createFontResources,
+  GGPlot,
+  type GGSpec,
+  type PrismInstance3D,
+  PrismInstances3D,
+} from "@gggplot/core";
 import { withSiteChartTheme3d } from "./chart_theme.ts";
 
 interface Props {
   canvas: HTMLCanvasElement;
   spec: GGSpec;
+  prismInstances?: readonly PrismInstance3D[];
 }
 
 const fontResources = createFontResources([
@@ -27,12 +34,15 @@ const fontResources = createFontResources([
   },
 ]);
 
-export const Scene3D = ({ canvas, spec }: Props) => (
+export const Scene3D = ({ canvas, spec, prismInstances }: Props) => (
   <WebGPU fallback={null}>
     <AutoCanvas canvas={canvas} backgroundColor={[0.05, 0.05, 0.07, 1]}>
       <GGPlot
         spec={withSiteChartTheme3d(spec)}
         fontResources={fontResources}
+        sceneExtras={prismInstances?.length
+          ? createElement(PrismInstances3D, { instances: prismInstances })
+          : undefined}
       />
     </AutoCanvas>
   </WebGPU>

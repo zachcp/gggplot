@@ -2,12 +2,67 @@ import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
 import wasm from "vite-plugin-wasm";
 import wgslRollup from "@use-gpu/wgsl-loader/rollup";
+import { createReadStream } from "node:fs";
+import { copyFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const wasmPlugin = wasm as unknown as () => PluginOption;
 const wgslPlugin = wgslRollup as unknown as () => PluginOption;
+// Keep this aligned with the npm version pinned by apps/site/deno.json. Vite
+// evaluates this config through a bundled Node-compatible loader, where
+// import.meta.resolve() can return a non-file npm: URL.
+const ortDist = resolve(
+  __dirname,
+  "../../node_modules/.deno/onnxruntime-web@1.27.0/node_modules/onnxruntime-web/dist",
+);
+const ortWasmFiles = [
+  "ort-wasm-simd-threaded.asyncify.mjs",
+  "ort-wasm-simd-threaded.asyncify.wasm",
+];
+
+/**
+ * ORT's WebGPU entrypoint discovers its WASM helper files at runtime. Vite
+ * bundles the binary but does not provide the sibling helper module at the
+ * package-relative URL ORT expects, so expose both under one stable route in
+ * dev and production.
+ */
+function ortWasmAssets(): PluginOption {
+  return {
+    name: "gggplot-ort-wasm-assets",
+    configureServer(server) {
+      server.middlewares.use("/ort/", (request, response, next) => {
+        const filename = request.url?.split("?")[0]?.slice(1);
+        if (!filename || !ortWasmFiles.includes(filename)) {
+          next();
+          return;
+        }
+        response.setHeader(
+          "Content-Type",
+          filename.endsWith(".wasm")
+            ? "application/wasm"
+            : "text/javascript; charset=utf-8",
+        );
+        createReadStream(resolve(ortDist, filename))
+          .on("error", () => next())
+          .pipe(response);
+      });
+    },
+    async writeBundle(options) {
+      const outDir = options.dir
+        ? resolve(__dirname, options.dir)
+        : resolve(__dirname, "dist");
+      const targetDir = resolve(outDir, "ort");
+      await mkdir(targetDir, { recursive: true });
+      await Promise.all(
+        ortWasmFiles.map((filename) =>
+          copyFile(resolve(ortDist, filename), resolve(targetDir, filename))
+        ),
+      );
+    },
+  };
+}
 
 export default defineConfig({
   resolve: {
@@ -25,6 +80,10 @@ export default defineConfig({
         __dirname,
         "../../packages/reductions/src/mod.ts",
       ),
+      "@gggplot/model-inspect": resolve(
+        __dirname,
+        "../../packages/model-inspect/src/mod.ts",
+      ),
     },
   },
   plugins: [
@@ -33,6 +92,7 @@ export default defineConfig({
     react(),
     wasmPlugin(),
     wgslPlugin(),
+    ortWasmAssets(),
   ],
   server: { port: 8080 },
   preview: { port: 8080 },
