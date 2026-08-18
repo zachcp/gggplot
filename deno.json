@@ -1,6 +1,7 @@
 {
   "workspace": [
     "packages/core",
+    "packages/model-inspect",
     "packages/reductions",
     "apps/site"
   ],
@@ -9,8 +10,8 @@
     "dev": "deno task --cwd apps/site dev",
     "build": "deno task --cwd apps/site build",
     "preview": "deno task --cwd apps/site preview",
-    "check": "deno check packages/core/src/mod.ts && deno task --cwd apps/site check",
-    "test": "deno test -A packages/core/tests/ packages/reductions/tests/",
+    "check": "deno check packages/core/src/mod.ts && deno check packages/model-inspect/src/mod.ts && deno task --cwd apps/site check",
+    "test": "deno test -A packages/core/tests/ packages/model-inspect/tests/ packages/reductions/tests/ apps/site/src/docs/model_examples_test.ts apps/site/src/docs/model_asset_test.ts",
     "check:core": "deno check packages/core/src/mod.ts",
     "check:site": "deno task --cwd apps/site check",
     "demo": "deno run packages/core/examples/emit-demo.ts",
