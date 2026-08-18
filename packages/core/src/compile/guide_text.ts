@@ -17,9 +17,13 @@ export function labelNode(
   theme: Theme,
   size?: number,
   angle = 0,
+  // Multi-label stacks stride by the caller's row height. Guides that must stay
+  // legible on short canvases widen this; the default reproduces the historical
+  // normalized rhythm.
+  step = 0.11,
 ): RenderNode {
   return node("Label", {
-    positions: labels.map((_, i): [number, number] => [x, y + i * 0.11]),
+    positions: labels.map((_, i): [number, number] => [x, y + i * step]),
     labels,
     color: theme.textColor ?? "#0b0b0b",
     size: size ?? theme.fontSize ?? 13,

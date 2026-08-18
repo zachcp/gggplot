@@ -25,6 +25,7 @@ export function legendNodes(
   theme: Theme,
   panelBounds: [number, number, number, number],
   layoutWidth?: number,
+  layoutHeight?: number,
 ): RenderNode[] {
   const {
     color: colorScale,
@@ -48,25 +49,41 @@ export function legendNodes(
   const titleX = guideLeft + paddingPx * px;
   const swatchX = guideLeft + (paddingPx + keyBoxPx / 2) * px;
   const labelX = guideLeft + (paddingPx + keyBoxPx + keyLabelGapPx) * px;
+  // The same argument applies vertically. A key row holds a physical glyph, so
+  // a normalized-only step silently collapses on a short canvas: the historical
+  // 0.11 is 33px tall at the default 600px height but only 16.5px at the 300px
+  // 3D canvas, which crowds 13px labels into their neighbours. Keep 0.11 as the
+  // rhythm and raise it only when pixels demand, so default-height output is
+  // unchanged and short canvases stay legible.
+  const minKeyRowPx = 18;
+  const keyStep = Math.max(
+    0.11,
+    minKeyRowPx * 2 / Math.max(layoutHeight ?? 600, 1),
+  );
+  // Title and inter-group gaps ride the same scale, so a widened row keeps the
+  // legend's proportions instead of stretching keys against fixed padding.
+  const rowScale = keyStep / 0.11;
+  const titleAdvance = 0.14 * rowScale;
+  const groupGap = 0.12 * rowScale;
 
   // Shared per-entry layout. Every legend family stacks a 14px title, then a
   // swatch column at swatchX beside a value-label column at labelX, advancing
-  // y by a fixed 0.11 per key plus inter-entry padding. Extracting these keeps
+  // y by keyStep per key plus inter-entry padding. Extracting these keeps
   // the title/swatch/label geometry defined once instead of per aesthetic.
   const pushTitle = (scale: TrainedScale, fallback: string) => {
     nodes.push(
       labelNode(titleX, y, [legendTitle(scale, labels, fallback)], theme, 14),
     );
-    y += 0.14;
+    y += titleAdvance;
   };
   const pushKeyLabels = (texts: string[]) => {
-    nodes.push(labelNode(labelX, y, texts, theme));
-    y += texts.length * 0.11 + 0.12;
+    nodes.push(labelNode(labelX, y, texts, theme, undefined, 0, keyStep));
+    y += texts.length * keyStep + groupGap;
   };
   const swatchColumn = (count: number): [number, number][] =>
     Array.from(
       { length: count },
-      (_, i): [number, number] => [swatchX, y + i * 0.11],
+      (_, i): [number, number] => [swatchX, y + i * keyStep],
     );
   // size/alpha/linewidth all key a continuous domain by [lo, mid, hi]
   // representative values (or just [lo] when the domain is a single point).
@@ -124,8 +141,8 @@ export function legendNodes(
         14,
       ),
     );
-    y += 0.14;
-    const height = 0.28 / count;
+    y += titleAdvance;
+    const height = 0.28 * rowScale / count;
     const positions = Array.from(
       { length: count },
       (_, i): [number, number][] => {
@@ -151,9 +168,9 @@ export function legendNodes(
       labelNode(labelX, y, [
         String(Number(hi.toFixed(2))),
         String(Number(lo.toFixed(2))),
-      ], theme),
+      ], theme, undefined, 0, keyStep),
     );
-    y += 0.36;
+    y += 0.36 * rowScale;
   };
 
   continuousColorGuide(colorScale, "color");
@@ -201,7 +218,7 @@ export function legendNodes(
     pushTitle(shapeScale, "shape");
     levels.forEach((level, i) => {
       nodes.push(node("Point", {
-        positions: [[swatchX, y + i * 0.11]],
+        positions: [[swatchX, y + i * keyStep]],
         shape: scaleShapeValue(shapeScale, level),
         color: "#3b82f6",
         size: 7,
@@ -219,9 +236,9 @@ export function legendNodes(
     levels.forEach((level, i) => {
       const dash = scaleLinetypeValue(linetypeScale, level);
       nodes.push(node("Line", {
-        positions: [[swatchX - 0.025, y + i * 0.11], [
+        positions: [[swatchX - 0.025, y + i * keyStep], [
           swatchX + 0.025,
-          y + i * 0.11,
+          y + i * keyStep,
         ]],
         color: "#3b82f6",
         width: 2,
@@ -236,9 +253,9 @@ export function legendNodes(
     pushTitle(linewidthScale, "linewidth");
     values.forEach((value, i) => {
       nodes.push(node("Line", {
-        positions: [[swatchX - 0.025, y + i * 0.11], [
+        positions: [[swatchX - 0.025, y + i * keyStep], [
           swatchX + 0.025,
-          y + i * 0.11,
+          y + i * keyStep,
         ]],
         color: "#3b82f6",
         width: scaleLinewidthValue(linewidthScale, value),

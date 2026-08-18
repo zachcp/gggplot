@@ -2863,6 +2863,42 @@ Deno.test("legend key boxes reserve pixel-stable space before labels", () => {
   assertEquals(Math.round((labelX - swatchX) * width / 2), 16);
 });
 
+Deno.test("legend key rows keep a legible pixel height on short canvases", () => {
+  const grouped = {
+    x: [0, 1, 2],
+    y: [1, 2, 3],
+    grp: ["cyl 4", "cyl 6", "cyl 8"],
+  };
+  const keyRowPx = (height: number) => {
+    const tree = compile(
+      ggplot(grouped, { x: "x", y: "y", color: "grp" }).add(geomPoint())
+        .build(),
+      {
+        layout: {
+          width: 800,
+          height,
+          measureText: (text, size) => ({
+            width: text.length * size * 0.6,
+            height: size,
+          }),
+        },
+      },
+    );
+    const swatch = findNodes(tree, "Point").find((node) =>
+      node.props.size === 7 &&
+      (node.props.positions as [number, number][]).length === 3
+    )!;
+    const positions = swatch.props.positions as [number, number][];
+    return (positions[1][1] - positions[0][1]) * height / 2;
+  };
+  // The default layout keeps the historical 0.11 normalized rhythm.
+  assertEquals(Math.round(keyRowPx(600)), 33);
+  // A short canvas (the 3D model scene is 300px tall) would collapse that same
+  // normalized step to 16.5px, crowding 13px labels. The floor holds it at 18px.
+  assertEquals(Math.round(keyRowPx(300)), 18);
+  assertEquals(Math.round(keyRowPx(200)), 18);
+});
+
 Deno.test("continuous color scale interpolates the sequential ramp across the domain", () => {
   const data2 = { x: [0, 1], y: [0, 1], val: [0, 10] };
   const perLayer = [{
