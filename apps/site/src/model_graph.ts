@@ -1,10 +1,12 @@
+// Grammar only: a spec builder must not drag in the render layer, or it
+// cannot be exercised headlessly through the extension registry.
 import {
   aes,
   geomLine,
-  ggplot,
   type GGSpec,
+  ggplot,
   themeMinimal,
-} from "@gggplot/core";
+} from "@gggplot/core/dsl";
 import {
   buildGeometryProduct,
   type ModelDocument,

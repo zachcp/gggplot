@@ -1,11 +1,13 @@
 import {
   aes,
   geomPath,
-  ggplot,
   type GGSpec,
-  type PrismInstance3D,
+  ggplot,
   theme,
-} from "@gggplot/core";
+} from "@gggplot/core/dsl";
+// Type-only, so the renderer is erased at runtime and this module stays
+// headless while still describing the prisms the host will draw.
+import type { PrismInstance3D } from "@gggplot/core";
 import { buildModelScene3D, type ModelDocument } from "@gggplot/model-inspect";
 
 interface SceneRow extends Record<string, unknown> {

@@ -67,6 +67,16 @@ export {
   type Scene3DTensorSlab,
 } from "./scene3d.ts";
 export {
+  type ModelAdapterContext,
+  MODEL_CPU_ADAPTERS,
+  MODEL_EXTENSIONS,
+  MODEL_GRAPH_EXTENSION,
+  MODEL_SCENE_3D_EXTENSION,
+  MODEL_TENSOR_INVENTORY_EXTENSION,
+  MODEL_TENSOR_MATRIX_EXTENSION,
+  modelTensorInventoryRows,
+} from "./extensions.ts";
+export {
   FIXTURE_CAPABILITIES,
   type FixtureCapture,
   FixtureCaptureError,

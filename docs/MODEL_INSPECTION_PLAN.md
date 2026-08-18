@@ -455,6 +455,50 @@ Input: an explicitly identified attention artifact with head/query/key axes.
 Output: matrix tiles or compact small multiples. Attention should not be
 inferred merely from tensor rank; the artifact must declare semantic axes.
 
+## Extension taxonomy
+
+Recorded 2026-08-18 for `gggplot-i5m.6`. Definitions live in
+`packages/model-inspect/src/extensions.ts`.
+
+| Extension | Class | Why |
+| --- | --- | --- |
+| `model_tensor_inventory` | ordinary | One row per tensor. A bar chart over a table needs no special renderer. |
+| `model_graph` | specialized | Topology, not rows — nodes, ports, and routed edges have no tabular equivalent. |
+| `model_tensor_matrix` | specialized | A bounded grid whose content policy picks the representation before anything is drawn. |
+| `model_scene_3d` | specialized | Slabs, modules, and connectors positioned in space. |
+
+The split is legible in the definitions themselves rather than only here: the
+ordinary extension emits `shape: "row"` fields, while the specialized ones emit
+`topology` or `grid`. A test asserts that correspondence, so the taxonomy
+cannot drift from the data it describes.
+
+`model_embedding`, `model_activation`, and `model_attention` appear in the
+design but are deliberately **not registered**. An embedding is an ordinary
+point chart once something produces coordinates, and both activations and
+attention require runtime capture that is not wired up. Registering them now
+would declare capability the package cannot honour.
+
+### Where capabilities are declared
+
+Every packaged definition declares `cpu` and nothing else. The package computes
+products; it does not draw them. A host that renders registers the same
+definitions with `live` and `emit` adapters added — `renderableDefinition()`
+republishes rather than mutating, so the package's exported definition is never
+altered by having been rendered somewhere.
+
+This is what keeps framework-specific loaders out of core. Core's registry
+holds a serializable definition plus opaque adapters; it never imports the
+inspection package, and the `emit` adapter names a static import rather than a
+serialized closure, so emitted source resolves the builder on its own.
+
+The registry enforces the boundary rather than trusting it. Declared
+capabilities must match supplied adapters exactly, and that check caught a real
+inconsistency while this landed: `model_tensor_matrix` declared `cpu` but
+supplied no adapter, because unlike the others it needs a `TensorSource` and a
+view request to read a bounded range. The fix was to supply the adapter and
+have it say plainly what it requires, rather than to quietly drop the
+declaration.
+
 ## Rendering and integration boundary
 
 The core package already has the right separation: serializable plans and
