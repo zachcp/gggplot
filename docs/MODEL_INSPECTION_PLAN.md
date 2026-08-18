@@ -441,6 +441,48 @@ extension switch. A source can provide a document, metadata bytes, or bounded
 tensor ranges. That lets a server-side converter, local file, or remote
 sharded artifact use the same view layer.
 
+## Runtime bundle and WASM budget
+
+Measured on the docs site (`deno task build`, 2026-08-18):
+
+| Build | `dist` total | Notes |
+| --- | --- | --- |
+| ORT assets copied unconditionally | 26 MB | `dist/ort/` alone was 23 MB |
+| ORT assets gated on use | 2.4 MB | 1.6 MB `assets`, 720 KB fonts, 116 KB fixtures |
+
+The docs model-inspection route never imports `onnxruntime-web`. It inspects
+ONNX statically through `inspectOnnx`, which parses the portable artifact
+directly and executes nothing. The runtime adapter remains a contract in
+`runtime.ts` with ORT as one named implementation, but no code path loads it,
+so the JS bundle cost of ORT today is zero and the route is responsive before
+a user chooses a file.
+
+The remaining cost was therefore not the bundle but the asset copy: the Vite
+plugin staged ORT's WASM into `dist/ort/` on every build for a runtime nothing
+loaded. That copy is now conditional on the emitted bundle actually referencing
+ORT, so the assets ship exactly when they are needed and cannot silently go
+missing the day the adapter is wired in. Dev always serves the route.
+
+### WASM variant selection
+
+If the runtime path is enabled, the variant matters more than anything else in
+the budget:
+
+| Variant | Size | When it applies |
+| --- | --- | --- |
+| `ort-wasm-simd-threaded.jsep.wasm` | 25.6 MB | Older WebGPU path |
+| `ort-wasm-simd-threaded.asyncify.wasm` | 23.1 MB | Currently pinned; broadest WebGPU support |
+| `ort-wasm-simd-threaded.jspi.wasm` | 14.3 MB | WebGPU via JS Promise Integration; needs recent browsers |
+| `ort-wasm-simd-threaded.wasm` | 12.9 MB | CPU only, no WebGPU |
+
+Prefer `jspi` where the browser supports it — roughly 40% smaller than the
+asyncify build for the same WebGPU capability — and fall back to asyncify
+otherwise. The plain SIMD-threaded build is the no-WebGPU fallback and should
+be paired with a visible notice that inspection is running on CPU, since
+threaded WASM additionally requires cross-origin isolation. Any of these
+belongs behind a dynamic `import()` triggered by an explicit user action, never
+on route load.
+
 ## Delivery sequence
 
 1. `.1`: package boundary, threat model, and source policy.
