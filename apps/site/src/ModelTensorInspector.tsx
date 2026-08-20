@@ -39,7 +39,10 @@ export function ModelTensorInspector(
     [document],
   );
   const [internalId, setInternalId] = React.useState<string | undefined>();
-  const activeId = selectedTensorId ?? internalId ?? entries[0]?.tensorId;
+  const requestedId = selectedTensorId ?? internalId;
+  const activeId = entries.some((entry) => entry.tensorId === requestedId)
+    ? requestedId
+    : entries[0]?.tensorId;
   const [product, setProduct] = React.useState<TensorContentProduct>();
   const [error, setError] = React.useState<string>();
 
@@ -49,6 +52,8 @@ export function ModelTensorInspector(
   };
 
   React.useEffect(() => {
+    setProduct(undefined);
+    setError(undefined);
     if (!activeId) return;
     let cancelled = false;
     const descriptor = document.tensors[activeId];
@@ -89,7 +94,12 @@ export function ModelTensorInspector(
   }
 
   const inventorySpec = tensorInventorySpec(document);
-  const matrixSpec = product ? tensorMatrixSpec(product) : undefined;
+  const activeProduct = product?.descriptor === document.tensors[activeId!]
+    ? product
+    : undefined;
+  const matrixSpec = activeProduct
+    ? tensorMatrixSpec(activeProduct)
+    : undefined;
 
   return (
     <>
@@ -115,20 +125,21 @@ export function ModelTensorInspector(
         </select>
       </label>
       {error && <p role="alert" style={styles.errorCopy}>{error}</p>}
-      {product && !matrixSpec && (
+      {activeProduct && !matrixSpec && (
         <p style={styles.metaCopy}>
-          Bounded as “{product.representation}” — too large to draw cell by
-          cell.{product.diagnostics.length > 0
-            ? " " + product.diagnostics.join(" ")
+          Bounded as “{activeProduct.representation}” — too large to draw cell
+          by cell.{activeProduct.diagnostics.length > 0
+            ? " " + activeProduct.diagnostics.join(" ")
             : ""}
         </p>
       )}
-      {product && matrixSpec && (
+      {activeProduct && matrixSpec && (
         <>
           <p style={styles.metaCopy}>
-            {product.representation} · {product.gridShape?.[0]}×{product
+            {activeProduct.representation} ·{" "}
+            {activeProduct.gridShape?.[0]}×{activeProduct
               .gridShape?.[1]} cells from shape{" "}
-            {JSON.stringify(product.descriptor.shape)}
+            {JSON.stringify(activeProduct.descriptor.shape)}
           </p>
           <ChartCanvas
             spec={matrixSpec}

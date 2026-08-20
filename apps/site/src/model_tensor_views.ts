@@ -81,7 +81,7 @@ export function trailingMatrixRequest(
   shape: readonly unknown[],
 ): {
   target: { kind: "tensor"; tensorId: string };
-  axes: [number, number];
+  axes: [number] | [number, number];
   fixedIndices: Record<number, number>;
 } {
   const rank = shape.length;
@@ -89,7 +89,7 @@ export function trailingMatrixRequest(
   for (let axis = 0; axis < rank - 2; axis++) fixedIndices[axis] = 0;
   return {
     target: { kind: "tensor", tensorId },
-    axes: [Math.max(rank - 2, 0), Math.max(rank - 1, 0)],
+    axes: rank <= 1 ? [0] : [rank - 2, rank - 1],
     fixedIndices,
   };
 }

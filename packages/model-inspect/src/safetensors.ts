@@ -9,6 +9,21 @@ import type {
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
 const SAFE_TENSORS_PREFIX_BYTES = 8;
 const DEFAULT_MAX_HEADER_BYTES = 16 * 1024 * 1024;
+const SAFE_TENSORS_DTYPE_WIDTHS: Readonly<Record<string, number>> = {
+  F16: 2,
+  F32: 4,
+  F64: 8,
+  BF16: 2,
+  I8: 1,
+  I16: 2,
+  I32: 4,
+  I64: 8,
+  U8: 1,
+  U16: 2,
+  U32: 4,
+  U64: 8,
+  BOOL: 1,
+};
 
 export class SafeTensorsFormatError extends Error {
   override name = "SafeTensorsFormatError";
@@ -103,6 +118,25 @@ function parseTensor(
     invalid(`Tensor ${name}.data_offsets are outside the payload`);
   }
   const byteLength = relativeEnd - relativeStart;
+  const width = SAFE_TENSORS_DTYPE_WIDTHS[tensor.dtype.toUpperCase()];
+  if (width) {
+    let expectedByteLength = width;
+    for (const dimension of shape) {
+      if (
+        dimension !== 0 &&
+        expectedByteLength > Number.MAX_SAFE_INTEGER / dimension
+      ) {
+        invalid(`Tensor ${name} byte length exceeds Number.MAX_SAFE_INTEGER`);
+      }
+      expectedByteLength *= dimension;
+    }
+    if (byteLength !== expectedByteLength) {
+      invalid(
+        `Tensor ${name} declares ${expectedByteLength} bytes from its dtype and shape, ` +
+          `but data_offsets span ${byteLength} bytes`,
+      );
+    }
+  }
   const id = `safetensors:${source.id}:tensor:${encodeURIComponent(name)}`;
   const dtype = modelDTypeFromSafeTensors(tensor.dtype);
   return {

@@ -516,6 +516,13 @@ function parseGraph(
     outputs: new Map(),
     values: new Map(),
   };
+  let tensorCount = 0;
+  const countTensor = () => {
+    tensorCount++;
+    if (tensorCount > maxTensors) {
+      fail(`ONNX graph exceeds configured ${maxTensors}-tensor limit`);
+    }
+  };
   while (!reader.done) {
     const field = reader.next()!;
     if (field.number === 1) {
@@ -535,14 +542,13 @@ function parseGraph(
       graph.name = reader.string(maxStringBytes);
     } else if (field.number === 5) {
       requireWire(field, 2, "GraphProto.initializer");
-      if (graph.initializers.length >= maxTensors) {
-        fail(`ONNX graph exceeds configured ${maxTensors}-tensor limit`);
-      }
+      countTensor();
       graph.initializers.push(parseTensor(reader.child(), maxStringBytes));
     } else if (
       field.number === 11 || field.number === 12 || field.number === 13
     ) {
       requireWire(field, 2, "GraphProto.value metadata");
+      countTensor();
       const value = parseValueInfo(reader.child(), maxStringBytes);
       if (!value.name) continue;
       const target = field.number === 11
@@ -710,12 +716,25 @@ export function inspectOnnx(
     const externalSourceId = location
       ? options.externalDataSourceId?.(location)
       : undefined;
-    const externalOffset = initializer.externalData?.offset
-      ? Number(initializer.externalData.offset)
-      : 0;
-    const externalLength = initializer.externalData?.length
-      ? Number(initializer.externalData.length)
-      : byteLength;
+    const externalInteger = (value: string | undefined, label: string) => {
+      if (value === undefined) return undefined;
+      if (!/^\d+$/.test(value)) {
+        fail(`ONNX external data ${label} must be a non-negative integer`);
+      }
+      const parsed = Number(value);
+      if (!Number.isSafeInteger(parsed)) {
+        fail(`ONNX external data ${label} exceeds Number.MAX_SAFE_INTEGER`);
+      }
+      return parsed;
+    };
+    const externalOffset = externalInteger(
+      initializer.externalData?.offset,
+      "offset",
+    ) ?? 0;
+    const externalLength = externalInteger(
+      initializer.externalData?.length,
+      "length",
+    ) ?? byteLength;
     const payload = initializer.rawData
       ? {
         sourceId: options.source.id,
@@ -723,8 +742,7 @@ export function inspectOnnx(
         byteLength: initializer.rawData.byteLength,
         encoding: "onnx" as const,
       }
-      : externalSourceId && Number.isSafeInteger(externalOffset) &&
-          externalLength !== undefined && Number.isSafeInteger(externalLength)
+      : externalSourceId && externalLength !== undefined
       ? {
         sourceId: externalSourceId,
         byteOffset: externalOffset,

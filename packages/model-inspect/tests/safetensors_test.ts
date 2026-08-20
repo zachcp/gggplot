@@ -91,4 +91,22 @@ Deno.test("SafeTensors rejects malformed and truncated untrusted headers", () =>
       }),
     SafeTensorsFormatError,
   );
+  const inconsistentHeader = encoder.encode(JSON.stringify({
+    tensor: { dtype: "F32", shape: [1], data_offsets: [0, 8] },
+  }));
+  const inconsistent = new Uint8Array(8 + inconsistentHeader.length + 8);
+  new DataView(inconsistent.buffer).setBigUint64(
+    0,
+    BigInt(inconsistentHeader.length),
+    true,
+  );
+  inconsistent.set(inconsistentHeader, 8);
+  assertThrows(
+    () =>
+      inspectSafeTensors(inconsistent, {
+        source: { id: "bad", format: "safetensors", kind: "memory" },
+      }),
+    SafeTensorsFormatError,
+    "dtype and shape",
+  );
 });

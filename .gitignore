@@ -3,6 +3,8 @@ dist/
 node_modules/
 .vite/
 .playwright-mcp/
+__pycache__/
+*.py[cod]
 
 # Beads / Dolt files (added by bd init)
 .dolt/

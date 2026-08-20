@@ -36,7 +36,7 @@
       "name": "layers.0.bias",
       "payload": {
         "byteLength": 16,
-        "byteOffset": 48,
+        "byteOffset": 381,
         "encoding": "safetensors",
         "sourceId": "file:tiny-mlp.safetensors"
       },
@@ -52,7 +52,7 @@
       "name": "layers.0.weight",
       "payload": {
         "byteLength": 48,
-        "byteOffset": 0,
+        "byteOffset": 333,
         "encoding": "safetensors",
         "sourceId": "file:tiny-mlp.safetensors"
       },
@@ -69,7 +69,7 @@
       "name": "layers.2.bias",
       "payload": {
         "byteLength": 8,
-        "byteOffset": 96,
+        "byteOffset": 429,
         "encoding": "safetensors",
         "sourceId": "file:tiny-mlp.safetensors"
       },
@@ -85,7 +85,7 @@
       "name": "layers.2.weight",
       "payload": {
         "byteLength": 32,
-        "byteOffset": 64,
+        "byteOffset": 397,
         "encoding": "safetensors",
         "sourceId": "file:tiny-mlp.safetensors"
       },

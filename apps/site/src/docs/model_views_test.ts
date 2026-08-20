@@ -98,6 +98,11 @@ Deno.test("trailing axes are derived from rank, not assumed", () => {
     axes: [0, 1],
     fixedIndices: {},
   });
+  assertEquals(trailingMatrixRequest("t", [4]), {
+    target: { kind: "tensor", tensorId: "t" },
+    axes: [0],
+    fixedIndices: {},
+  });
 });
 
 Deno.test("a summary-only product yields no matrix spec", () => {

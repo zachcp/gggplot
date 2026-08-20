@@ -57,7 +57,7 @@ class DocumentTest(unittest.TestCase):
     def test_weights_only_export_states_it_has_no_graph(self) -> None:
         tensors = demo_tensors()
         document = build_model_document(
-            "m", tensors, "file:m.safetensors", "m.safetensors", 100
+            "m", tensors, "file:m.safetensors", "m.safetensors", 204, 100
         )
         self.assertEqual(document["graphs"][0]["nodes"], [])
         # "no topology" must be distinguishable from "topology we failed to read".
@@ -67,9 +67,9 @@ class DocumentTest(unittest.TestCase):
     def test_payload_offsets_match_writer_order(self) -> None:
         tensors = demo_tensors()
         document = build_model_document(
-            "m", tensors, "file:m.safetensors", "m.safetensors", 100
+            "m", tensors, "file:m.safetensors", "m.safetensors", 204, 100
         )
-        offset = 0
+        offset = 100
         for tensor in tensors:
             descriptor = document["tensors"][
                 f"safetensors:file:m.safetensors:tensor:{tensor.name}"

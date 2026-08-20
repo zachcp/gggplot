@@ -601,12 +601,13 @@ function chooseRepresentation(
   request: TensorViewRequest,
   budget: ContentBudget,
 ): TensorContentRepresentation {
-  if (request.mode && request.mode !== "auto") return request.mode;
+  if (request.mode === "metadata") return "metadata";
   const width = numericWidth(descriptor.dtype);
   if (
     !source || !descriptor.payload || !shape || !width ||
     byteLength === undefined
   ) return "metadata";
+  if (request.mode && request.mode !== "auto") return request.mode;
   if (
     shape.length <= budget.maxExactRank &&
     byteLength <= Math.min(budget.maxExactBytes, budget.maxResidentBytes)

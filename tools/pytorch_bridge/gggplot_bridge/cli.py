@@ -77,6 +77,7 @@ def convert(
 
     payload = write_safetensors(tensors, metadata={"produced_by": "gggplot-bridge"})
     weights_path.write_bytes(payload)
+    payload_offset = len(payload) - sum(tensor.byte_length for tensor in tensors)
 
     document = build_model_document(
         model_id=model_id,
@@ -84,6 +85,7 @@ def convert(
         source_id=f"file:{weights_path.name}",
         source_uri=weights_path.name,
         byte_length=len(payload),
+        payload_offset=payload_offset,
     )
     document_path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
     return weights_path, document_path

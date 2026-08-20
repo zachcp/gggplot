@@ -242,3 +242,17 @@ Deno.test("forced exact and downsample modes still respect content budgets", asy
   });
   assertEquals(downsample.representation, "summary");
 });
+
+Deno.test("forced content modes remain metadata-only without content prerequisites", async () => {
+  const document = model([2, 2]);
+  document.tensors.weights.shape = [{ unknown: true }];
+  delete document.tensors.weights.payload;
+  delete document.tensors.weights.storage;
+  for (const mode of ["exact", "tile", "downsample", "summary"] as const) {
+    const product = await buildTensorContentProduct(document, new Map(), {
+      target: { kind: "tensor", tensorId: "weights" },
+      mode,
+    });
+    assertEquals(product.representation, "metadata", mode);
+  }
+});

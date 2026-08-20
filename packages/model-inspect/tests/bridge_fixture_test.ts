@@ -2,6 +2,7 @@ import { assert, assertEquals } from "@std/assert";
 import { inspectSafeTensors } from "../src/safetensors.ts";
 import { validateModelDocument } from "../src/validate.ts";
 import { buildTensorContentProduct } from "../src/products.ts";
+import { ByteArrayTensorSource } from "../src/residency.ts";
 import type { ModelDocument } from "../src/types.ts";
 
 /**
@@ -71,30 +72,23 @@ Deno.test("Python and TypeScript agree on shapes, dtypes, and byte ranges", asyn
     assertEquals(parsedTensor.dtype, pythonTensor.dtype, name);
     assertEquals(parsedTensor.shape, pythonTensor.shape, name);
     assertEquals(parsedTensor.byteLength, pythonTensor.byteLength, name);
-    // Offsets are the real contract: Python writes them relative to the
-    // payload, and the reader must resolve them against the whole file.
+    // ModelDocument payload offsets address the whole source file.
     assertEquals(
-      parsedTensor.payload?.byteLength,
-      pythonTensor.payload?.byteLength,
+      parsedTensor.payload,
+      pythonTensor.payload,
       name,
     );
   }
 });
 
-Deno.test("bridge weights read back as the values Python wrote", async () => {
-  const inspection = inspectSafeTensors(await weights(), {
-    source: {
-      id: "file:tiny-mlp.safetensors",
-      format: "safetensors",
-      kind: "file",
-      uri: "tiny-mlp.safetensors",
-    },
-  });
-  const bias = Object.values(inspection.document.tensors)
+Deno.test("bridge document reads back the values Python wrote", async () => {
+  const bytes = await weights();
+  const document = await emittedDocument();
+  const bias = Object.values(document.tensors)
     .find((tensor) => tensor.name === "layers.2.bias")!;
   const product = await buildTensorContentProduct(
-    inspection.document,
-    inspection.source,
+    document,
+    new ByteArrayTensorSource(document.source.id, "v1", bytes),
     { target: { kind: "tensor", tensorId: bias.id }, axes: [0] },
   );
   // demo_tensors() ramps this bias by 0.5 per element.

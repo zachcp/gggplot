@@ -45,14 +45,23 @@ function text(number: number, value: string): Uint8Array {
   return field(number, encoder.encode(value));
 }
 
-function tinyOnnx(): Uint8Array {
-  const initializer = message(
-    integer(1, 2),
-    integer(1, 2),
-    integer(2, 1),
-    text(8, "weights"),
-    field(9, new Uint8Array(16)),
-  );
+function tinyOnnx(externalOffset?: string): Uint8Array {
+  const initializer = externalOffset === undefined
+    ? message(
+      integer(1, 2),
+      integer(1, 2),
+      integer(2, 1),
+      text(8, "weights"),
+      field(9, new Uint8Array(16)),
+    )
+    : message(
+      integer(1, 2),
+      integer(1, 2),
+      integer(2, 1),
+      text(8, "weights"),
+      field(13, message(text(1, "location"), text(2, "weights.bin"))),
+      field(13, message(text(1, "offset"), text(2, externalOffset))),
+    );
   const tensorType = message(
     integer(1, 1),
     field(
@@ -147,5 +156,23 @@ Deno.test("direct ONNX inspection bounds malformed and oversized inputs", () => 
         maxModelBytes: 1,
       }),
     OnnxFormatError,
+  );
+  assertThrows(
+    () =>
+      inspectOnnx(tinyOnnx(), {
+        source: { id: "many", format: "onnx", kind: "memory" },
+        maxTensors: 2,
+      }),
+    OnnxFormatError,
+    "tensor limit",
+  );
+  assertThrows(
+    () =>
+      inspectOnnx(tinyOnnx("-1"), {
+        source: { id: "external", format: "onnx", kind: "memory" },
+        externalDataSourceId: () => "weights",
+      }),
+    OnnxFormatError,
+    "non-negative integer",
   );
 });

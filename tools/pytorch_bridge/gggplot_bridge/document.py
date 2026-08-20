@@ -34,6 +34,7 @@ def build_model_document(
     source_id: str,
     source_uri: str,
     byte_length: int,
+    payload_offset: int,
     framework: dict[str, str] | None = None,
 ) -> dict:
     """Produce a ModelDocument for a weights-only export.
@@ -45,7 +46,7 @@ def build_model_document(
     matters.
     """
     descriptors = {}
-    offset = 0
+    offset = payload_offset
     for tensor in tensors:
         identifier = f"safetensors:{source_id}:tensor:{tensor.name}"
         descriptors[identifier] = {
