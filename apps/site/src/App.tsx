@@ -2,6 +2,7 @@ import React from "react";
 import { docPages } from "./docs/pages.ts";
 import type { DocPage } from "./docs/types.ts";
 import { ExampleSection, Panel } from "./ExampleSection.tsx";
+import { ModelInspectionSection } from "./ModelInspectionSection.tsx";
 import { ChartCanvas3D } from "./ChartCanvas3D.tsx";
 import { useViewportWidth } from "./hooks.ts";
 import { styles } from "./styles.ts";
@@ -209,6 +210,10 @@ export function App() {
             />
           ))}
 
+          {(activePage.modelExamples ?? []).map((example) => (
+            <ModelInspectionSection key={example.id} example={example} />
+          ))}
+
           {(activePage.threeD ?? []).map((threeD) => (
             <section
               key={threeD.id}
@@ -244,9 +249,10 @@ export function App() {
                     label={threeD.description}
                   />
                   <p style={styles.note}>
-                    Requires a WebGPU browser. Drag to orbit. Positions are
-                    data-space vec4; the perspective camera projects them on the
-                    GPU.
+                    Requires a WebGPU browser. Drag to orbit, Shift-drag or
+                    right-drag to pan, and scroll to zoom; Reset camera returns
+                    to the initial view. Positions are data-space vec4; the
+                    perspective camera projects them on the GPU.
                   </p>
                 </Panel>
               </section>

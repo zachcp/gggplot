@@ -65,6 +65,8 @@ export type ComponentName =
   | "RadialViewport"
   /** Two-pass 3D scene: child 0 is orbit-camera content, child 1 flat overlay. */
   | "Scene3D"
+  /** Runtime-only host extension injected into the live 3D Cartesian scene. */
+  | "SceneExtras"
   /**
    * Not a real @use-gpu/plot export — a small custom Live component (defined
    * in render/GGPlot.tsx, inlined by emit/mod.ts) that divides the ambient

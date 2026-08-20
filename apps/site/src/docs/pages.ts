@@ -62,6 +62,7 @@ import {
   themedChart,
   tileHeatmap,
 } from "./examples.tsx";
+import { tinyMlpInspection } from "./model_examples.ts";
 
 export const docPages: DocPage[] = [
   {
@@ -305,6 +306,22 @@ export const docPages: DocPage[] = [
     ],
     examples: [],
     threeD: threeDShowcases,
+  },
+  {
+    slug: "model-inspection",
+    section: "model-inspection",
+    title: "Model inspection (preview)",
+    summary:
+      "Represent model graphs and tensor structure as serializable metadata, then choose bounded GPU residency for the views that need it.",
+    narrative: [
+      {
+        heading: "Loader versus visualization storage",
+        body:
+          "The page parses a local ONNX artifact directly into static operator, tensor, and data-flow metadata—without executing the model. Its model scene lays those entities out in perspective: tensor tiles become bounded slabs, operators become modules, and data flow uses routed connectors. The resulting scene stays serializable and source-aware; runtime activations and validated runtime-shared buffers remain separate follow-up slices.",
+      },
+    ],
+    examples: [],
+    modelExamples: [tinyMlpInspection],
   },
   {
     slug: "faq",

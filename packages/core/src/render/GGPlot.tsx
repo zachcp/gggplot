@@ -455,6 +455,10 @@ export const Scene3D = (
   );
 };
 
+/** Render a host-supplied live element inside the active Cartesian scene. */
+const SceneExtras = ({ content }: { content?: unknown }) =>
+  content == null ? null : createElement(Fragment, {}, content);
+
 /** vec4 point tensors need the explicit WGSL source format used by use.gpu. */
 const PointNode = (props: Record<string, unknown>) => {
   const positions = props.positions as FlatTensor | undefined;
@@ -529,6 +533,7 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
   PanelViewport,
   RadialViewport,
   Scene3D,
+  SceneExtras,
 };
 
 /** Mark-tensor prop names carried by Point-family RenderNodes (see
@@ -581,10 +586,34 @@ export interface GGPlotProps {
   /** Compatibility shorthand; prefer fontResources for readiness/validation. */
   fonts?: FontFaceResource[];
   fontResources?: FontResources;
+  /** Runtime-only 3D content mounted inside the compiled Cartesian scene. */
+  sceneExtras?: unknown;
+}
+
+function appendSceneExtras(tree: RenderNode, content: unknown): RenderNode {
+  let inserted = false;
+  const visit = (current: RenderNode): RenderNode => {
+    if (!inserted && current.component === "Cartesian") {
+      inserted = true;
+      return {
+        ...current,
+        children: [
+          ...current.children,
+          { component: "SceneExtras", props: { content }, children: [] },
+        ],
+      };
+    }
+    return { ...current, children: current.children.map(visit) };
+  };
+  return visit(tree);
 }
 
 const GlyphMeasuredPlot = (
-  { spec, interactive = true }: { spec: GGSpec; interactive?: boolean },
+  {
+    spec,
+    interactive = true,
+    sceneExtras,
+  }: { spec: GGSpec; interactive?: boolean; sceneExtras?: unknown },
 ) => {
   const rustText = useFontContext();
   const measureText = useMemo(
@@ -641,9 +670,13 @@ const GlyphMeasuredPlot = (
     [spec, width, height, measureText],
   );
   // deno-lint-ignore no-explicit-any
-  const renderedTree = tree.component === "Scene3D"
+  const interactiveTree = tree.component === "Scene3D"
     ? { ...tree, props: { ...tree.props, interactive } }
     : tree;
+  const renderedTree =
+    sceneExtras != null && interactiveTree.component === "Scene3D"
+      ? appendSceneExtras(interactiveTree, sceneExtras)
+      : interactiveTree;
   return renderTree(renderedTree) as any;
 };
 
@@ -658,7 +691,7 @@ const GlyphMeasuredPlot = (
  * renders visibly when the host supplies real font sources.
  */
 export const GGPlot = (
-  { spec, interactive, fonts, fontResources }: GGPlotProps,
+  { spec, interactive, fonts, fontResources, sceneExtras }: GGPlotProps,
 ) => {
   const resources = useMemo(
     () => fontResources ?? (fonts?.length ? createFontResources(fonts) : null),
@@ -680,6 +713,6 @@ export const GGPlot = (
   return createElement(
     FontLoader,
     { fonts: resources?.faces ?? fonts },
-    createElement(GlyphMeasuredPlot, { spec, interactive }) as any,
+    createElement(GlyphMeasuredPlot, { spec, interactive, sceneExtras }) as any,
   );
 };

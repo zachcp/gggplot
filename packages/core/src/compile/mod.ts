@@ -170,6 +170,7 @@ function compileThreeDimensionalPlot(
       spec.theme,
       [-1, -1, 0.62, 1],
       options.layout?.width,
+      options.layout?.height,
     ),
   ]);
   return node("Scene3D", { camera: spec.camera ?? resolveCamera3D() }, [
@@ -602,6 +603,7 @@ export function compile(
           theme,
           panelBounds,
           options.layout?.width,
+          options.layout?.height,
         ),
       ]);
     }
@@ -632,6 +634,7 @@ export function compile(
         theme,
         panelBounds,
         options.layout?.width,
+        options.layout?.height,
       ),
     ]);
   }
@@ -698,6 +701,7 @@ export function compile(
       theme,
       panelBounds,
       options.layout?.width,
+      options.layout?.height,
     ),
   ]);
 }

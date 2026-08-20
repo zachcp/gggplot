@@ -1,4 +1,5 @@
 import type { DataFrame, GGSpec } from "@gggplot/core";
+import type { ModelDocument } from "@gggplot/model-inspect";
 
 /** A 3D GGSpec preview on a docs page. */
 export interface ThreeDShowcase {
@@ -29,6 +30,7 @@ export type DocSection =
   | "annotations"
   | "themes"
   | "internals"
+  | "model-inspection"
   | "guides"
   | "faq"
   | "reference";
@@ -82,4 +84,15 @@ export interface DocPage {
   examples: DocExample[];
   /** Optional 3D previews shown below the 2D examples. */
   threeD?: ThreeDShowcase[];
+  /** Optional model-inspection previews, which are not ordinary chart examples. */
+  modelExamples?: ModelInspectionExample[];
+}
+
+export interface ModelInspectionExample {
+  id: string;
+  title: string;
+  description: string;
+  document: ModelDocument;
+  ownership: "visualizer-owned" | "runtime-shared" | "runtime-copy-on-demand";
+  ownershipReason: string;
 }

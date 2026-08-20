@@ -1,0 +1,99 @@
+{
+  "framework": {
+    "dialect": "state_dict",
+    "name": "PyTorch"
+  },
+  "graphs": [
+    {
+      "edges": [],
+      "id": "tiny-mlp:parameters",
+      "inputs": [],
+      "name": "parameters",
+      "nodes": [],
+      "outputs": []
+    }
+  ],
+  "id": "tiny-mlp",
+  "metadata": {
+    "bridge": "gggplot-pytorch-bridge",
+    "graphStructure": "none",
+    "graphStructureReason": "a state_dict records weights, not topology; export to ONNX when graph structure is required"
+  },
+  "name": "tiny-mlp",
+  "schema": "gggplot.model@1",
+  "source": {
+    "byteLength": 437,
+    "format": "safetensors",
+    "id": "file:tiny-mlp.safetensors",
+    "kind": "file",
+    "uri": "tiny-mlp.safetensors"
+  },
+  "tensors": {
+    "safetensors:file:tiny-mlp.safetensors:tensor:layers.0.bias": {
+      "byteLength": 16,
+      "dtype": "f32",
+      "id": "safetensors:file:tiny-mlp.safetensors:tensor:layers.0.bias",
+      "name": "layers.0.bias",
+      "payload": {
+        "byteLength": 16,
+        "byteOffset": 381,
+        "encoding": "safetensors",
+        "sourceId": "file:tiny-mlp.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        4
+      ]
+    },
+    "safetensors:file:tiny-mlp.safetensors:tensor:layers.0.weight": {
+      "byteLength": 48,
+      "dtype": "f32",
+      "id": "safetensors:file:tiny-mlp.safetensors:tensor:layers.0.weight",
+      "name": "layers.0.weight",
+      "payload": {
+        "byteLength": 48,
+        "byteOffset": 333,
+        "encoding": "safetensors",
+        "sourceId": "file:tiny-mlp.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        4,
+        3
+      ]
+    },
+    "safetensors:file:tiny-mlp.safetensors:tensor:layers.2.bias": {
+      "byteLength": 8,
+      "dtype": "f32",
+      "id": "safetensors:file:tiny-mlp.safetensors:tensor:layers.2.bias",
+      "name": "layers.2.bias",
+      "payload": {
+        "byteLength": 8,
+        "byteOffset": 429,
+        "encoding": "safetensors",
+        "sourceId": "file:tiny-mlp.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        2
+      ]
+    },
+    "safetensors:file:tiny-mlp.safetensors:tensor:layers.2.weight": {
+      "byteLength": 32,
+      "dtype": "f32",
+      "id": "safetensors:file:tiny-mlp.safetensors:tensor:layers.2.weight",
+      "name": "layers.2.weight",
+      "payload": {
+        "byteLength": 32,
+        "byteOffset": 397,
+        "encoding": "safetensors",
+        "sourceId": "file:tiny-mlp.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        2,
+        4
+      ]
+    }
+  }
+}

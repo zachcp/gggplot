@@ -3,6 +3,8 @@ dist/
 node_modules/
 .vite/
 .playwright-mcp/
+__pycache__/
+*.py[cod]
 
 # Beads / Dolt files (added by bd init)
 .dolt/
@@ -16,3 +18,4 @@ node_modules/
 # Apple system fonts must not be committed (no redistribution license);
 # the site ships only its OFL-licensed faces.
 apps/site/public/fonts/SFNS*.ttf
+.beads.gate.lock

@@ -15,7 +15,9 @@ jobs:
           deno-version: v2.x
       - name: Check
         run: deno task check
-      - name: Test core
-        run: deno task --cwd packages/core test
+      - name: Test
+        run: deno task test
+      - name: Test Python bridge
+        run: python3 -m unittest discover -s tools/pytorch_bridge/tests
       - name: Build site
         run: deno task build
