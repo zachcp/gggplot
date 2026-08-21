@@ -8,6 +8,7 @@ import type { MarkTopology } from "../compile/rendertree.ts";
 import type { LayerContext } from "./types.ts";
 import {
   colorsOf,
+  depthProps,
   type FaceLoop,
   normalizeFontface,
   packFaceLoops,
@@ -15,6 +16,17 @@ import {
   packUniformChunks,
   valuesOf,
 } from "./shared.ts";
+import { packPoints3d } from "./packing.ts";
+import type { DepthPolicy } from "./types.ts";
+
+/**
+ * Glyphs accept a mapped alpha exactly as points do.
+ *
+ * DESIGN_3D_GEOM_MATRIX proposed "opaque" for this row, which predates the
+ * policy vocabulary from gggplot-lcy.10; alphaAware matches point, line, and
+ * segment and resolves identically while a layer is opaque.
+ */
+export const TEXT_3D_DEPTH: DepthPolicy = "alphaAware";
 
 const fallbackMeasurer: TextMeasurer = (text, size) => ({
   width: text.length * size * 0.6,
@@ -36,6 +48,7 @@ export function lowerText(
   data: DataFrame,
   ctx: LayerContext,
 ): RenderNode[] {
+  if (mapping.z != null) return lowerText3d(layer, mapping, data, ctx);
   const xScale = ctx.scales.x;
   const yScale = ctx.scales.y;
   const theme = ctx.theme;
@@ -279,4 +292,136 @@ export function lowerText(
       },
     })),
   ];
+}
+
+/**
+ * The 3D realization: camera-facing glyphs anchored at vec4 positions.
+ *
+ * use.gpu's Label already billboards and accepts world-space vec4 anchors —
+ * the 3D axis tick labels have relied on that since the unified 3D work — so
+ * this lowers to the same node the 2D path uses, differing only in the packed
+ * position format and the depth props.
+ *
+ * `geom_label` deliberately has no 3D mode. Its background box is measured in
+ * CSS pixels and converted through the panel's data-per-pixel ratio, which has
+ * no meaning under a perspective camera; a 3D label box would have to be a
+ * billboarded quad sized in screen space, which is a primitive that does not
+ * exist yet. Mapping z to it reports that rather than drawing bare glyphs and
+ * quietly losing the box.
+ */
+function lowerText3d(
+  layer: Layer,
+  mapping: Aes,
+  data: DataFrame,
+  ctx: LayerContext,
+): RenderNode[] {
+  const theme = ctx.theme;
+  const labelCol = mapping.label;
+  if (!labelCol || !(labelCol in data)) return [];
+  const rawLabels = columnValues(data, labelCol);
+  const rawX = valuesOf(data, mapping.x);
+  const rawY = valuesOf(data, mapping.y);
+  const rawZ = valuesOf(data, mapping.z);
+  if (!rawX || !rawY || !rawZ) return [];
+
+  // A glyph needs a finite anchor and a label; either missing drops the row
+  // before packing, so labels stay index-aligned with positions.
+  const retained: number[] = [];
+  const xs: number[] = [];
+  const ys: number[] = [];
+  const zs: number[] = [];
+  const labels: string[] = [];
+  const rows = Math.min(
+    rawX.length,
+    rawY.length,
+    rawZ.length,
+    rawLabels.length,
+  );
+  for (let row = 0; row < rows; row++) {
+    if (rawLabels[row] == null) continue;
+    // Check the raw values before scaling, not only the result: ingest turns
+    // NaN into null, and scalePosition maps null onto a finite coordinate, so
+    // a finiteness test alone would place a glyph for a missing position.
+    if (rawX[row] == null || rawY[row] == null || rawZ[row] == null) continue;
+    const x = scalePosition(ctx.scales.x, rawX[row]);
+    const y = scalePosition(ctx.scales.y, rawY[row]);
+    const z = scalePosition(ctx.scales.z, rawZ[row]);
+    if (![x, y, z].every(Number.isFinite)) continue;
+    retained.push(row);
+    xs.push(x);
+    ys.push(y);
+    zs.push(z);
+    labels.push(String(rawLabels[row]));
+  }
+  if (!retained.length) return [];
+
+  const mappedColors = colorsOf(
+    mapping,
+    data,
+    ctx.scales.color,
+    ctx.scales.fill,
+    "color",
+  );
+  const colors = mappedColors
+    ? retained.map((row) => mappedColors[row])
+    : undefined;
+  const color = (layer.params.color as string) ?? theme.textColor ?? "#0b0b0b";
+  const size = (layer.params.size as number) ?? theme.fontSize ?? 14;
+  const defaultFamily = (layer.params.family as string) ?? theme.fontFamily;
+  const defaultFace = normalizeFontface(
+    layer.params.fontface,
+    layer.params.weight ?? theme.fontWeight,
+    layer.params.style ?? theme.fontStyle,
+  );
+  const opacity = (layer.params.alpha as number) ?? 1;
+
+  // Batch by resolved font identity, matching the 2D path: one node per
+  // distinct family/weight/style so the renderer can share an atlas.
+  const sourceFamilies = valuesOf(data, mapping.family);
+  const sourceFaces = valuesOf(data, mapping.fontface);
+  const batches = new Map<string, {
+    family?: string;
+    weight: number | string;
+    style: string;
+    indices: number[];
+  }>();
+  retained.forEach((row, index) => {
+    const family = sourceFamilies?.[row] != null
+      ? String(sourceFamilies[row])
+      : defaultFamily;
+    const face = sourceFaces?.[row] != null
+      ? normalizeFontface(sourceFaces[row])
+      : defaultFace;
+    const key = JSON.stringify([family, face.weight, face.style]);
+    const batch = batches.get(key) ?? { family, ...face, indices: [] };
+    batch.indices.push(index);
+    batches.set(key, batch);
+  });
+
+  return [...batches.values()].map((batch) => {
+    const packed = packPoints3d({
+      xs: batch.indices.map((index) => xs[index]),
+      ys: batch.indices.map((index) => ys[index]),
+      zs: batch.indices.map((index) => zs[index]),
+      ...(colors ? { colors: batch.indices.map((index) => colors[index]) } : {}),
+    });
+    return node("Label", {
+      positions: packed.positions,
+      topology: POINTS_TOPOLOGY,
+      labels: batch.indices
+        .filter((_, i) => packed.mask[i])
+        .map((index) => labels[index]),
+      ...(packed.colors ? { colors: packed.colors } : { color }),
+      size,
+      weight: batch.weight,
+      style: batch.style,
+      // Glyphs stay screen-legible by default; "perspective" is the explicit
+      // world-space opt-in, spelled the same way geom_point spells it.
+      depth: layer.params.sizeMode === "perspective" ? 1 : 0,
+      zBias: 2,
+      ...(batch.family ? { family: batch.family } : {}),
+      ...(opacity !== 1 ? { opacity } : {}),
+      ...depthProps(TEXT_3D_DEPTH, opacity < 1),
+    });
+  });
 }

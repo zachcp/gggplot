@@ -18,7 +18,7 @@ import { lowerHex } from "./hex.ts";
 import { lowerInterval } from "./errorbar.ts";
 import { lowerBoxplot } from "./boxplot.ts";
 import { lowerViolin } from "./violin.ts";
-import { lowerText } from "./text.ts";
+import { lowerText, TEXT_3D_DEPTH } from "./text.ts";
 import { lowerSegment, SEGMENT_3D_DEPTH } from "./segment.ts";
 import { lowerRect } from "./rect.ts";
 import { lowerAbline, lowerHline, lowerVline } from "./refline.ts";
@@ -224,6 +224,18 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
   text: {
     defaultStat: "identity",
     lower: lowerText,
+    dimensionalParams: ["sizeMode"],
+    modes: [
+      { dimensions: 2, requiredPosition: ["x", "y"] },
+      {
+        dimensions: 3,
+        requiredPosition: ["x", "y", "z"],
+        stats: ["identity"],
+        positions: ["identity"],
+        params: { sizeMode: ["constant", "perspective"] },
+        depth: TEXT_3D_DEPTH,
+      },
+    ],
     doc: doc("Draw text labels at x/y positions.", ["x", "y", "label"], [
       "color",
       "alpha",

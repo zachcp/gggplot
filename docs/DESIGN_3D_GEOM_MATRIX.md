@@ -169,15 +169,35 @@ resolve identically while a layer is opaque.
 ```ts
 { dimensions: 3, requiredPosition: ["x", "y", "z"],
   stats: ["identity"], positions: ["identity"],
-  params: { billboard: [true, false] }, depth: "opaque" }
+  params: { sizeMode: ["constant", "perspective"] }, depth: "alphaAware" }
 ```
 
+Implemented, with two corrections to this row. The proposed `billboard`
+parameter does not exist: use.gpu's `Label` is always camera-facing, so a
+`billboard: false` option would be unimplementable rather than merely unbuilt.
+The real knob is sizing, spelled exactly as `geom_point` spells it. And `depth`
+is `alphaAware` rather than `opaque`, matching every other 3D geom.
+
+No new renderer capability was needed — the 3D axis tick labels have been
+passing vec4 world anchors to `Label` since the unified 3D work, so glyph
+billboarding was already proven in production.
+
 - **Topology:** camera-facing billboard quads at a depth-tested anchor.
-- **Missing values:** a missing position or label drops the glyph.
+- **Missing values:** a missing position or label drops the glyph. The check
+  must read the *raw* values: `ingest()` turns `NaN` into `null` and
+  `scalePosition()` maps `null` onto a finite coordinate, so testing the scaled
+  result alone silently places a glyph where the data had none. The 2D path
+  still has that hole — filed as `gggplot-ybv`.
 - **Camera:** glyphs stay screen-legible, so size is pixel-constant by default
   and `sizeMode: "perspective"` is the opt-in, matching `point`.
 - **Non-goals:** no in-scene text layout, no collision avoidance, no
   occlusion-aware label placement. Overlapping labels overlap.
+- **`geom_label` is excluded.** Its background box is measured in CSS pixels
+  and converted through the panel's data-per-pixel ratio, which has no meaning
+  under a perspective camera. A 3D label box would have to be a billboarded
+  quad sized in screen space — a primitive that does not exist — so mapping z
+  to it reports that rather than drawing bare glyphs and quietly losing the
+  box.
 
 ### 4. `bar` / `col` — prisms
 
@@ -256,7 +276,7 @@ defined.
 | 1 | `segment` + reference-line modes | Lowest risk: existing line topology, but forces the `zend` aesthetic | `lcy.2` ✅ |
 | 2 | Declared depth policy | Required before the first translucent geom, not after | `lcy.10` |
 | 3 | Planar surfaces: polygon, area, ribbon, rect, tile | First translucent content; validates milestone 2 | `lcy.3` |
-| 4 | `text` billboards | Independent of 2 and 3; slot in wherever convenient | `lcy.11` |
+| 4 | `text` billboards | Independent of 2 and 3; slot in wherever convenient | `lcy.11` ✅ |
 | 5 | Prisms: bar, col | First distinct 3D primitive; needs the footprint decision, not just z | `lcy.8` |
 | 6 | `surface`/`mesh` | Needs the grid contract from milestone 5's footprint thinking | `lcy.4` |
 | 7 | `stat_bin_3d` product contract | Decide bin semantics with nothing rendering yet | `lcy.5` |
