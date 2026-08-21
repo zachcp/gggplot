@@ -80,24 +80,36 @@ Implemented in `selectGeomMode()` against a named `Z_VALUE_STATS` list and a
 `GeomDefinition.nonPositionalAes` declaration, so each exemption is stated
 rather than inferred.
 
-**2. `GeomMode` cannot express depth behavior.** Only
-`prism_instances_3d.tsx` sets `depthTest`/`depthWrite` explicitly; point, line,
-and path inherit renderer defaults. That is survivable while everything 3D is
-opaque, and stops being survivable at the first translucent planar surface —
-which is milestone 2. Depth policy must become a declared, serializable part of
-the mode rather than a renderer accident.
+**2. `GeomMode` could not express depth behavior.** The first draft of this
+section claimed point, line, and path inherited renderer defaults. That was
+wrong — it came from grepping the render layer, where only
+`prism_instances_3d.tsx` sets the flags, and missing the geom lowering. All
+three already derived `depthWrite: !transparent` from observed alpha, and did
+so correctly.
 
-Proposed addition, with today's three geoms defaulting to `opaque`:
+The real gap was that they each derived it *separately*, so the planar surfaces
+in milestone 3 would have been the third copy of the same rule. Depth is now a
+declared part of the mode, resolved through one shared `depthProps()`:
 
 ```ts
-depth?: "opaque" | "translucent" | "overlay";
+depth?: "opaque" | "alphaAware" | "overlay";
 ```
 
-| Policy | depthTest | depthWrite | Draw order |
+| Policy | depthTest | depthWrite | Notes |
 | --- | --- | --- | --- |
-| `opaque` | on | on | any |
-| `translucent` | on | **off** | back-to-front by camera distance |
-| `overlay` | **off** | off | after scene content |
+| `opaque` | on | on | Always writes; a translucent tint cannot silently disable occlusion |
+| `alphaAware` | on | off *when any alpha < 1* | The effective policy depends on the data, so a mode declares the capability, not the outcome |
+| `overlay` | **off** | off | Sits on top of the scene regardless of position |
+
+Omitting the policy means `alphaAware`: writing depth for genuinely
+translucent content produces visible blending artifacts, while the reverse
+costs nothing, so the forgiving reading is the safe default.
+
+**Back-to-front draw order is still not implemented.** `alphaAware` sets the
+buffer flags but nothing sorts translucent geometry by camera distance. That is
+invisible for points and thin lines and will not stay invisible for overlapping
+planar surfaces — it is filed separately rather than folded in here, because it
+needs translucent surfaces to validate against.
 
 ## The matrix
 

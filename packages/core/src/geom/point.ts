@@ -2,9 +2,9 @@
 import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
 import { jitter } from "../position/mod.ts";
-import type { LayerContext } from "./types.ts";
+import type { DepthPolicy, LayerContext } from "./types.ts";
 import {
-  alphasOf,
+  depthProps,  alphasOf,
   colorsOf,
   packMarkRows,
   positionsXYOf,
@@ -194,6 +194,13 @@ export function lowerPoint(
   return [emitPoint(xs, ys, xs.map((_, i) => i), {})];
 }
 
+/**
+ * Points fade with alpha, so their depth behavior follows the data rather than
+ * a fixed declaration. Referenced by the 3D mode in the registry so the
+ * declaration and the lowering cannot drift apart.
+ */
+export const POINT_3D_DEPTH: DepthPolicy = "alphaAware";
+
 function lowerPoint3d(
   layer: Layer,
   mapping: Aes,
@@ -241,9 +248,12 @@ function lowerPoint3d(
       ? { sizes: packed.sizes }
       : { size: (layer.params.size as number) ?? 6 }),
     opacity,
+    // Note: this `depth` is the perspective size factor, not a depth-buffer
+    // setting. The buffer props come from the mode's declared policy below.
     depth: layer.params.sizeMode === "perspective" ? 1 : 0,
-    depthTest: (layer.params.depthTest as boolean) ?? true,
-    depthWrite: !transparent,
-    ...(transparent ? { mode: "transparent" } : {}),
+    ...depthProps(POINT_3D_DEPTH, transparent),
+    ...(layer.params.depthTest != null
+      ? { depthTest: layer.params.depthTest as boolean }
+      : {}),
   })];
 }

@@ -70,6 +70,22 @@ export interface GeomDocMeta {
 
 export type PlotDimension = 2 | 3;
 
+/**
+ * How a 3D realization interacts with the depth buffer.
+ *
+ * `opaque` always writes depth. `alphaAware` writes depth only while the layer
+ * is actually opaque and switches to transparent rendering once any alpha
+ * drops below 1 — the effective policy depends on the data, so a mode can
+ * declare the capability but not the outcome. `overlay` never tests or writes,
+ * for content that must sit on top of the scene regardless of position.
+ *
+ * Declaring this per mode is what stops each new 3D geom from re-deriving the
+ * rule: point and line arrived at the same `depthWrite: !transparent`
+ * independently, and the planar surfaces in gggplot-lcy.3 would have been the
+ * third copy.
+ */
+export type DepthPolicy = "opaque" | "alphaAware" | "overlay";
+
 /** One dimensional realization exposed behind a public geom definition. */
 export interface GeomMode {
   dimensions: PlotDimension;
@@ -81,6 +97,13 @@ export interface GeomMode {
   positions?: readonly PositionKind[];
   /** Allowed values for params whose validity differs by dimensional mode. */
   params?: Readonly<Record<string, readonly unknown[]>>;
+  /**
+   * Depth-buffer behavior. Omitting it means `alphaAware`, which is what
+   * point, line, and path already did: a geom that forgets to declare gets
+   * the safe reading, since writing depth for genuinely translucent content
+   * produces visible blending artifacts while the reverse costs nothing.
+   */
+  depth?: DepthPolicy;
 }
 
 export interface GeomDefinition {

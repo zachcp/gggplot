@@ -8,8 +8,8 @@ import type { RenderNode } from "../compile/rendertree.ts";
 import type { GeomDefinition, GeomDocMeta, LayerContext } from "./types.ts";
 import { resolvePlotDimension as resolveDimension } from "./dimension.ts";
 
-import { lowerPoint } from "./point.ts";
-import { lowerLine } from "./line.ts";
+import { lowerPoint, POINT_3D_DEPTH } from "./point.ts";
+import { LINE_3D_DEPTH, lowerLine } from "./line.ts";
 import { barDomainContribution, barResidentPlan, lowerBar } from "./bar.ts";
 import { areaDomainContribution, lowerArea } from "./area.ts";
 import { lowerPolygon } from "./polygon.ts";
@@ -76,6 +76,7 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
         stats: ["identity"],
         positions: ["identity"],
         params: { sizeMode: ["constant", "perspective"] },
+        depth: POINT_3D_DEPTH,
       },
     ],
     doc: doc("Draw points at x/y positions.", ["x", "y"], [
@@ -109,6 +110,7 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
         requiredPosition: ["x", "y", "z"],
         stats: ["identity"],
         positions: ["identity"],
+        depth: LINE_3D_DEPTH,
       },
     ],
     doc: doc("Connect observations in ascending x order.", ["x", "y"], [
@@ -126,6 +128,7 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
         requiredPosition: ["x", "y", "z"],
         stats: ["identity"],
         positions: ["identity"],
+        depth: LINE_3D_DEPTH,
       },
     ],
     doc: doc("Connect observations in input order.", ["x", "y"], [
