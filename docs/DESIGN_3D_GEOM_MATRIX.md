@@ -240,9 +240,16 @@ billboarding was already proven in production.
 
 ```ts
 { dimensions: 3, requiredPosition: ["x", "y", "z"],
-  stats: ["bin_3d"], positions: ["identity"],
-  params: { representation: ["prism", "voxel"] }, depth: "translucent" }
+  stats: ["bin_3d"], positions: ["identity"], depth: "alphaAware" }
 ```
+
+Specified in [DESIGN_3D_BIN_PRODUCT.md](DESIGN_3D_BIN_PRODUCT.md). Two
+corrections to this row: the geom is **`geom_voxel`** (decided 2026-08-21 —
+`stat_bin_3d` reduces, `geom_voxel` draws, and collapsing them would make the
+geom's name a claim about statistics), and the `representation` parameter is
+dropped. Once the geom is named for the representation, a parameter selecting
+between "prism" and "voxel" is naming the same thing twice — and a prism is a
+different geom with a different meaning, not a display mode of this one.
 
 - **Topology:** occupancy cells on a 3D lattice, with a count or summary per
   cell.
@@ -250,10 +257,15 @@ billboarding was already proven in production.
   binning, never binned into a "missing" cell.
 - **Camera:** interior cells are invisible without translucency or slicing, so
   this is the one geom whose usefulness depends on the depth policy.
-- **Blocked on:** a `stat_bin_3d` product contract — bin edges, closure, count
-  vs. density, and empty-cell representation — decided **before** any voxel
-  rendering exists. This ordering is the whole point of `gggplot-lcy.5`
-  preceding `.6`.
+- **Sparse:** empty cells are dropped, so absence means "no observations", not
+  zero. A dense lattice would cost memory proportional to bins rather than
+  data and draw nothing visible for it.
+- **Renderer:** reuses the existing `PrismInstances3D` primitive, which already
+  draws instanced filled boxes from `{ center, size, color }`. It needs the
+  resolved depth props rather than its current hardcoded opaque mode.
+- **Blocked on:** the contract above, now written, and on `gggplot-lcy.12` —
+  a lattice is nothing but overlapping depth ranges, so voxels are the geom
+  that makes back-to-front sorting visible.
 - **Non-goals:** no volume rendering, no ray marching, no transfer functions,
   no isosurface extraction.
 
@@ -279,7 +291,7 @@ defined.
 | 4 | `text` billboards | Independent of 2 and 3; slot in wherever convenient | `lcy.11` ✅ |
 | 5 | Prisms: bar, col | First distinct 3D primitive; needs the footprint decision, not just z | `lcy.8` |
 | 6 | `surface`/`mesh` | Needs the grid contract from milestone 5's footprint thinking | `lcy.4` |
-| 7 | `stat_bin_3d` product contract | Decide bin semantics with nothing rendering yet | `lcy.5` |
+| 7 | `stat_bin_3d` product contract | Decide bin semantics with nothing rendering yet | `lcy.5` ✅ |
 | 8 | Voxel rendering | Only after 7 | `lcy.6` |
 | 9 | 3D interaction and visual QA | Needs enough geoms to be worth testing | `lcy.7` |
 
