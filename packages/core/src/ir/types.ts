@@ -49,6 +49,7 @@ export type AesName =
   | "ymax"
   | "xend"
   | "yend"
+  | "zend"
   | "angle"
   | "radius"
   | "lower"

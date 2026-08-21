@@ -121,17 +121,31 @@ explicitly does **not** provide.
 
 ```ts
 { dimensions: 3, requiredPosition: ["x", "y", "z", "xend", "yend", "zend"],
-  stats: ["identity"], positions: ["identity"], depth: "opaque" }
+  stats: ["identity"], positions: ["identity"], depth: "alphaAware" }
 ```
+
+Implemented. `depth` is `alphaAware`, not the `opaque` this row first proposed:
+segments are lines and fade with alpha exactly as `geom_line` does, and the two
+resolve identically while a layer is opaque.
 
 - **Topology:** independent 2-vertex segments; no ordering or grouping.
 - **Missing values:** any missing endpoint component drops the whole segment.
 - **Camera:** none beyond the shared camera; widths stay pixel-constant.
-- **Requires:** a `zend` positional aesthetic, which does not exist yet, and
-  which must train on the z scale like `xend`/`yend` do on x/y.
+- **Requires:** a `zend` positional aesthetic, added with this milestone. It
+  trains the z scale exactly as `xend`/`yend` train x/y — without that a far
+  endpoint scales outside the cube.
+- **Selection:** a 3D mode is chosen only when its *whole* position set is
+  mapped. Keying on a mapped `z` alone was not enough: `geom_contour` lowers
+  through the same geom and maps z as a height field, so it would have claimed
+  the six-position 3D mode. A partially mapped 3D segment now names the
+  aesthetics still missing rather than reporting "z is not supported", which
+  would be false for a geom that does have a 3D mode.
 - **Non-goals:** `abline`/`hline`/`vline` do **not** become planes. A reference
   line in 3D is a line, and a reference *plane* is a separate primitive with
-  its own parameters — as ADR 002 already states.
+  its own parameters — as ADR 002 already states. In practice the family is
+  structurally immune: each supplies its own literal data with
+  `inheritAes: false`, so it never sees a plot-level `z`. Combining one with a
+  3D layer reports the existing mixed-dimension error.
 
 ### 2. `polygon`, `area`, `ribbon`, `rect`, `tile`
 
@@ -239,7 +253,7 @@ defined.
 | # | Work | Why here | Bead |
 | --- | --- | --- | --- |
 | 0 | Fail on unsupported `z` | Every later milestone otherwise ships a new silent no-op | `lcy.9` ✅ |
-| 1 | `segment` + reference-line modes | Lowest risk: existing line topology, but forces the `zend` aesthetic | `lcy.2` |
+| 1 | `segment` + reference-line modes | Lowest risk: existing line topology, but forces the `zend` aesthetic | `lcy.2` ✅ |
 | 2 | Declared depth policy | Required before the first translucent geom, not after | `lcy.10` |
 | 3 | Planar surfaces: polygon, area, ribbon, rect, tile | First translucent content; validates milestone 2 | `lcy.3` |
 | 4 | `text` billboards | Independent of 2 and 3; slot in wherever convenient | `lcy.11` |

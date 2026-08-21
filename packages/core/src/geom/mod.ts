@@ -19,7 +19,7 @@ import { lowerInterval } from "./errorbar.ts";
 import { lowerBoxplot } from "./boxplot.ts";
 import { lowerViolin } from "./violin.ts";
 import { lowerText } from "./text.ts";
-import { lowerSegment } from "./segment.ts";
+import { lowerSegment, SEGMENT_3D_DEPTH } from "./segment.ts";
 import { lowerRect } from "./rect.ts";
 import { lowerAbline, lowerHline, lowerVline } from "./refline.ts";
 import { lowerCurve } from "./curve.ts";
@@ -319,6 +319,16 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
   segment: {
     defaultStat: "identity",
     lower: lowerSegment,
+    modes: [
+      { dimensions: 2, requiredPosition: ["x", "y", "xend", "yend"] },
+      {
+        dimensions: 3,
+        requiredPosition: ["x", "y", "z", "xend", "yend", "zend"],
+        stats: ["identity"],
+        positions: ["identity"],
+        depth: SEGMENT_3D_DEPTH,
+      },
+    ],
     doc: doc("Draw straight segments between endpoints.", [
       "x",
       "y",

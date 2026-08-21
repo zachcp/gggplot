@@ -115,6 +115,15 @@ export const statFunction = (
   fun: (x: number) => number,
   opts: GeomOpts = {},
 ): SpecPart => geom("line", { ...opts, fun, stat: opts.stat ?? "function" });
+/**
+ * Straight segments between mapped endpoints.
+ *
+ * `annotate("segment", ...)` covers literal endpoints; this is the data-driven
+ * form, and the only way to reach the 3D mode, which needs six mapped
+ * positions rather than six constants.
+ */
+export const geomSegment = (opts: GeomOpts = {}): SpecPart =>
+  geom("segment", opts);
 export const geomContour = (opts: GeomOpts = {}): SpecPart =>
   geom("segment", { ...opts, stat: opts.stat ?? "contour" });
 export const geomContourFilled = (opts: GeomOpts = {}): SpecPart =>

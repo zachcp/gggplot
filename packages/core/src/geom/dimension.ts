@@ -56,9 +56,13 @@ export function selectGeomMode(
   const modes = definition.modes ?? [DEFAULT_2D_MODE];
   const two = modes.find((mode) => mode.dimensions === 2);
   const three = modes.find((mode) => mode.dimensions === 3);
-  const mode = mapping.z != null && three?.requiredPosition.includes("z")
-    ? three
-    : two ?? three;
+  // Selecting on a mapped z alone is not enough: geom_contour maps z as a stat
+  // value channel and would otherwise claim geom_segment's 3D mode, which
+  // needs six positions. A 3D mode is chosen only when its whole position set
+  // is present.
+  const threeSatisfied = three != null &&
+    three.requiredPosition.every((aes) => mapping[aes] != null);
+  const mode = threeSatisfied ? three : two ?? three;
   if (!mode) {
     throw new Error(
       `[gggplot] geom_${layer.geom} declares no dimensional mode`,
@@ -67,20 +71,36 @@ export function selectGeomMode(
 
   // A mapped z that nothing consumes used to fall through to the 2D mode and
   // be discarded in silence, so every geom without a 3D mode was a quiet
-  // no-op rather than a "not yet". z is legitimate here in three ways: the
-  // mode takes it as a position, the stat reads it as a value, or the geom
-  // declares it as a value channel. A layer that trains scales without
-  // drawing (geomBlank) is exempt, since its whole job is to widen a domain.
-  if (
-    mapping.z != null &&
-    !mode.requiredPosition.includes("z") &&
-    !Z_VALUE_STATS.includes(layer.stat) &&
-    !(definition.nonPositionalAes ?? []).includes("z") &&
-    definition.contributesDimension !== false
-  ) {
-    throw new Error(
-      `[gggplot] geom_${layer.geom} has no 3D mode; z is not supported`,
-    );
+  // no-op rather than a "not yet".
+  //
+  // z is legitimate without being a position in three ways: the stat reads it
+  // as a value (contour's height field, summary_2d's reduction), the geom
+  // declares it as a value channel (geom_tile), or the layer only trains
+  // scales without drawing (geomBlank). Those cases share one exemption so the
+  // two diagnostics below cannot disagree about what counts.
+  const zIsValueChannel = Z_VALUE_STATS.includes(layer.stat) ||
+    (definition.nonPositionalAes ?? []).includes("z") ||
+    definition.contributesDimension === false;
+
+  if (mapping.z != null && !zIsValueChannel) {
+    // A geom that HAS a 3D mode but did not satisfy it needs a different
+    // message from one that has none at all: "z is not supported" would be a
+    // lie, and the useful information is which positions are still missing.
+    const missing = three != null && mode !== three
+      ? three.requiredPosition.filter((aes) => mapping[aes] == null)
+      : [];
+    if (missing.length) {
+      throw new Error(
+        `[gggplot] 3D geom_${layer.geom} requires mapped position aesthetic(s): ${
+          missing.join(", ")
+        }`,
+      );
+    }
+    if (!mode.requiredPosition.includes("z")) {
+      throw new Error(
+        `[gggplot] geom_${layer.geom} has no 3D mode; z is not supported`,
+      );
+    }
   }
 
   // Non-identity stats may synthesize their geom's required positions (QQ is

@@ -4,6 +4,7 @@ import {
   emitSource,
   geomPath,
   geomPoint,
+  geomSegment,
   ggplot,
   type GGSpec,
   labels,
@@ -23,7 +24,11 @@ function showcase(
 ): ThreeDShowcase {
   const tree = compile(spec);
   const cartesian = tree.children[0].children[0];
-  const point = cartesian.children.find((node) => node.component === "Point")!;
+  // The first node carrying positions, rather than a Point specifically: a
+  // segment showcase has Line marks and no points at all.
+  const point = cartesian.children.find((node) =>
+    node.props.positions != null
+  )!;
   const ranges = cartesian.props.range as [number, number][];
   const positions = point.props.positions as { length: number; format: string };
   const count = (component: string) =>
@@ -36,7 +41,7 @@ function showcase(
     spec,
     emitted: emitSource(tree, id),
     summary:
-      `${positions.length} points packed into a ${positions.format} FlatTensor; ` +
+      `${positions.length} vertices packed into a ${positions.format} FlatTensor; ` +
       `data ranges x=[${ranges[0].join(", ")}], y=[${ranges[1].join(", ")}], ` +
       `z=[${ranges[2].join(", ")}]; ${count("Axis")} in-scene axes, ` +
       `${count("Grid")} coordinate-plane grids, ` +
@@ -189,10 +194,79 @@ const swizzled3d = showcase(
   swizzled3dSpec,
 );
 
+// A small vector field: each row is one segment from a lattice site along a
+// swirl direction, which is the shape geom_segment's six mapped positions are
+// actually for.
+const fieldX: number[] = [];
+const fieldY: number[] = [];
+const fieldZ: number[] = [];
+const fieldXend: number[] = [];
+const fieldYend: number[] = [];
+const fieldZend: number[] = [];
+const speed: number[] = [];
+for (let i = 0; i < 5; i++) {
+  for (let j = 0; j < 5; j++) {
+    for (let k = 0; k < 3; k++) {
+      const x = i / 4 * 2 - 1;
+      const y = j / 4 * 2 - 1;
+      const z = k / 2 * 2 - 1;
+      // A swirl about the vertical axis, scaled down so arrows stay readable.
+      const dx = -y * 0.35;
+      const dy = x * 0.35;
+      const dz = 0.18;
+      fieldX.push(x);
+      fieldY.push(y);
+      fieldZ.push(z);
+      fieldXend.push(x + dx);
+      fieldYend.push(y + dy);
+      fieldZend.push(z + dz);
+      speed.push(Math.sqrt(dx * dx + dy * dy + dz * dz));
+    }
+  }
+}
+
+export const segments3dSpec = ggplot(
+  {
+    x: fieldX,
+    y: fieldY,
+    z: fieldZ,
+    xend: fieldXend,
+    yend: fieldYend,
+    zend: fieldZend,
+    speed,
+  },
+  {
+    x: "x",
+    y: "y",
+    z: "z",
+    xend: "xend",
+    yend: "yend",
+    zend: "zend",
+  },
+).add(
+  geomSegment({ strokeWidth: 2, color: "#38bdf8" }),
+  labels({ title: "Vector field", x: "x", y: "y", z: "z" }),
+).build();
+
+const segments3d = showcase(
+  "Segments3D",
+  "3D segments from six mapped positions",
+  "A swirl field drawn as one disjoint segment per row. The 3D mode needs all six positions mapped — x/y/z and xend/yend/zend — and zend trains the z scale exactly as xend trains x, so the far endpoints stay inside the cube.",
+  `ggplot(data, aes({
+  x: "x", y: "y", z: "z",
+  xend: "xend", yend: "yend", zend: "zend",
+}))
+  .add(geomSegment({ strokeWidth: 2, color: "#38bdf8" }));
+// Mapping z without zend reports the missing aesthetic rather than
+// silently dropping back to a 2D plot.`,
+  segments3dSpec,
+);
+
 export const threeDShowcases: ThreeDShowcase[] = [
   helix3d,
   lattice3d,
   categorical3d,
+  segments3d,
   swizzled3d,
 ];
 

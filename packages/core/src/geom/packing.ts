@@ -496,3 +496,56 @@ export function packUniformChunks(
     },
   };
 }
+
+/**
+ * The vec4 analogue of packUniformChunks, for disjoint 3D chunks.
+ *
+ * Rows arrive already filtered: a segment with any non-finite component is
+ * dropped whole by the caller rather than half-packed, since half a segment is
+ * a line to nowhere.
+ */
+export function packUniformChunks3d(
+  chunkPoints: readonly (readonly [number, number, number])[][],
+): PackedGeometry {
+  const chunkCount = chunkPoints.length;
+  if (chunkCount === 0) {
+    return {
+      positions: {
+        array: new Float32Array(0),
+        format: "vec4",
+        dims: 4,
+        length: 0,
+        size: [0],
+        version: 0,
+      },
+      topology: { kind: "polyline" },
+    };
+  }
+  const chunkLen = chunkPoints[0].length;
+  const array = new Float32Array(chunkCount * chunkLen * 4);
+  let w = 0;
+  for (const chunk of chunkPoints) {
+    for (const [x, y, z] of chunk) {
+      array[w++] = x;
+      array[w++] = y;
+      array[w++] = z;
+      array[w++] = 1;
+    }
+  }
+  const length = chunkCount * chunkLen;
+  return {
+    positions: {
+      array,
+      format: "vec4",
+      dims: 4,
+      length,
+      size: [chunkLen, chunkCount],
+      version: 0,
+    },
+    topology: {
+      kind: "polyline",
+      chunks: new Uint32Array(chunkCount).fill(chunkLen),
+      loops: false,
+    },
+  };
+}
