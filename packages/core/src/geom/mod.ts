@@ -197,6 +197,8 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
   tile: {
     defaultStat: "identity",
     lower: lowerTile,
+    // z is a value channel here, not a position; see dimension_resolver_test.
+    nonPositionalAes: ["z"],
     domainContribution: tileDomainContribution,
     residentPlan: tileResidentPlan,
     doc: doc("Draw rectangular cells centered on x/y.", ["x", "y"], [

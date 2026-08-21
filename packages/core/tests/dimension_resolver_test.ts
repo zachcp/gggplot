@@ -2,10 +2,14 @@ import { assertEquals, assertThrows } from "jsr:@std/assert@1";
 import {
   camera3d,
   facetWrap,
+  geomArea,
+  geomBar,
   geomBlank,
   geomPoint,
+  geomPolygon,
   geomTile,
   ggplot,
+  statSummary2d,
 } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
 import { resolvePlotDimension, selectGeomMode } from "../src/geom/mod.ts";
@@ -46,6 +50,51 @@ Deno.test("a tile z value remains 2D while point z is positional", () => {
     () => resolvePlotDimension(mixed),
     Error,
     "mixed 2D/3D layers",
+  );
+});
+
+Deno.test("a mapped z with nothing to consume it fails instead of vanishing", () => {
+  // Previously each of these compiled a silent 2D plot with the z mapping
+  // discarded, so an unimplemented 3D geom was indistinguishable from a
+  // supported one.
+  for (const part of [geomBar({ stat: "identity" }), geomArea(), geomPolygon()]) {
+    assertThrows(
+      () => resolvePlotDimension(ggplot(data, { x: "x", y: "y", z: "z" }).add(part).build()),
+      Error,
+      "z is not supported",
+    );
+  }
+});
+
+Deno.test("z stays legal wherever something actually reads it", () => {
+  // A stat that reduces z as a value channel.
+  assertEquals(
+    resolvePlotDimension(
+      ggplot(data, { x: "x", y: "y", z: "z" }).add(statSummary2d({ bins: 2 }))
+        .build(),
+    ).dimensions,
+    2,
+  );
+  // A geom that documents z as a value channel.
+  assertEquals(
+    resolvePlotDimension(
+      ggplot(data, { x: "x", y: "y", z: "z" }).add(geomTile()).build(),
+    ).dimensions,
+    2,
+  );
+  // A geom that only trains scales.
+  assertEquals(
+    resolvePlotDimension(
+      ggplot(data, { x: "x", y: "y", z: "z" }).add(geomBlank()).build(),
+    ).dimensions,
+    2,
+  );
+  // And a geom whose 3D mode takes z as a position.
+  assertEquals(
+    resolvePlotDimension(
+      ggplot(data, { x: "x", y: "y", z: "z" }).add(geomPoint()).build(),
+    ).dimensions,
+    3,
   );
 });
 

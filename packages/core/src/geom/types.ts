@@ -91,6 +91,15 @@ export interface GeomDefinition {
   /** Default position used by the DSL layer builder (default "identity"). */
   defaultPosition?: PositionKind;
   /**
+   * Aesthetics this geom accepts without them selecting a dimensional mode.
+   *
+   * `z` on geom_tile is the current case: it is a documented value channel,
+   * not a position. Without this declaration a mapped `z` on a geom with no
+   * 3D mode is indistinguishable from a 3D request that was silently ignored,
+   * which is the bug this field exists to make impossible.
+   */
+  nonPositionalAes?: readonly AesName[];
+  /**
    * Public dimensional realizations. Omit for an ordinary 2D-only geom.
    * Shared geoms declare both modes without growing a second GeomKind.
    */

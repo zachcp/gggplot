@@ -59,9 +59,26 @@ added one at a time — every unimplemented geom is a silent no-op rather than a
 "not yet" message. **Fix before adding any new mode**, otherwise each milestone
 below ships a new way to be quietly ignored.
 
-The rule: if `z` is mapped and the resolved mode does not consume it, throw
+The rule: if `z` is mapped and *nothing* consumes it, throw
 `geom_<name> has no 3D mode; z is not supported`. A caller who genuinely wants
 z ignored can drop it from the mapping.
+
+"Nothing consumes it" turned out to be subtler than "the mode does not require
+it". `z` is a legitimate non-positional aesthetic in three other places, and
+the first draft of this rule broke all of them:
+
+- **The stat reads it as a value.** `contour` and `contour_filled` take z as a
+  height field; `summary_2d`, `summary_hex`, and `summary_bin` reduce it per
+  cell. Whether z is positional is therefore a property of the *stat*, not the
+  geom.
+- **The geom documents it as a value channel.** `geom_tile` lists z among its
+  optional aesthetics, and a test asserts that a tile z stays 2D.
+- **The layer only trains scales.** `geom_blank` maps z to widen a domain
+  without drawing, and is exempt via its existing `contributesDimension: false`.
+
+Implemented in `selectGeomMode()` against a named `Z_VALUE_STATS` list and a
+`GeomDefinition.nonPositionalAes` declaration, so each exemption is stated
+rather than inferred.
 
 **2. `GeomMode` cannot express depth behavior.** Only
 `prism_instances_3d.tsx` sets `depthTest`/`depthWrite` explicitly; point, line,
@@ -209,18 +226,18 @@ defined.
 
 | # | Work | Why here | Bead |
 | --- | --- | --- | --- |
-| 0 | Fail on unsupported `z` | Every later milestone otherwise ships a new silent no-op | *(new)* |
+| 0 | Fail on unsupported `z` | Every later milestone otherwise ships a new silent no-op | `lcy.9` ✅ |
 | 1 | `segment` + reference-line modes | Lowest risk: existing line topology, but forces the `zend` aesthetic | `lcy.2` |
-| 2 | Declared depth policy | Required before the first translucent geom, not after | *(new)* |
+| 2 | Declared depth policy | Required before the first translucent geom, not after | `lcy.10` |
 | 3 | Planar surfaces: polygon, area, ribbon, rect, tile | First translucent content; validates milestone 2 | `lcy.3` |
-| 4 | `text` billboards | Independent of 2 and 3; slot in wherever convenient | *(new)* |
+| 4 | `text` billboards | Independent of 2 and 3; slot in wherever convenient | `lcy.11` |
 | 5 | Prisms: bar, col | First distinct 3D primitive; needs the footprint decision, not just z | `lcy.8` |
 | 6 | `surface`/`mesh` | Needs the grid contract from milestone 5's footprint thinking | `lcy.4` |
 | 7 | `stat_bin_3d` product contract | Decide bin semantics with nothing rendering yet | `lcy.5` |
 | 8 | Voxel rendering | Only after 7 | `lcy.6` |
 | 9 | 3D interaction and visual QA | Needs enough geoms to be worth testing | `lcy.7` |
 
-Milestones 0, 2, and 4 have no bead yet and need filing.
+Milestone 0 is done; the rest are beaded and dependency-ordered.
 
 ### The guard against accidental volume semantics
 

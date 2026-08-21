@@ -1,5 +1,24 @@
-import type { Aes, GGSpec, Layer } from "../ir/types.ts";
+import type { Aes, GGSpec, Layer, StatKind } from "../ir/types.ts";
 import type { GeomDefinition, GeomMode, PlotDimension } from "./types.ts";
+
+/**
+ * Stats that read a mapped `z` as a value channel rather than a position.
+ *
+ * Whether `z` is positional is a property of the stat, not the geom: contour
+ * reads it as a height field and summary_2d reduces it per cell, both while
+ * drawing an ordinary 2D plot. Keeping the list here — rather than inferring
+ * it — is what lets an unconsumed `z` be reported instead of discarded.
+ */
+const Z_VALUE_STATS: readonly StatKind[] = [
+  "contour",
+  "contourfilled",
+  // summary2d, summaryhex, and summarybin all resolve to statSummary2d, which
+  // reduces the mapped z per cell; they are listed individually because the
+  // allow-list is keyed by StatKind, not by implementation.
+  "summary2d",
+  "summaryhex",
+  "summarybin",
+];
 
 const DEFAULT_2D_MODE: GeomMode = {
   dimensions: 2,
@@ -43,6 +62,24 @@ export function selectGeomMode(
   if (!mode) {
     throw new Error(
       `[gggplot] geom_${layer.geom} declares no dimensional mode`,
+    );
+  }
+
+  // A mapped z that nothing consumes used to fall through to the 2D mode and
+  // be discarded in silence, so every geom without a 3D mode was a quiet
+  // no-op rather than a "not yet". z is legitimate here in three ways: the
+  // mode takes it as a position, the stat reads it as a value, or the geom
+  // declares it as a value channel. A layer that trains scales without
+  // drawing (geomBlank) is exempt, since its whole job is to widen a domain.
+  if (
+    mapping.z != null &&
+    !mode.requiredPosition.includes("z") &&
+    !Z_VALUE_STATS.includes(layer.stat) &&
+    !(definition.nonPositionalAes ?? []).includes("z") &&
+    definition.contributesDimension !== false
+  ) {
+    throw new Error(
+      `[gggplot] geom_${layer.geom} has no 3D mode; z is not supported`,
     );
   }
 
