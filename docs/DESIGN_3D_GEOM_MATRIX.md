@@ -105,11 +105,28 @@ Omitting the policy means `alphaAware`: writing depth for genuinely
 translucent content produces visible blending artifacts, while the reverse
 costs nothing, so the forgiving reading is the safe default.
 
-**Back-to-front draw order is still not implemented.** `alphaAware` sets the
-buffer flags but nothing sorts translucent geometry by camera distance. That is
-invisible for points and thin lines and will not stay invisible for overlapping
-planar surfaces — it is filed separately rather than folded in here, because it
-needs translucent surfaces to validate against.
+**Back-to-front draw order already works, at the draw-call level.** This
+section previously claimed nothing sorted translucent geometry. That was wrong.
+
+use.gpu's colour pass draws opaque calls, then transparent ones, and passes
+`sign = -1` to `drawToPass` for the transparent set
+(`@use-gpu/workbench/pass/color-pass`). `drawToPass` sorts renderables by a
+culler-computed depth and that sign reverses the comparison, which is a
+back-to-front sort, recomputed every frame as the camera moves. The raw
+primitives supply the `bounds` that depth is derived from — `raw-faces`
+computes it from transformed positions and hands it to the renderable — so
+gggplot's marks participate without doing anything.
+
+Two real limits remain, and both matter for the same geom:
+
+- **The sort is per draw call, not per primitive.** Renderables are ordered
+  against each other; the instances inside one of them are not. A voxel lattice
+  is a single instanced draw containing thousands of mutually overlapping
+  boxes, so it gets no internal ordering. Filed as `gggplot-lcy.13`.
+- **`PrismInstances3D` never enters the transparent pass.** It hardcodes
+  `mode: "opaque"` with both depth flags on, so prism and voxel content is
+  excluded from the sorted set entirely until it takes the layer's resolved
+  depth props. That change belongs to `gggplot-lcy.6`.
 
 ## The matrix
 
