@@ -13,7 +13,7 @@ import { LINE_3D_DEPTH, lowerLine } from "./line.ts";
 import { barDomainContribution, barResidentPlan, lowerBar } from "./bar.ts";
 import { areaDomainContribution, lowerArea } from "./area.ts";
 import { lowerPolygon } from "./polygon.ts";
-import { SURFACE_3D_DEPTH } from "./surface_3d.ts";
+import { lowerVoxel, SURFACE_3D_DEPTH } from "./surface_3d.ts";
 import { lowerTile, tileDomainContribution, tileResidentPlan } from "./tile.ts";
 import { lowerHex } from "./hex.ts";
 import { lowerInterval } from "./errorbar.ts";
@@ -466,6 +466,29 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
     ], {
       sides: "Panel sides receiving ticks.",
       length: "Tick length in CSS pixels.",
+    }),
+  },
+  voxel: {
+    defaultStat: "bin3d",
+    lower: lowerVoxel,
+    modes: [
+      {
+        dimensions: 3,
+        requiredPosition: ["x", "y", "z"],
+        stats: ["bin3d", "identity"],
+        positions: ["identity"],
+        depth: SURFACE_3D_DEPTH,
+      },
+    ],
+    doc: doc("Draw occupancy cells for binned 3D observations.", [
+      "x",
+      "y",
+      "z",
+    ], ["fill", "color", "alpha", "group"], {
+      bins: "Bin count per axis; scalar or [x, y, z].",
+      binwidth: "Bin width per axis; scalar or [x, y, z]. Overrides bins.",
+      boundary: "Bin edge alignment; scalar or [x, y, z].",
+      padding: "Shrink each cell toward its center, 0 to 1, for legibility.",
     }),
   },
   blank: {

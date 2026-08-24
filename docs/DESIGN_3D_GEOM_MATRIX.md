@@ -344,7 +344,7 @@ defined.
 | 5 | Prisms: col | First distinct 3D primitive; footprint is z + a zwidth param | `lcy.8` ✅ |
 | 6 | `surface`/`mesh` | Needs the grid contract from milestone 5's footprint thinking | `lcy.4` |
 | 7 | `stat_bin_3d` product contract | Decide bin semantics with nothing rendering yet | `lcy.5` ✅ |
-| 8 | Voxel rendering | Only after 7 | `lcy.6` |
+| 8 | Voxel rendering | Only after 7 | `lcy.6` ✅ |
 | 9 | 3D interaction and visual QA | Needs enough geoms to be worth testing | `lcy.7` |
 
 Milestone 0 is done; the rest are beaded and dependency-ordered.

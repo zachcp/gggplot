@@ -61,13 +61,20 @@ every other stat produces:
 | *(y column name)* | Cell center on y |
 | *(z column name)* | Cell center on z |
 | `count` | Observations in the cell; always present |
-| `density` | `count / (total × cellVolume)`; present when requested |
+| `density` | `count / (total × cellVolume)`; always present |
 | `value` | Summary of a mapped value column, when `fun` is supplied |
 | *(group columns)* | Carried through unchanged, one cell per group |
 
-Cell geometry is not emitted per row. The lattice is regular, so the three bin
-widths and the three origins describe every cell and belong in the layer's
-resolved parameters rather than repeated across thousands of rows.
+Cell geometry **is** emitted per row, as `binWidthX`, `binWidthY`, and
+`binWidthZ`. This reverses the original plan, which put the lattice widths in
+resolved parameters to avoid repeating them across thousands of rows. That
+plan assumed a channel that does not exist: `StatResult` carries only `data`
+and `mapping`, so a stat has no way to hand resolved parameters to its geom.
+
+Columns are the honest alternative. `geom_voxel` genuinely needs the cell size,
+and it cannot recover it from centers when an axis holds a single cell. The
+redundancy is real but bounded, and closing it would mean widening the
+stat/geom contract for one consumer.
 
 ### Density has a volume divisor
 

@@ -342,3 +342,72 @@ export function lowerPrism3d(
   });
   return boxNode(layer, boxes);
 }
+
+/**
+ * geom_voxel: one occupancy cell per non-empty lattice bin.
+ *
+ * Cell size comes from the binWidth columns stat_bin_3d emits, so voxels tile
+ * exactly. A `padding` param shrinks each box toward its center, which makes
+ * individual cells legible in a dense lattice; it is a rendering affordance
+ * and does not change the bin the cell represents.
+ */
+export function lowerVoxel(
+  layer: Layer,
+  mapping: Aes,
+  data: DataFrame,
+  ctx: LayerContext,
+): RenderNode[] {
+  const xs = valuesOf(data, mapping.x);
+  const ys = valuesOf(data, mapping.y);
+  const zs = valuesOf(data, mapping.z);
+  const wx = valuesOf(data, "binWidthX");
+  const wy = valuesOf(data, "binWidthY");
+  const wz = valuesOf(data, "binWidthZ");
+  if (!xs || !ys || !zs) return [];
+
+  const colors = colorsOf(
+    mapping,
+    data,
+    ctx.scales.color,
+    ctx.scales.fill,
+    "fillOrColor",
+  );
+  const fallback = (layer.params.fill as string) ??
+    (layer.params.color as string) ?? "#3b82f6";
+  const padding = typeof layer.params.padding === "number"
+    ? Math.min(Math.max(layer.params.padding, 0), 1)
+    : 0;
+
+  const boxes = [];
+  const n = Math.min(xs.length, ys.length, zs.length);
+  for (let row = 0; row < n; row++) {
+    if (xs[row] == null || ys[row] == null || zs[row] == null) continue;
+    const cx = scalePosition(ctx.scales.x, xs[row]);
+    const cy = scalePosition(ctx.scales.y, ys[row]);
+    const cz = scalePosition(ctx.scales.z, zs[row]);
+    if (![cx, cy, cz].every(Number.isFinite)) continue;
+    // Widths are in data units; scale the cell's far corner rather than the
+    // width itself, so a non-linear position scale still tiles correctly.
+    const half = (
+      raw: number[] | undefined,
+      centerRaw: unknown,
+      center: number,
+      scale: Parameters<typeof scalePosition>[0],
+    ): number => {
+      const width = raw?.[row];
+      if (typeof width !== "number" || !Number.isFinite(width)) return 0;
+      const edge = scalePosition(scale, Number(centerRaw) + width / 2);
+      return Number.isFinite(edge) ? Math.abs(edge - center) : 0;
+    };
+    const sx = half(wx as number[], xs[row], cx, ctx.scales.x) * 2;
+    const sy = half(wy as number[], ys[row], cy, ctx.scales.y) * 2;
+    const sz = half(wz as number[], zs[row], cz, ctx.scales.z) * 2;
+    const shrink = 1 - padding;
+    boxes.push({
+      center: [cx, cy, cz] as [number, number, number],
+      size: [sx * shrink, sy * shrink, sz * shrink] as [number, number, number],
+      fill: colors?.[row] ?? fallback,
+    });
+  }
+  return boxNode(layer, boxes);
+}

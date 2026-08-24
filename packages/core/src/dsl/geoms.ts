@@ -116,6 +116,17 @@ export const statFunction = (
   opts: GeomOpts = {},
 ): SpecPart => geom("line", { ...opts, fun, stat: opts.stat ?? "function" });
 /**
+ * Occupancy cells for binned 3D observations.
+ *
+ * Named for what it draws, not for the reduction behind it: `stat_bin_3d`
+ * counts observations into lattice cells and `geom_voxel` renders the
+ * occupied ones. There is no 2D `geom_bin` alias — `geom_bin2d` already
+ * covers rectangular 2D binning.
+ */
+export const geomVoxel = (opts: GeomOpts = {}): SpecPart =>
+  geom("voxel", { ...opts, stat: opts.stat ?? "bin3d" });
+
+/**
  * Rectangles from mapped bounds.
  *
  * `annotate("rect", ...)` covers literal bounds; this is the data-driven form,

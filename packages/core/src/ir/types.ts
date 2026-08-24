@@ -92,6 +92,7 @@ export type GeomKind =
   | "step"
   | "curve"
   | "spoke"
+  | "voxel"
   | "rug";
 
 export type StatKind =
@@ -105,6 +106,7 @@ export type StatKind =
   | "ydensity"
   | "dotplot"
   | "bin2d"
+  | "bin3d"
   | "binhex"
   | "summary2d"
   | "summaryhex"
