@@ -128,6 +128,38 @@ Two real limits remain, and both matter for the same geom:
   excluded from the sorted set entirely until it takes the layer's resolved
   depth props. That change belongs to `gggplot-lcy.6`.
 
+### Ordering inside one draw call is unsolved, and deliberately so
+
+`gggplot-lcy.12` established that use.gpu sorts translucent *renderables*
+back-to-front every frame. It does not order the primitives inside one of them,
+and nothing in `@use-gpu/workbench` does — there is no per-primitive depth sort
+anywhere in the package.
+
+Prisms, voxels, and surfaces each pack every box or quad into a single
+`ChunkedFace`, so a voxel lattice is one renderable holding thousands of
+mutually overlapping rings. Those rings blend in packing order.
+
+**The exposure is bounded and opt-in.** A voxel layer with no `alpha` resolves
+to `opaque` with `depthWrite` on, and the depth buffer orders it correctly with
+no sorting involved. The artifact appears only when a user asks for
+translucency, which is exactly when they are asking to see through overlapping
+cells.
+
+**A compile-time sort was considered and rejected.** `LayerContext` carries
+scales, theme, and panel pixels — not the camera — so sorting during lowering
+would mean threading a camera through every geom's lowering signature for one
+narrow purpose. Worse, the result would be correct only for the declared
+camera: the RenderTree is static, and orbiting is the primary 3D interaction,
+so the ordering would decay from correct to reversed as the user does the one
+thing the scene is built for. An ordering that is right at t=0 and silently
+wrong afterwards is harder to reason about than no ordering at all.
+
+A correct fix reorders per frame with the live camera — either inside
+`ChunkedFace`, which would have to repack its buffers as the camera moves, or
+through an order-independent transparency scheme. Both are renderer work, and
+both need a real browser to evaluate, which is why `gggplot-lcy.13` stays open
+rather than being closed on analysis alone.
+
 ## The matrix
 
 Each row gives the mode literal, the topology it lowers to, and its non-goals.
