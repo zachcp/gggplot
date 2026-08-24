@@ -48,6 +48,25 @@ Deno.test("a 3D polygon packs one vec4 ring per group", () => {
   }
 });
 
+Deno.test("groups become separate rings in one packed face", () => {
+  const two = {
+    x: [0, 1, 1, 0, 2, 3, 3, 2],
+    y: [0, 0, 1, 1, 0, 0, 1, 1],
+    z: [2, 2, 2, 2, 5, 5, 5, 5],
+    g: ["a", "a", "a", "a", "b", "b", "b", "b"],
+  };
+  const nodes = surfaces(
+    ggplot(two, { x: "x", y: "y", z: "z", group: "g" }).add(geomPolygon())
+      .build(),
+  );
+  // One node, two rings — the packer concatenates groups rather than
+  // emitting a draw call each.
+  assertEquals(nodes.length, 1);
+  assertEquals((nodes[0].props.positions as { length: number }).length, 8);
+  const topology = nodes[0].props.topology as { chunks?: Uint32Array };
+  assertEquals(Array.from(topology.chunks ?? []), [4, 4]);
+});
+
 Deno.test("a ring with a missing vertex is dropped, not closed across the gap", () => {
   // Closing the gap would invent area the data never had.
   const holed = { x: [0, 1, 1, 0], y: [0, 0, 1, 1], z: [2, null, 2, 2] };
