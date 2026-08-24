@@ -116,6 +116,15 @@ export const statFunction = (
   opts: GeomOpts = {},
 ): SpecPart => geom("line", { ...opts, fun, stat: opts.stat ?? "function" });
 /**
+ * Rectangles from mapped bounds.
+ *
+ * `annotate("rect", ...)` covers literal bounds; this is the data-driven form,
+ * and the only way to reach the 3D mode, which positions each rectangle in the
+ * plane at its row's z.
+ */
+export const geomRect = (opts: GeomOpts = {}): SpecPart => geom("rect", opts);
+
+/**
  * Straight segments between mapped endpoints.
  *
  * `annotate("segment", ...)` covers literal endpoints; this is the data-driven

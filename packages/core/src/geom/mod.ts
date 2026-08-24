@@ -13,6 +13,7 @@ import { LINE_3D_DEPTH, lowerLine } from "./line.ts";
 import { barDomainContribution, barResidentPlan, lowerBar } from "./bar.ts";
 import { areaDomainContribution, lowerArea } from "./area.ts";
 import { lowerPolygon } from "./polygon.ts";
+import { SURFACE_3D_DEPTH } from "./surface_3d.ts";
 import { lowerTile, tileDomainContribution, tileResidentPlan } from "./tile.ts";
 import { lowerHex } from "./hex.ts";
 import { lowerInterval } from "./errorbar.ts";
@@ -174,6 +175,16 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
     defaultStat: "identity",
     lower: lowerArea,
     domainContribution: areaDomainContribution,
+    modes: [
+      { dimensions: 2, requiredPosition: ["x", "y"] },
+      {
+        dimensions: 3,
+        requiredPosition: ["x", "y", "z"],
+        stats: ["identity"],
+        positions: ["identity"],
+        depth: SURFACE_3D_DEPTH,
+      },
+    ],
     doc: doc(
       "Draw filled bands from a baseline to grouped y series.",
       ["x", "y"],
@@ -184,6 +195,16 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
   ribbon: {
     defaultStat: "identity",
     lower: lowerArea,
+    modes: [
+      { dimensions: 2, requiredPosition: ["x", "ymin", "ymax"] },
+      {
+        dimensions: 3,
+        requiredPosition: ["x", "ymin", "ymax", "z"],
+        stats: ["identity"],
+        positions: ["identity"],
+        depth: SURFACE_3D_DEPTH,
+      },
+    ],
     doc: doc("Draw a band between ymin and ymax.", ["x", "ymin", "ymax"], [
       "group",
       ...visual,
@@ -192,6 +213,16 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
   polygon: {
     defaultStat: "identity",
     lower: lowerPolygon,
+    modes: [
+      { dimensions: 2, requiredPosition: ["x", "y"] },
+      {
+        dimensions: 3,
+        requiredPosition: ["x", "y", "z"],
+        stats: ["identity"],
+        positions: ["identity"],
+        depth: SURFACE_3D_DEPTH,
+      },
+    ],
     doc: doc("Draw closed grouped polygon loops.", ["x", "y"], [
       "group",
       ...visual,
@@ -351,6 +382,16 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
   rect: {
     defaultStat: "identity",
     lower: lowerRect,
+    modes: [
+      { dimensions: 2, requiredPosition: ["xmin", "xmax", "ymin", "ymax"] },
+      {
+        dimensions: 3,
+        requiredPosition: ["xmin", "xmax", "ymin", "ymax", "z"],
+        stats: ["identity"],
+        positions: ["identity"],
+        depth: SURFACE_3D_DEPTH,
+      },
+    ],
     doc: doc("Draw rectangles from explicit bounds.", [
       "xmin",
       "xmax",

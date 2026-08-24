@@ -1,3 +1,4 @@
+import { lowerRect3d } from "./surface_3d.ts";
 // geom_rect / annotate("rect") — one rectangle loop per row.
 import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
@@ -17,6 +18,7 @@ export function lowerRect(
   data: DataFrame,
   ctx: LayerContext,
 ): RenderNode[] {
+  if (mapping.z != null) return lowerRect3d(layer, mapping, data, ctx);
   const xScale = ctx.scales.x;
   const yScale = ctx.scales.y;
 

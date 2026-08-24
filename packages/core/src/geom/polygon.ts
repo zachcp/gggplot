@@ -1,3 +1,4 @@
+import { lowerPolygon3d } from "./surface_3d.ts";
 // geom_polygon — one closed loop per effective group, packed into a single
 // ChunkedFace node per layer (gggplot-tzc.4). Arbitrary user-supplied
 // outlines are not guaranteed convex, so this uses the concave-capable
@@ -15,6 +16,7 @@ export function lowerPolygon(
   data: DataFrame,
   ctx: LayerContext,
 ): RenderNode[] {
+  if (mapping.z != null) return lowerPolygon3d(layer, mapping, data, ctx);
   const xScale = ctx.scales.x;
   const yScale = ctx.scales.y;
   const colorScale = ctx.scales.color;

@@ -2,11 +2,11 @@ import { assertEquals, assertThrows } from "jsr:@std/assert@1";
 import {
   camera3d,
   facetWrap,
-  geomArea,
   geomBar,
+  geomBoxplot,
+  geomCol,
   geomBlank,
   geomPoint,
-  geomPolygon,
   geomTile,
   ggplot,
   statSummary2d,
@@ -57,7 +57,7 @@ Deno.test("a mapped z with nothing to consume it fails instead of vanishing", ()
   // Previously each of these compiled a silent 2D plot with the z mapping
   // discarded, so an unimplemented 3D geom was indistinguishable from a
   // supported one.
-  for (const part of [geomBar({ stat: "identity" }), geomArea(), geomPolygon()]) {
+  for (const part of [geomBar({ stat: "identity" }), geomCol(), geomBoxplot()]) {
     assertThrows(
       () => resolvePlotDimension(ggplot(data, { x: "x", y: "y", z: "z" }).add(part).build()),
       Error,

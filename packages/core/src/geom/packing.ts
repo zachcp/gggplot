@@ -549,3 +549,54 @@ export function packUniformChunks3d(
     },
   };
 }
+
+/** A planar surface ring placed in 3D. Vertices carry z; nothing is extruded. */
+export interface FaceLoop3D {
+  positions: [number, number, number][];
+  fill: string;
+  alpha?: number;
+}
+
+/**
+ * The vec4 analogue of packFaceLoops.
+ *
+ * Rings arrive already filtered: a loop with any non-finite vertex is dropped
+ * whole by the caller rather than closed across the gap, which would invent
+ * area the data never had.
+ */
+export function packFaceLoops3d(loops: FaceLoop3D[]): PackedFaceGeometry {
+  const pieces: PackedGeometry[] = loops.map((loop) => {
+    const array = new Float32Array(loop.positions.length * 4);
+    loop.positions.forEach(([x, y, z], v) => {
+      array[v * 4] = x;
+      array[v * 4 + 1] = y;
+      array[v * 4 + 2] = z;
+      array[v * 4 + 3] = 1;
+    });
+    return {
+      positions: {
+        array,
+        format: "vec4",
+        dims: 4,
+        length: loop.positions.length,
+        size: [loop.positions.length],
+        version: 0,
+      },
+      topology: { kind: "loops", loops: true } as MarkTopology,
+      // Local all-0 owners, rebased by concatPacked exactly as the 2D packer
+      // relies on; see packFaceLoops for why a global index here would double.
+      owners: new Uint32Array(loop.positions.length).fill(0),
+    };
+  });
+  const combined = concatPacked(pieces);
+  const rowMask = new Uint8Array(loops.length).fill(1);
+  const rowColors = packColorsRGBA(
+    loops.map((l) => l.fill),
+    rowMask,
+    loops.map((l) => l.alpha ?? 1),
+  );
+  const colors = combined.owners
+    ? expandByOwners(rowColors, combined.owners)
+    : rowColors;
+  return { positions: combined.positions, topology: combined.topology, colors };
+}

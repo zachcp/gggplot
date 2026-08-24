@@ -168,8 +168,22 @@ resolve identically while a layer is opaque.
 
 ```ts
 { dimensions: 3, requiredPosition: ["x", "y", "z"],
-  stats: ["identity"], positions: ["identity"], depth: "translucent" }
+  stats: ["identity"], positions: ["identity"], depth: "alphaAware" }
 ```
+
+Implemented for `polygon`, `area`, `ribbon`, and `rect`, each declaring the
+positions it actually needs — `ribbon` takes `x`/`ymin`/`ymax`/`z`, `rect`
+takes its four bounds plus `z`. `depth` is `alphaAware`; the row's original
+`translucent` spelling predates the vocabulary settled in `gggplot-lcy.10`.
+
+**`geom_tile` is excluded, and cannot be included as written.** Its `z` is
+already a value channel — `stat_summary_2d` reduces a mapped `z` per cell, and
+`geom_tile` declares `nonPositionalAes: ["z"]` for exactly that reason. Giving
+it a `z`-based 3D mode would make a mapped `z` ambiguous between "the value to
+colour by" and "the plane to sit in", which is the ambiguity this epic exists
+to prevent. `geom_rect` covers the 3D rectangle case with unambiguous bounds.
+A 3D tile would need a different aesthetic to carry its plane, which is a
+design question rather than a missing implementation.
 
 - **Topology:** a planar surface embedded in 3D — triangulated in its own
   plane, then placed. Vertex `z` positions the plane; it does not extrude.
@@ -304,7 +318,7 @@ defined.
 | 0 | Fail on unsupported `z` | Every later milestone otherwise ships a new silent no-op | `lcy.9` ✅ |
 | 1 | `segment` + reference-line modes | Lowest risk: existing line topology, but forces the `zend` aesthetic | `lcy.2` ✅ |
 | 2 | Declared depth policy | Required before the first translucent geom, not after | `lcy.10` |
-| 3 | Planar surfaces: polygon, area, ribbon, rect, tile | First translucent content; validates milestone 2 | `lcy.3` |
+| 3 | Planar surfaces: polygon, area, ribbon, rect | First translucent content; validates milestone 2. `tile` excluded — its z is a value channel | `lcy.3` ✅ |
 | 4 | `text` billboards | Independent of 2 and 3; slot in wherever convenient | `lcy.11` ✅ |
 | 5 | Prisms: bar, col | First distinct 3D primitive; needs the footprint decision, not just z | `lcy.8` |
 | 6 | `surface`/`mesh` | Needs the grid contract from milestone 5's footprint thinking | `lcy.4` |

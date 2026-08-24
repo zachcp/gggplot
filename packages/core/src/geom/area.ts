@@ -1,3 +1,4 @@
+import { lowerArea3d } from "./surface_3d.ts";
 // geom_area / geom_ribbon — filled bands, plus the stacked-silhouette variant.
 import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
@@ -198,6 +199,7 @@ export function lowerArea(
   data: DataFrame,
   ctx: LayerContext,
 ): RenderNode[] {
+  if (mapping.z != null) return lowerArea3d(layer, mapping, data, ctx);
   const xScale = ctx.scales.x;
   const yScale = ctx.scales.y;
   const colorScale = ctx.scales.color;
