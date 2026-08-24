@@ -1,4 +1,4 @@
-import { assertEquals, assertThrows } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1";
 import {
   camera3d,
   facetWrap,
@@ -12,7 +12,11 @@ import {
   statSummary2d,
 } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
-import { resolvePlotDimension, selectGeomMode } from "../src/geom/mod.ts";
+import {
+  GEOM_REGISTRY,
+  resolvePlotDimension,
+  selectGeomMode,
+} from "../src/geom/mod.ts";
 import type { GeomDefinition } from "../src/geom/mod.ts";
 import type { Layer } from "../src/ir/types.ts";
 
@@ -54,14 +58,29 @@ Deno.test("a tile z value remains 2D while point z is positional", () => {
 });
 
 Deno.test("a mapped z with nothing to consume it fails instead of vanishing", () => {
-  // Previously each of these compiled a silent 2D plot with the z mapping
-  // discarded, so an unimplemented 3D geom was indistinguishable from a
-  // supported one.
-  for (const part of [geomBar({ stat: "identity" }), geomCol(), geomBoxplot()]) {
+  // Derived from the registry rather than a hardcoded list: this test broke
+  // twice as geoms gained 3D modes, which is the test's own fault for naming
+  // them. Any geom that declares no 3D mode, does not read z as a value
+  // channel, and still contributes a dimension must reject a mapped z.
+  const twoDOnly = Object.entries(GEOM_REGISTRY).filter(([, definition]) =>
+    !(definition.modes ?? []).some((mode) => mode.dimensions === 3) &&
+    !(definition.nonPositionalAes ?? []).includes("z") &&
+    definition.contributesDimension !== false
+  );
+  assert(twoDOnly.length > 0, "expected some geoms to remain 2D-only");
+
+  for (const [kind, definition] of twoDOnly) {
+    const layer = {
+      geom: kind,
+      stat: definition.defaultStat,
+      position: definition.defaultPosition ?? "identity",
+      params: {},
+    } as unknown as Layer;
     assertThrows(
-      () => resolvePlotDimension(ggplot(data, { x: "x", y: "y", z: "z" }).add(part).build()),
+      () => selectGeomMode(layer, { x: "x", y: "y", z: "z" }, definition),
       Error,
       "z is not supported",
+      `geom_${kind} should reject a mapped z`,
     );
   }
 });

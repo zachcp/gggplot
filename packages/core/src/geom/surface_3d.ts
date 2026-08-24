@@ -5,7 +5,12 @@ import { node, type RenderNode } from "../compile/rendertree.ts";
 import { scalePosition } from "../scale/mod.ts";
 import type { LayerContext } from "./types.ts";
 import type { DepthPolicy } from "./types.ts";
-import { colorsOf, depthProps, valuesOf } from "./shared.ts";
+import {
+  colorsOf,
+  depthProps,
+  resolutionOf,
+  valuesOf,
+} from "./shared.ts";
 import { splitByEffectiveGroup } from "../group/mod.ts";
 import { type FaceLoop3D, packFaceLoops3d } from "./packing.ts";
 
@@ -217,4 +222,123 @@ export function lowerArea3d(
       return [...top, ...bottom.reverse()];
     }, fill),
   );
+}
+
+/**
+ * The six faces of an axis-aligned box, as closed rings.
+ *
+ * A prism is drawn as planar surfaces rather than through the instanced
+ * PrismInstances3D primitive because that primitive is reached only through
+ * the runtime SceneExtras host hook — it is not something compile() can emit.
+ * Six rings per box reuses the surface path this module already provides and
+ * keeps prisms inside the serializable RenderTree; instancing is a
+ * performance question for dense lattices, filed separately.
+ */
+export function boxLoops(
+  center: [number, number, number],
+  size: [number, number, number],
+  fill: string,
+): FaceLoop3D[] {
+  const [cx, cy, cz] = center;
+  const [sx, sy, sz] = size;
+  const x0 = cx - sx / 2, x1 = cx + sx / 2;
+  const y0 = cy - sy / 2, y1 = cy + sy / 2;
+  const z0 = cz - sz / 2, z1 = cz + sz / 2;
+  const ring = (
+    positions: [number, number, number][],
+  ): FaceLoop3D => ({ positions, fill });
+  return [
+    ring([[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0]]),
+    ring([[x0, y0, z1], [x0, y1, z1], [x1, y1, z1], [x1, y0, z1]]),
+    ring([[x0, y0, z0], [x0, y1, z0], [x0, y1, z1], [x0, y0, z1]]),
+    ring([[x1, y0, z0], [x1, y0, z1], [x1, y1, z1], [x1, y1, z0]]),
+    ring([[x0, y0, z0], [x0, y0, z1], [x1, y0, z1], [x1, y0, z0]]),
+    ring([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]]),
+  ];
+}
+
+/** Emit a set of boxes as one packed surface node. */
+export function boxNode(
+  layer: Layer,
+  boxes: { center: [number, number, number]; size: [number, number, number]; fill: string }[],
+): RenderNode[] {
+  return surfaceNode(
+    layer,
+    boxes.flatMap((box) => boxLoops(box.center, box.size, box.fill)),
+  );
+}
+
+/**
+ * geom_col in 3D: one rectangular prism per row.
+ *
+ * This is a distinct 3D primitive, not a z extension. A 2D bar has one
+ * categorical axis and one measured extent; a prism has two footprint axes,
+ * and the second one is an ordinary mapped position (`z`) whose thickness
+ * comes from a `zwidth` param defaulting to the scale resolution — exactly how
+ * `width` already works on x. There is no depthMode enum: "constant depth" is
+ * the param's default, and mapping the thickness later is an additive change
+ * that needs no new mode.
+ *
+ * Stacking groups by the (x, z) FOOTPRINT CELL rather than by x alone. The 2D
+ * stackBars helper keys on x only, which in 3D would pile up prisms that share
+ * an x but sit at different depths.
+ */
+export function lowerPrism3d(
+  layer: Layer,
+  mapping: Aes,
+  data: DataFrame,
+  ctx: LayerContext,
+): RenderNode[] {
+  const xs = valuesOf(data, mapping.x);
+  const ys = valuesOf(data, mapping.y);
+  const zs = valuesOf(data, mapping.z);
+  if (!xs || !ys || !zs) return [];
+
+  const rows: { x: number; y: number; z: number; row: number }[] = [];
+  const n = Math.min(xs.length, ys.length, zs.length);
+  for (let row = 0; row < n; row++) {
+    if (xs[row] == null || ys[row] == null || zs[row] == null) continue;
+    const point = {
+      x: scalePosition(ctx.scales.x, xs[row]),
+      y: scalePosition(ctx.scales.y, ys[row]),
+      z: scalePosition(ctx.scales.z, zs[row]),
+      row,
+    };
+    if (![point.x, point.y, point.z].every(Number.isFinite)) continue;
+    rows.push(point);
+  }
+  if (!rows.length) return [];
+
+  const width = typeof layer.params.width === "number"
+    ? layer.params.width
+    : resolutionOf(ctx.scales.x, rows.map((r) => r.x)) * 0.9;
+  const zwidth = typeof layer.params.zwidth === "number"
+    ? layer.params.zwidth
+    : resolutionOf(ctx.scales.z, rows.map((r) => r.z)) * 0.9;
+
+  // Stack within a footprint cell; identity leaves every prism on the floor.
+  const stacking = layer.position === "stack";
+  const cursor = new Map<string, number>();
+  const colors = colorsOf(
+    mapping,
+    data,
+    ctx.scales.color,
+    ctx.scales.fill,
+    "fillOrColor",
+  );
+  const fallback = (layer.params.fill as string) ??
+    (layer.params.color as string) ?? "#3b82f6";
+
+  const boxes = rows.map((r) => {
+    const key = `${r.x}|${r.z}`;
+    const base = stacking ? cursor.get(key) ?? 0 : 0;
+    const top = base + r.y;
+    if (stacking) cursor.set(key, top);
+    return {
+      center: [r.x, (base + top) / 2, r.z] as [number, number, number],
+      size: [width, Math.abs(top - base), zwidth] as [number, number, number],
+      fill: colors?.[r.row] ?? fallback,
+    };
+  });
+  return boxNode(layer, boxes);
 }

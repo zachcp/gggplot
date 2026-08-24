@@ -166,6 +166,21 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
     defaultPosition: "stack",
     lower: lowerBar,
     domainContribution: barDomainContribution,
+    modes: [
+      { dimensions: 2, requiredPosition: ["x", "y"] },
+      {
+        dimensions: 3,
+        requiredPosition: ["x", "y", "z"],
+        // stat_count has no per-(x, z) meaning; a 3D categorical count is a
+        // different statistic, and binned counts belong to stat_bin_3d.
+        stats: ["identity"],
+        positions: ["identity", "stack"],
+        // zwidth is deliberately NOT a dimensionalParam: GeomMode.params is an
+        // enumerated allow-list for values like sizeMode, and a free-form
+        // thickness has no finite value set to enumerate.
+        depth: SURFACE_3D_DEPTH,
+      },
+    ],
     doc: doc("Draw bars from explicit x/y values.", ["x", "y"], [
       "group",
       ...visual,

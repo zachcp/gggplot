@@ -234,9 +234,30 @@ billboarding was already proven in production.
 
 ```ts
 { dimensions: 3, requiredPosition: ["x", "y", "z"],
-  stats: ["identity", "count"], positions: ["identity", "stack"],
-  params: { depthMode: ["constant", "mapped"] }, depth: "opaque" }
+  stats: ["identity"], positions: ["identity", "stack"],
+  depth: "alphaAware" }   // plus a free-form `zwidth` param
 ```
+
+Implemented for **`geom_col` only**, with three corrections to this row.
+
+**There is no `depthMode` enum.** It dissolves once the second footprint axis
+is treated as what it is: an ordinary mapped position. `z` gives the prism its
+place, and `zwidth` gives it thickness — a free param defaulting to the scale
+resolution, exactly how `width` already works on x. "Constant depth" is that
+default; mapping the thickness later is an additive change needing no new
+mode. Note `zwidth` is deliberately not a `dimensionalParam`, because
+`GeomMode.params` is an enumerated allow-list and a thickness has no finite
+value set.
+
+**`geom_bar` is excluded.** Its default stat is `count`, and a count has no
+per-`(x, z)` meaning — counting into a 3D footprint is a different statistic,
+and the binned form of it is `stat_bin_3d`. `geom_col` carries pre-computed
+values, which is what a prism actually needs.
+
+**`dodge` is rejected.** Dodging splits along x, which in 3D competes with `z`
+for the footprint; `identity` and `stack` are supported, and stacking groups by
+the `(x, z)` cell rather than by x alone — the 2D stacker keys on x only and
+would pile up prisms that share an x but sit at different depths.
 
 - **Topology:** a rectangular prism per row. This is a **distinct 3D
   primitive**, not a z extension: a 2D bar has one categorical axis and one
@@ -320,7 +341,7 @@ defined.
 | 2 | Declared depth policy | Required before the first translucent geom, not after | `lcy.10` |
 | 3 | Planar surfaces: polygon, area, ribbon, rect | First translucent content; validates milestone 2. `tile` excluded — its z is a value channel | `lcy.3` ✅ |
 | 4 | `text` billboards | Independent of 2 and 3; slot in wherever convenient | `lcy.11` ✅ |
-| 5 | Prisms: bar, col | First distinct 3D primitive; needs the footprint decision, not just z | `lcy.8` |
+| 5 | Prisms: col | First distinct 3D primitive; footprint is z + a zwidth param | `lcy.8` ✅ |
 | 6 | `surface`/`mesh` | Needs the grid contract from milestone 5's footprint thinking | `lcy.4` |
 | 7 | `stat_bin_3d` product contract | Decide bin semantics with nothing rendering yet | `lcy.5` ✅ |
 | 8 | Voxel rendering | Only after 7 | `lcy.6` |
