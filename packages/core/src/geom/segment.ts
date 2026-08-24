@@ -111,8 +111,12 @@ function lowerSegment3d(
 
   const opacity = (layer.params.alpha as number) ?? 1;
   const packed = packUniformChunks3d(segments);
+  // ChunkedLine, not Line: it is our own wrapper and the only polyline path
+  // that translates a FlatTensor's internal format ("vec4") into the WGSL
+  // spelling use.gpu wants. geom_line's 3D mode already renders through it;
+  // plain Line is the 2D vec2 path.
   return [
-    node("Line", {
+    node("ChunkedLine", {
       positions: packed.positions,
       topology: packed.topology,
       color: (layer.params.color as string) ?? "#3b82f6",

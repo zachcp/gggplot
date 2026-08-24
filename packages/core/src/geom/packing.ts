@@ -539,7 +539,12 @@ export function packUniformChunks3d(
       format: "vec4",
       dims: 4,
       length,
-      size: [chunkLen, chunkCount],
+      // Flat length, with chunk boundaries carried in topology. The 2D packer
+      // uses the [chunkLen, chunkCount] size form so @use-gpu/plot's own Line
+      // can auto-detect uniform chunks; the 3D path renders through our own
+      // ChunkedLine instead, which reads topology.chunks and translates our
+      // internal format string into the WGSL one use.gpu expects.
+      size: [length],
       version: 0,
     },
     topology: {

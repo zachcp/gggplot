@@ -35,7 +35,7 @@ function findNodes(node: RenderNode, component: string): RenderNode[] {
 }
 
 const segmentNode = (spec: Parameters<typeof compile>[0]) =>
-  findNodes(compile(spec), "Line").find((node) =>
+  findNodes(compile(spec), "ChunkedLine").find((node) =>
     (node.props.positions as { format?: string }).format === "vec4"
   )!;
 

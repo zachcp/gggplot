@@ -23,23 +23,18 @@ function findNodes(node: RenderNode, component: string): RenderNode[] {
 /** In-scene glyph nodes carry vec4 anchors; flat overlay guides do not. */
 const glyphNodes = (spec: Parameters<typeof compile>[0]) =>
   findNodes(compile(spec), "Label").filter((node) =>
-    (node.props.positions as { format?: string })?.format === "vec4"
+    Array.isArray(node.props.positions) &&
+    (node.props.positions as unknown[][])[0]?.length === 4
   );
 
 Deno.test("3D text anchors glyphs at vec4 world positions", () => {
   const nodes = glyphNodes(ggplot(data, mapping).add(geomText()).build());
   assertEquals(nodes.length, 1);
-  const positions = nodes[0].props.positions as {
-    format: string;
-    length: number;
-    array: Float32Array;
-  };
-  assertEquals(positions.format, "vec4");
+  const positions = nodes[0].props.positions as [number, number, number, number][];
   assertEquals(positions.length, 3);
   assertEquals(nodes[0].props.labels, ["a", "b", "c"]);
-  for (let i = 3; i < positions.array.length; i += 4) {
-    assertEquals(positions.array[i], 1);
-  }
+  // Homogeneous w stays 1 on every anchor.
+  for (const position of positions) assertEquals(position[3], 1);
 });
 
 Deno.test("glyphs are pixel-constant unless perspective is asked for", () => {
@@ -66,7 +61,7 @@ Deno.test("a row without a label or a finite anchor is dropped", () => {
   const node = glyphNodes(ggplot(holed, mapping).add(geomText()).build())[0];
   // Row 1 has a non-finite z, row 2 has no label; only "a" survives.
   assertEquals(node.props.labels, ["a"]);
-  assertEquals((node.props.positions as { length: number }).length, 1);
+  assertEquals((node.props.positions as unknown[]).length, 1);
 });
 
 Deno.test("glyphs batch by resolved font identity", () => {
@@ -95,8 +90,8 @@ Deno.test("3D text carries depth props and survives emitSource", () => {
     compile(ggplot(data, mapping).add(geomText()).build()),
     "Text3D",
   );
-  assert(source.includes("vec4"));
-  assert(source.includes("depthWrite"));
+  assert(source.includes("depthWrite"), "emitted node keeps depth props");
+  assert(source.includes("positions"), "emitted node keeps its anchors");
 });
 
 Deno.test("geom_label has no 3D mode and says so", () => {

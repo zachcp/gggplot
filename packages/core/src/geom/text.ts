@@ -399,19 +399,26 @@ function lowerText3d(
   });
 
   return [...batches.values()].map((batch) => {
-    const packed = packPoints3d({
-      xs: batch.indices.map((index) => xs[index]),
-      ys: batch.indices.map((index) => ys[index]),
-      zs: batch.indices.map((index) => zs[index]),
-      ...(colors ? { colors: batch.indices.map((index) => colors[index]) } : {}),
-    });
+    // Plain [x, y, z, w] tuples rather than a packed FlatTensor. The 3D axis
+    // tick labels have rendered this way since the unified 3D work, and it is
+    // the only in-scene label path proven to draw: use.gpu's Label reads a
+    // parsed array directly, while a FlatTensor carries our internal format
+    // string ("vec4") rather than the WGSL spelling. ChunkedLine translates
+    // that for polylines; nothing does for labels.
     return node("Label", {
-      positions: packed.positions,
+      positions: batch.indices.map((
+        index,
+      ): [number, number, number, number] => [
+        xs[index],
+        ys[index],
+        zs[index],
+        1,
+      ]),
       topology: POINTS_TOPOLOGY,
-      labels: batch.indices
-        .filter((_, i) => packed.mask[i])
-        .map((index) => labels[index]),
-      ...(packed.colors ? { colors: packed.colors } : { color }),
+      labels: batch.indices.map((index) => labels[index]),
+      ...(colors
+        ? { colors: batch.indices.map((index) => colors[index]) }
+        : { color }),
       size,
       weight: batch.weight,
       style: batch.style,
