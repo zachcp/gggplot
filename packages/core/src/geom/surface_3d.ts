@@ -411,3 +411,118 @@ export function lowerVoxel(
   }
   return boxNode(layer, boxes);
 }
+
+export class SurfaceGridError extends TypeError {
+  override name = "SurfaceGridError";
+}
+
+/**
+ * geom_surface: a grid-connected height field, z = f(x, y).
+ *
+ * Named for what it draws. "mesh" would promise arbitrary topology, which is
+ * an explicit non-goal — this triangulates by grid adjacency and nothing else.
+ *
+ * The grid contract is declared rather than inferred. Every combination of the
+ * distinct x and y values must appear exactly once, because inferring
+ * adjacency from scattered points is a triangulation problem this geom does
+ * not solve; scattered input fails with that message instead of being turned
+ * into a sparse lattice of mostly-holes.
+ *
+ * A missing z leaves a hole: the up-to-four quads touching that corner are
+ * dropped rather than interpolated across, which would fabricate terrain.
+ */
+export function lowerSurface3d(
+  layer: Layer,
+  mapping: Aes,
+  data: DataFrame,
+  ctx: LayerContext,
+): RenderNode[] {
+  const xs = valuesOf(data, mapping.x);
+  const ys = valuesOf(data, mapping.y);
+  const zs = valuesOf(data, mapping.z);
+  if (!xs || !ys || !zs) return [];
+
+  const n = Math.min(xs.length, ys.length, zs.length);
+  const xKeys = [...new Set(xs.slice(0, n).map(Number))].sort((a, b) => a - b);
+  const yKeys = [...new Set(ys.slice(0, n).map(Number))].sort((a, b) => a - b);
+  if (xKeys.length < 2 || yKeys.length < 2) {
+    throw new SurfaceGridError(
+      "[gggplot] geom_surface requires a grid with at least two distinct x " +
+        "and two distinct y values",
+    );
+  }
+  if (n !== xKeys.length * yKeys.length) {
+    throw new SurfaceGridError(
+      `[gggplot] geom_surface requires a complete grid: ${xKeys.length} x ` +
+        `values by ${yKeys.length} y values needs ${
+          xKeys.length * yKeys.length
+        } rows, got ${n}. Scattered points are not a height field; ` +
+        "triangulating them is not something this geom does.",
+    );
+  }
+
+  const xIndex = new Map(xKeys.map((value, index) => [value, index]));
+  const yIndex = new Map(yKeys.map((value, index) => [value, index]));
+  // A cell holds its scaled vertex, or undefined where z is missing.
+  const cells = new Array<
+    { x: number; y: number; z: number } | undefined
+  >(xKeys.length * yKeys.length).fill(undefined);
+  const seen = new Uint8Array(cells.length);
+  for (let row = 0; row < n; row++) {
+    const xi = xIndex.get(Number(xs[row]));
+    const yi = yIndex.get(Number(ys[row]));
+    if (xi === undefined || yi === undefined) continue;
+    const slot = yi * xKeys.length + xi;
+    if (seen[slot]) {
+      throw new SurfaceGridError(
+        `[gggplot] geom_surface found a duplicate grid position at x=${
+          xs[row]
+        }, y=${ys[row]}; each cell must appear exactly once`,
+      );
+    }
+    seen[slot] = 1;
+    // Raw check before scaling: ingest turns NaN into null and scalePosition
+    // maps null onto a finite coordinate (gggplot-ybv), so a hole would
+    // otherwise become a vertex at an invented height.
+    if (zs[row] == null) continue;
+    const point = {
+      x: scalePosition(ctx.scales.x, xs[row]),
+      y: scalePosition(ctx.scales.y, ys[row]),
+      z: scalePosition(ctx.scales.z, zs[row]),
+    };
+    if (![point.x, point.y, point.z].every(Number.isFinite)) continue;
+    cells[slot] = point;
+  }
+
+  const colors = colorsOf(
+    mapping,
+    data,
+    ctx.scales.color,
+    ctx.scales.fill,
+    "fillOrColor",
+  );
+  const fallback = (layer.params.fill as string) ??
+    (layer.params.color as string) ?? "#3b82f6";
+
+  const loops: FaceLoop3D[] = [];
+  for (let yi = 0; yi < yKeys.length - 1; yi++) {
+    for (let xi = 0; xi < xKeys.length - 1; xi++) {
+      const corners = [
+        cells[yi * xKeys.length + xi],
+        cells[yi * xKeys.length + xi + 1],
+        cells[(yi + 1) * xKeys.length + xi + 1],
+        cells[(yi + 1) * xKeys.length + xi],
+      ];
+      // One missing corner drops the quad. The hole is the honest rendering
+      // of absent data; bridging it would invent terrain.
+      if (corners.some((corner) => corner === undefined)) continue;
+      loops.push({
+        positions: corners.map((
+          corner,
+        ): [number, number, number] => [corner!.x, corner!.y, corner!.z]),
+        fill: colors?.[yi * xKeys.length + xi] ?? fallback,
+      });
+    }
+  }
+  return surfaceNode(layer, loops);
+}

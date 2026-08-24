@@ -274,17 +274,29 @@ would pile up prisms that share an x but sit at different depths.
 
 ```ts
 { dimensions: 3, requiredPosition: ["x", "y", "z"],
-  stats: ["identity"], positions: ["identity"],
-  params: { shading: ["flat", "smooth"] }, depth: "opaque" }
+  stats: ["identity"], positions: ["identity"], depth: "alphaAware" }
 ```
+
+Implemented as **`geom_surface`**, not `geom_mesh`: it triangulates by grid
+adjacency and nothing else, so "mesh" would promise arbitrary topology that is
+an explicit non-goal.
+
+The proposed `shading: ["flat", "smooth"]` parameter **does not exist**, for
+the same reason `billboard` did not. Smooth shading needs per-vertex normals
+and a lighting model; `ChunkedFace` draws flat-coloured faces, and lighting is
+listed out of scope for every row of this matrix and by ADR 002. The parameter
+would have been unimplementable rather than merely unbuilt. `depth` is
+`alphaAware`, matching every other 3D geom.
 
 - **Topology:** a grid-connected height field: z = f(x, y) over a regular or
   rectilinear grid, triangulated by grid adjacency.
 - **Missing values:** a missing z leaves a hole — the adjacent quads are
   dropped rather than interpolated across, which would fabricate terrain.
-- **Requires:** a declared grid contract. Inferring adjacency from scattered
-  points is a triangulation problem this geom does not solve; input that is not
-  grid-shaped must fail with that message.
+- **Requires:** a declared grid contract, enforced. Every combination of the
+  distinct x and y values must appear exactly once; scattered input fails
+  naming the row count it would have needed, and a duplicated cell fails
+  naming its position. Inferring adjacency from scattered points is a
+  triangulation problem this geom does not solve.
 - **Non-goals:** not an isosurface, not a volume, not a general mesh format.
   Arbitrary 3D meshes belong to an extension, per ADR 002.
 
@@ -342,7 +354,7 @@ defined.
 | 3 | Planar surfaces: polygon, area, ribbon, rect | First translucent content; validates milestone 2. `tile` excluded — its z is a value channel | `lcy.3` ✅ |
 | 4 | `text` billboards | Independent of 2 and 3; slot in wherever convenient | `lcy.11` ✅ |
 | 5 | Prisms: col | First distinct 3D primitive; footprint is z + a zwidth param | `lcy.8` ✅ |
-| 6 | `surface`/`mesh` | Needs the grid contract from milestone 5's footprint thinking | `lcy.4` |
+| 6 | `surface` | Needs the grid contract from milestone 5's footprint thinking | `lcy.4` ✅ |
 | 7 | `stat_bin_3d` product contract | Decide bin semantics with nothing rendering yet | `lcy.5` ✅ |
 | 8 | Voxel rendering | Only after 7 | `lcy.6` ✅ |
 | 9 | 3D interaction and visual QA | Needs enough geoms to be worth testing | `lcy.7` |

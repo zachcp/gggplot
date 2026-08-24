@@ -13,7 +13,11 @@ import { LINE_3D_DEPTH, lowerLine } from "./line.ts";
 import { barDomainContribution, barResidentPlan, lowerBar } from "./bar.ts";
 import { areaDomainContribution, lowerArea } from "./area.ts";
 import { lowerPolygon } from "./polygon.ts";
-import { lowerVoxel, SURFACE_3D_DEPTH } from "./surface_3d.ts";
+import {
+  lowerSurface3d,
+  lowerVoxel,
+  SURFACE_3D_DEPTH,
+} from "./surface_3d.ts";
 import { lowerTile, tileDomainContribution, tileResidentPlan } from "./tile.ts";
 import { lowerHex } from "./hex.ts";
 import { lowerInterval } from "./errorbar.ts";
@@ -467,6 +471,24 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
       sides: "Panel sides receiving ticks.",
       length: "Tick length in CSS pixels.",
     }),
+  },
+  surface: {
+    defaultStat: "identity",
+    lower: lowerSurface3d,
+    modes: [
+      {
+        dimensions: 3,
+        requiredPosition: ["x", "y", "z"],
+        stats: ["identity"],
+        positions: ["identity"],
+        depth: SURFACE_3D_DEPTH,
+      },
+    ],
+    doc: doc("Draw a grid-connected height field.", ["x", "y", "z"], [
+      "fill",
+      "color",
+      "alpha",
+    ]),
   },
   voxel: {
     defaultStat: "bin3d",

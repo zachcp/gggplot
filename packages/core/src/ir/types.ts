@@ -93,6 +93,7 @@ export type GeomKind =
   | "curve"
   | "spoke"
   | "voxel"
+  | "surface"
   | "rug";
 
 export type StatKind =

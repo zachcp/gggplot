@@ -116,6 +116,18 @@ export const statFunction = (
   opts: GeomOpts = {},
 ): SpecPart => geom("line", { ...opts, fun, stat: opts.stat ?? "function" });
 /**
+ * A grid-connected height field, z = f(x, y).
+ *
+ * Named `surface` rather than `mesh`: it triangulates by grid adjacency and
+ * nothing else, so "mesh" would promise arbitrary topology it does not
+ * provide. Requires a complete grid — every combination of the distinct x and
+ * y values, exactly once. A missing z leaves a hole rather than being
+ * interpolated across.
+ */
+export const geomSurface = (opts: GeomOpts = {}): SpecPart =>
+  geom("surface", opts);
+
+/**
  * Occupancy cells for binned 3D observations.
  *
  * Named for what it draws, not for the reduction behind it: `stat_bin_3d`
