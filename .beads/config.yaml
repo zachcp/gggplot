@@ -8,7 +8,7 @@
 # Example: issue-prefix: "myproject" creates issues like "myproject-1", "myproject-2", etc.
 issue-prefix: "gggplot"
 sync:
-  remote: "git+https://github.com/zachcp/gggplot"
+    remote: "git+ssh://git@github.com/zachcp/gggplot.git"
 
 # Use no-db mode: JSONL-only, no Dolt database
 # When true, .beads/issues.jsonl is the only local store
