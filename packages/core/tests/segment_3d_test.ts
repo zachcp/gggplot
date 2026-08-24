@@ -1,4 +1,9 @@
-import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1";
+import {
+  assert,
+  assertEquals,
+  assertStringIncludes,
+  assertThrows,
+} from "jsr:@std/assert@1";
 import {
   geomContour,
   geomHline,
@@ -143,5 +148,31 @@ Deno.test("3D segment rejects non-identity stats and positions", () => {
       ),
     Error,
     'does not support position "jitter"',
+  );
+});
+
+Deno.test("a scalar mark colour is parsed before it reaches a raw layer", () => {
+  // gggplot-frg: geom_segment's 3D mode is the only ChunkedLine caller that
+  // relies on the scalar `color` prop — every other one packs a per-vertex
+  // `colors` tensor. That made this path the one place where handing a CSS
+  // string to workbench's raw LineLayer went unnoticed: the string reaches
+  // useShaderRef, which wants a numeric vec4, and all 75 segments drew pure
+  // black on a near-black scene. Draws happened, so no existing gate caught it.
+  const node = segmentNode(
+    ggplot(data, mapping).add(geomSegment({ color: "#38bdf8" })).build(),
+  );
+  assertEquals(node.props.color, "#38bdf8");
+  assertEquals(node.props.colors, undefined, "3D segments carry no color tensor");
+
+  // The emitted standalone module must parse it too, or the two backends
+  // disagree about what the same RenderTree looks like.
+  const source = emitSource(
+    compile(ggplot(data, mapping).add(geomSegment({ color: "#38bdf8" })).build()),
+    "Segment3D",
+  );
+  assertStringIncludes(source, "const parseColorRGBA");
+  assertStringIncludes(
+    source,
+    'color: parseColorRGBA(color ?? "#3b82f6", opacity ?? 1)',
   );
 });

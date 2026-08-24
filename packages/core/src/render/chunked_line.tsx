@@ -49,6 +49,7 @@ import type { LiveElement } from "@use-gpu/live";
 import { wgsl } from "@use-gpu/shader/wgsl";
 import { getWorldScale } from "@use-gpu/wgsl/use/view.wgsl";
 import type { FlatTensor, MarkTopology } from "../compile/rendertree.ts";
+import { parseColorRGBA } from "../color/mod.ts";
 import { withMarkAttribution } from "./gpu_instrument.ts";
 import {
   createElement,
@@ -228,6 +229,7 @@ export interface ChunkedLineProps {
   widths?: FlatTensor;
   width?: number;
   color?: string;
+  opacity?: number;
   dash?: readonly number[];
   [key: string]: unknown;
 }
@@ -238,7 +240,8 @@ export interface ChunkedLineProps {
  * geom/shared.ts's concatPacked) — gggplot-tzc.3.
  */
 export const ChunkedLine = (props: ChunkedLineProps): LiveElement => {
-  const { positions, topology, colors, widths, width, color, dash, ...rest } = props;
+  const { positions, topology, colors, widths, width, color, opacity, dash, ...rest } =
+    props;
   const chunks = topology.chunks ?? Uint32Array.of(positions.length);
   // gggplot-tzc.8: MarkTopology's chunks array is also mark data (integer
   // topology, not a per-row float attribute, but still a Use.GPU raw source
@@ -287,7 +290,17 @@ export const ChunkedLine = (props: ChunkedLineProps): LiveElement => {
     segments,
     count,
     sides: 2,
-    ...(colorsSource ? { colors: colorsSource } : { color: color ?? "#3b82f6" }),
+    // LineLayer is workbench's RAW primitive: it feeds props.color straight to
+    // useShaderRef, which needs a numeric vec4. A CSS string reaches the shader
+    // as zeroes and the line draws pure black on a dark scene — invisible, not
+    // absent (gggplot-frg). plot's own <Line> parses via its color trait; the
+    // raw layers do not, so parse here, exactly as runtime/resident_bar.tsx
+    // does for FaceLayer. Opacity folds into alpha for the same reason: raw
+    // primitives have no 'opacity' prop at all, and the colors-tensor branch
+    // already carries per-row alpha baked in by packColorsRGBA.
+    ...(colorsSource
+      ? { colors: colorsSource }
+      : { color: parseColorRGBA(color ?? "#3b82f6", opacity ?? 1) }),
     ...(widthsSource ? { widths: widthsSource } : { width: width ?? 2 }),
     ...(stsSource ? { sts: stsSource } : {}),
     ...rest,

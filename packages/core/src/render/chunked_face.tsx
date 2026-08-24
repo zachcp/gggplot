@@ -43,6 +43,7 @@
 
 import type { LiveElement } from "@use-gpu/live";
 import type { FlatTensor, MarkTopology } from "../compile/rendertree.ts";
+import { parseColorRGBA } from "../color/mod.ts";
 import { withMarkAttribution } from "./gpu_instrument.ts";
 import {
   createElement,
@@ -148,8 +149,12 @@ export const ChunkedFace = (props: ChunkedFaceProps): LiveElement => {
     ...(concave
       ? { indices: indexed!.indices }
       : { segments: fan!.segments, count: fan!.count }),
-    ...(colorsSource ? { colors: colorsSource } : { color: color ?? "#3b82f6" }),
-    ...(opacity != null ? { opacity } : {}),
+    // Same raw-primitive contract as chunked_line.tsx (gggplot-frg): FaceLayer
+    // takes a numeric vec4, never a CSS string, and has no 'opacity' prop —
+    // fold it into alpha here rather than passing a prop nothing reads.
+    ...(colorsSource
+      ? { colors: colorsSource, ...(opacity != null ? { opacity } : {}) }
+      : { color: parseColorRGBA(color ?? "#3b82f6", opacity ?? 1) }),
     ...rest,
   });
 };

@@ -316,6 +316,25 @@ const useOptionalTensorSource = (tensor: any): any => {
 };
 `;
 
+// Inlined standalone realization of color/mod.ts's parseColorRGBA. Both raw
+// workbench layers below (LineLayer, FaceLayer) take a numeric vec4 color and
+// silently render black for a CSS string (gggplot-frg), so the emitted module
+// needs the same parse the live components do -- LIVE/EMIT PARITY REQUIRED.
+export const SCALAR_COLOR_SOURCE = `
+const parseColorRGBA = (color: string, alpha = 1): [number, number, number, number] => {
+  const a = Math.max(0, Math.min(1, alpha));
+  let hex = (color ?? "").trim().replace(/^#/, "");
+  if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return [0, 0, 0, a];
+  return [
+    parseInt(hex.slice(0, 2), 16) / 255,
+    parseInt(hex.slice(2, 4), 16) / 255,
+    parseInt(hex.slice(4, 6), 16) / 255,
+    a,
+  ];
+};
+`;
+
 // Inlined standalone realization of RenderTree's 'ChunkedLine' mark, mirroring
 // render/chunked_line.tsx: workbench LineLayer + useLineSegmentsSource over a
 // packed FlatTensor 'positions' + explicit MarkTopology 'chunks'. Prop shapes
@@ -403,7 +422,7 @@ function computeArcLengths(positions: any, chunks: any): any {
 }
 
 const ChunkedLine = (props: any): any => {
-  const { positions, topology, colors, widths, width, color, dash, ...rest } = props;
+  const { positions, topology, colors, widths, width, color, opacity, dash, ...rest } = props;
   const chunks = topology.chunks ?? Uint32Array.of(positions.length);
   const { count, segments } = useLineSegmentsSource({
     chunks,
@@ -436,7 +455,9 @@ const ChunkedLine = (props: any): any => {
     segments,
     count,
     sides: 2,
-    ...(colorsSource ? { colors: colorsSource } : { color: color ?? "#3b82f6" }),
+    ...(colorsSource
+      ? { colors: colorsSource }
+      : { color: parseColorRGBA(color ?? "#3b82f6", opacity ?? 1) }),
     ...(widthsSource ? { widths: widthsSource } : { width: width ?? 2 }),
     ...(stsSource ? { sts: stsSource } : {}),
     ...rest,
@@ -476,8 +497,9 @@ const ChunkedFace = (props: any): any => {
     ...(concave
       ? { indices: indexed.indices }
       : { segments: fan.segments, count: fan.count }),
-    ...(colorsSource ? { colors: colorsSource } : { color: color ?? "#3b82f6" }),
-    ...(opacity != null ? { opacity } : {}),
+    ...(colorsSource
+      ? { colors: colorsSource, ...(opacity != null ? { opacity } : {}) }
+      : { color: parseColorRGBA(color ?? "#3b82f6", opacity ?? 1) }),
     ...rest,
   });
 };
@@ -642,7 +664,7 @@ export function emitSource(root: RenderNode, name = "GGChart"): string {
   const chunkedDefs = chunked
     ? `\nconst { ${
       chunkedHooks.join(", ")
-    } } = Workbench as unknown as Record<string, any>;\n${TENSOR_SOURCE_SOURCE}${
+    } } = Workbench as unknown as Record<string, any>;\n${TENSOR_SOURCE_SOURCE}${SCALAR_COLOR_SOURCE}${
       chunkedLine ? CHUNKED_LINE_SOURCE : ""
     }${chunkedFace ? CHUNKED_FACE_SOURCE : ""}`
     : "";
