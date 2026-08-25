@@ -4,6 +4,7 @@ import { node, type RenderNode } from "./rendertree.ts";
 import { applyStat } from "../stat/mod.ts";
 import {
   censorToScaleLimits,
+  removeMissingPositions,
   type TrainedScale,
   trainScales,
 } from "../scale/mod.ts";
@@ -209,11 +210,14 @@ export function compile(
         : { ...spec.mapping, ...layer.mapping };
       // ggplot2 order: scale limits censor the data BEFORE the stat runs, so
       // stat_bin and friends never see rows the user excluded (gggplot-wjw).
-      const data = censorToScaleLimits(
-        spec,
-        mapping,
-        layer.data ?? panel.data,
-      );
+      // Two row filters, in ggplot2's order and for different reasons. Missing
+      // positions go first (a row that was never plottable), then scale limits
+      // (a row the user chose to exclude) — both before the stat, so neither
+      // is counted by stat_bin and then hidden at draw time.
+      const source = GEOM_REGISTRY[layer.geom].dropsMissingPositions
+        ? removeMissingPositions(mapping, layer.data ?? panel.data)
+        : layer.data ?? panel.data;
+      const data = censorToScaleLimits(spec, mapping, source);
       const resident = options.resident
         ? GEOM_REGISTRY[layer.geom].residentPlan?.(
           spec,

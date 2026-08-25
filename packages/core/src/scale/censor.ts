@@ -98,3 +98,44 @@ export function censorToScaleLimits(
   }
   return keep.length === rows ? data : sliceRows(data, keep);
 }
+
+/**
+ * Drop rows with no position at all, for geoms that declare they can take it
+ * (GeomDefinition.dropsMissingPositions).
+ *
+ * Separate from limits censoring on purpose. A row excluded by limits was
+ * plottable and the user chose to exclude it; a row with a null or NaN
+ * position was never plottable. ggplot2 reports the two differently, and
+ * keeping them apart keeps a future "Removed N rows" count meaningful.
+ *
+ * Applying this per geom rather than globally is not fastidiousness: a blanket
+ * filter was implemented and measured, and it broke geom_surface's complete-
+ * grid contract and geom_polygon's ring topology, because for those geoms the
+ * gap IS the information. See the field's own documentation.
+ */
+export function removeMissingPositions(
+  mapping: Aes,
+  data: DataFrame,
+): DataFrame {
+  const columns = (["x", "y", "z"] as const)
+    .flatMap((axis) => POSITION_FAMILY[axis])
+    .map((aes) => mapping[aes])
+    .filter((column): column is string => !!column && column in data);
+  if (!columns.length) return data;
+
+  const rows = rowCount(data);
+  const keep: number[] = [];
+  for (let row = 0; row < rows; row++) {
+    const missing = columns.some((column) =>
+      isMissingValue(columnValues(data, column)[row])
+    );
+    if (!missing) keep.push(row);
+  }
+  return keep.length === rows ? data : sliceRows(data, keep);
+}
+
+/** null, undefined, NaN or an infinity — the forms "no position" arrives in. */
+function isMissingValue(raw: unknown): boolean {
+  if (raw == null) return true;
+  return typeof raw === "number" && !Number.isFinite(raw);
+}

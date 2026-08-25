@@ -129,6 +129,27 @@ export interface GeomDefinition {
   modes?: readonly GeomMode[];
   /** Params that must be accepted by the selected mode rather than globally. */
   dimensionalParams?: readonly string[];
+  /**
+   * Whether a row with no position can simply be dropped before lowering.
+   *
+   * True for geoms whose rows are independent marks — a point, a tile, a bar.
+   * Removing one changes nothing about its neighbours, and keeping it is
+   * actively wrong: ingest() turns NaN into null and scalePosition maps null
+   * onto a finite coordinate, so the row is drawn somewhere its data never
+   * was. Measured: geom_point plotted [0, NaN, 2] at y=0 (gggplot-bab).
+   *
+   * FALSE — the important half — for geoms whose topology is defined by row
+   * order or grid completeness. A missing value in geom_path is a BREAK in
+   * the line, not an absent row; geom_surface needs a complete grid and drops
+   * only the cells touching the hole. Filtering those rows upstream joins the
+   * line across the gap, or throws on an incomplete grid. That was measured
+   * too: a blanket filter failed exactly four tests, every one of them
+   * asserting that a missing value carries structural meaning.
+   *
+   * This is ggplot2's per-layer na.rm handling, which is per-geom for the
+   * same reason.
+   */
+  dropsMissingPositions?: boolean;
   /** False for scale-training-only layers such as geomBlank. */
   contributesDimension?: boolean;
   /** Lower one geom layer to its RenderNode(s) — one per group for connected geoms. */
