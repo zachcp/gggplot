@@ -21,6 +21,7 @@
     "npm:gl-matrix@^3.4.4": "3.4.4",
     "npm:onnxruntime-web@*": "1.27.0",
     "npm:onnxruntime-web@^1.27.0": "1.27.0",
+    "npm:playwright@*": "1.61.1",
     "npm:playwright@^1.61.1": "1.61.1",
     "npm:react-dom@^18.3.1": "18.3.1_react@18.3.1",
     "npm:react@^18.3.1": "18.3.1",
@@ -1138,6 +1139,7 @@
       "packages/core": {
         "dependencies": [
           "jsr:@std/assert@1",
+          "npm:@use-gpu/core@0.20",
           "npm:@use-gpu/glyph@0.20",
           "npm:@use-gpu/interact@0.20",
           "npm:@use-gpu/live@0.20",

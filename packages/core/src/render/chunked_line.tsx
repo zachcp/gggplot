@@ -186,13 +186,6 @@ export function computeArcLengths(
   return { array: out, format: "f32", dims: 1, length, size: [length], version };
 }
 
-/** Our compiler-internal FlatTensor.format to the WGSL-style format string useRawTensorSource expects. */
-function toWgslFormat(format: FlatTensor["format"]): string {
-  if (format === "vec2") return "vec2<f32>";
-  if (format === "vec4") return "vec4<f32>";
-  return "f32";
-}
-
 /**
  * Uploads a FlatTensor as a raw GPU source, using workbench's paired no-op
  * hook to keep hook-call order stable across renders when the tensor prop is
@@ -212,7 +205,7 @@ function useOptionalTensorSource(tensor: FlatTensor | undefined): unknown {
     return withMarkAttribution(() =>
       useRawTensorSource({
         array: tensor.array,
-        format: toWgslFormat(tensor.format),
+        format: tensor.format,
         size: tensor.size,
         version: tensor.version,
       })

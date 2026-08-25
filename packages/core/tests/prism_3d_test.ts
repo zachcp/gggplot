@@ -12,7 +12,7 @@ function findNodes(node: RenderNode, component: string): RenderNode[] {
 
 const prisms = (spec: Parameters<typeof compile>[0]) =>
   findNodes(compile(spec), "ChunkedFace").filter((node) =>
-    (node.props.positions as { format?: string })?.format === "vec4"
+    (node.props.positions as { format?: string })?.format === "vec4<f32>"
   );
 
 const mapping = { x: "x", y: "y", z: "z" };

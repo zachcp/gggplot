@@ -22,7 +22,7 @@ function findNodes(node: RenderNode, component: string): RenderNode[] {
 /** In-scene surfaces carry vec4 rings; flat guide faces do not. */
 const surfaces = (spec: Parameters<typeof compile>[0]) =>
   findNodes(compile(spec), "ChunkedFace").filter((node) =>
-    (node.props.positions as { format?: string })?.format === "vec4"
+    (node.props.positions as { format?: string })?.format === "vec4<f32>"
   );
 
 const ring = {
@@ -41,7 +41,7 @@ Deno.test("a 3D polygon packs one vec4 ring per group", () => {
     length: number;
     array: Float32Array;
   };
-  assertEquals(positions.format, "vec4");
+  assertEquals(positions.format, "vec4<f32>");
   assertEquals(positions.length, 4);
   for (let i = 3; i < positions.array.length; i += 4) {
     assertEquals(positions.array[i], 1);
@@ -143,7 +143,7 @@ Deno.test("surfaces carry depth props and survive emitSource", () => {
     compile(ggplot(ring, { x: "x", y: "y", z: "z" }).add(geomPolygon()).build()),
     "Surface3D",
   );
-  assert(source.includes("vec4"));
+  assert(source.includes("vec4<f32>"));
   assert(source.includes("depthWrite"));
 });
 

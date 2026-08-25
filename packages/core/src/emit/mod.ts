@@ -189,7 +189,10 @@ const PanelViewport = ({ bounds, children }: any): any => {
   const [x0, y0, x1, y1] = bounds;
   const matrix = useMemo(() => new Float32Array([
     (x1 - x0) / 2, 0, 0, 0,
-    0, (y1 - y0) / 2, 0, 0,
+    // NEGATIVE y: plot's Cartesian is y-up, the surrounding overlay is y-down.
+    // See render/GGPlot.tsx's PanelViewport for the full derivation
+    // (gggplot-8zx) -- LIVE/EMIT PARITY REQUIRED.
+    0, -(y1 - y0) / 2, 0, 0,
     0, 0, 1, 0,
     (x0 + x1) / 2, (y0 + y1) / 2, 0, 1,
   ]), [x0, y0, x1, y1]);
@@ -294,19 +297,22 @@ function serializeValue(value: unknown, indent: string): string {
 }
 
 // Shared FlatTensor -> raw GPU source helper for the inlined Chunked* marks.
-// Mirrors the useOptionalTensorSource/toWgslFormat pair in
-// render/chunked_line.tsx + render/chunked_face.tsx: the paired no-op hook
-// keeps @use-gpu/live's hook-call order stable when an optional tensor prop is
-// absent. Params are annotated `any` (the emitted module has no access to the
-// compiler-internal FlatTensor type) so the standalone module still deno-checks.
+// Mirrors useOptionalTensorSource in render/chunked_line.tsx +
+// render/chunked_face.tsx: the paired no-op hook keeps @use-gpu/live's
+// hook-call order stable when an optional tensor prop is absent. Params are
+// annotated `any` (the emitted module has no access to the compiler-internal
+// FlatTensor type) so the standalone module still deno-checks.
+//
+// gggplot-iti: a toWgslFormat translation used to live here, embedded as a
+// STRING inside every generated module and therefore invisible to the type
+// checker and to grep-driven refactors alike. FlatTensor.format is now the
+// canonical WGSL spelling, so the tensor is passed straight through.
 export const TENSOR_SOURCE_SOURCE = `
-const toWgslFormat = (format: string): string =>
-  format === "vec2" ? "vec2<f32>" : format === "vec4" ? "vec4<f32>" : "f32";
 const useOptionalTensorSource = (tensor: any): any => {
   if (tensor) {
     return useRawTensorSource({
       array: tensor.array,
-      format: toWgslFormat(tensor.format),
+      format: tensor.format,
       size: tensor.size,
       version: tensor.version,
     });

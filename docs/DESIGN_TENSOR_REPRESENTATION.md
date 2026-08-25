@@ -27,14 +27,22 @@ suspected of this class of bug.
 
 ## Why it is worth removing
 
-Three separate copies of the same translator exist:
+**Correction (2026-08-24, during implementation): there were FOUR copies, not
+three.** The fourth was an inline ternary rather than a named function, which is
+exactly why it was missed when this list was written — searching for
+`toWgslFormat` does not find it:
 
 - `render/chunked_line.tsx` — `toWgslFormat`
 - `render/chunked_face.tsx` — `toWgslFormat`
 - `emit/mod.ts` — `toWgslFormat`, embedded as a **string** in the emitted
   module's `TENSOR_SOURCE_SOURCE`
+- `render/GGPlot.tsx` — `PointNode`'s `markSource`, an unnamed inline
+  `format === "vec4" ? ... : format === "vec2" ? ... : "f32"`
 
-Three copies means there is no chokepoint that guarantees translation. A new
+That miscount is itself the argument for the change: the duplication was
+already hard to enumerate correctly while reading for it deliberately.
+
+Four copies means there is no chokepoint that guarantees translation. A new
 component that consumes a tensor is correct only if its author remembers, and
 nothing in the type system says so — `FlatTensor` is structurally acceptable to
 anything expecting a `TensorArray`, so a missing translation type-checks
@@ -75,6 +83,15 @@ export type FlatTensor = TensorArray;   // or drop the alias entirely
 with `format` holding `"f32" | "u32" | "vec2<f32>" | "vec4<f32>"`. Every
 `toWgslFormat` disappears, including the one embedded in emitted source, and
 `useRawTensorSource` receives the tensor unchanged.
+
+**As implemented**, `FlatTensor` stayed a named interface with `format` narrowed
+to `"f32" | "vec2<f32>" | "vec4<f32>"` rather than becoming a bare alias of
+`TensorArray`. Widening to the full `UniformType` would admit `array<...>` and
+matrix shapes that the paired `dims: 1 | 2 | 4` cannot describe, and that
+pairing is load-bearing throughout `geom/packing.ts`. Assignability to
+`TensorArray` — the property the alias was for — is pinned instead by a
+type-level check in `compile/rendertree.ts` that fails to compile if the two
+ever drift.
 
 The `formats` prop is the canonical way to tell a plot primitive that data is
 not in its schema's default layout. Anywhere we currently reason about dims,

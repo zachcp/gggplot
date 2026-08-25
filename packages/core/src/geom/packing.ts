@@ -75,7 +75,7 @@ export function packColorsRGBA(
   }
   return {
     array,
-    format: "vec4",
+    format: "vec4<f32>",
     dims: 4,
     length: kept,
     size: [kept],
@@ -147,7 +147,7 @@ export function packPoints3d(input: PackPoints3dInput): PackedPoints3d {
   }
   const positions: FlatTensor = {
     array,
-    format: "vec4",
+    format: "vec4<f32>",
     dims: 4,
     length: kept,
     size: [kept],
@@ -190,7 +190,7 @@ export function packMarkRows(input: PackMarkRowsInput): PackedMarkRows {
   }
   const positions: FlatTensor = {
     array,
-    format: "vec2",
+    format: "vec2<f32>",
     dims: 2,
     length: kept,
     size: [kept],
@@ -263,7 +263,7 @@ export function concatPacked(geoms: PackedGeometry[]): PackedGeometry {
   if (nonEmpty.length === 0) {
     const empty: FlatTensor = {
       array: new Float32Array(0),
-      format: "vec2",
+      format: "vec2<f32>",
       dims: 2,
       length: 0,
       size: [0],
@@ -402,7 +402,7 @@ export function packFaceLoops(loops: FaceLoop[]): PackedFaceGeometry {
     return {
       positions: {
         array,
-        format: "vec2",
+        format: "vec2<f32>",
         dims: 2,
         length: loop.positions.length,
         size: [loop.positions.length],
@@ -461,7 +461,7 @@ export function packUniformChunks(
     return {
       positions: {
         array: new Float32Array(0),
-        format: "vec2",
+        format: "vec2<f32>",
         dims: 2,
         length: 0,
         size: [0],
@@ -483,7 +483,7 @@ export function packUniformChunks(
   return {
     positions: {
       array,
-      format: "vec2",
+      format: "vec2<f32>",
       dims: 2,
       length,
       size: [chunkLen, chunkCount],
@@ -512,7 +512,7 @@ export function packUniformChunks3d(
     return {
       positions: {
         array: new Float32Array(0),
-        format: "vec4",
+        format: "vec4<f32>",
         dims: 4,
         length: 0,
         size: [0],
@@ -536,7 +536,7 @@ export function packUniformChunks3d(
   return {
     positions: {
       array,
-      format: "vec4",
+      format: "vec4<f32>",
       dims: 4,
       length,
       // Flat length, with chunk boundaries carried in topology. The 2D packer
@@ -581,7 +581,7 @@ export function packFaceLoops3d(loops: FaceLoop3D[]): PackedFaceGeometry {
     return {
       positions: {
         array,
-        format: "vec4",
+        format: "vec4<f32>",
         dims: 4,
         length: loop.positions.length,
         size: [loop.positions.length],

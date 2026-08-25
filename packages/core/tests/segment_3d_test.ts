@@ -41,7 +41,7 @@ function findNodes(node: RenderNode, component: string): RenderNode[] {
 
 const segmentNode = (spec: Parameters<typeof compile>[0]) =>
   findNodes(compile(spec), "ChunkedLine").find((node) =>
-    (node.props.positions as { format?: string }).format === "vec4"
+    (node.props.positions as { format?: string }).format === "vec4<f32>"
   )!;
 
 Deno.test("3D segments pack disjoint vec4 endpoint pairs", () => {
@@ -53,7 +53,7 @@ Deno.test("3D segments pack disjoint vec4 endpoint pairs", () => {
     array: Float32Array;
     length: number;
   };
-  assertEquals(positions.format, "vec4");
+  assertEquals(positions.format, "vec4<f32>");
   // Two segments, two endpoints each.
   assertEquals(positions.length, 4);
   const topology = node.props.topology as { chunks: Uint32Array };
@@ -136,7 +136,7 @@ Deno.test("3D segments carry depth props and survive emitSource", () => {
     compile(ggplot(data, mapping).add(geomSegment()).build()),
     "Segment3D",
   );
-  assert(source.includes("vec4"), "emitted positions stay vec4");
+  assert(source.includes("vec4<f32>"), "emitted positions stay vec4");
   assert(source.includes("depthWrite"), "emitted node keeps depth props");
 });
 

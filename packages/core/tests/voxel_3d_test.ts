@@ -101,7 +101,7 @@ Deno.test("voxels render one box per occupied cell", () => {
     compile(ggplot(corners, mapping).add(geomVoxel({ bins: 2 })).build()),
     "ChunkedFace",
   ).filter((node) =>
-    (node.props.positions as { format?: string })?.format === "vec4"
+    (node.props.positions as { format?: string })?.format === "vec4<f32>"
   );
   assertEquals(nodes.length, 1);
   const topology = nodes[0].props.topology as { chunks: Uint32Array };
@@ -114,7 +114,7 @@ Deno.test("padding shrinks cells without moving them", () => {
     ggplot(corners, mapping).add(geomVoxel({ bins: 2, ...(padding != null ? { padding } : {}) })).build();
   const extent = (padding?: number) => {
     const node = findNodes(compile(spec(padding)), "ChunkedFace").find((n) =>
-      (n.props.positions as { format?: string })?.format === "vec4"
+      (n.props.positions as { format?: string })?.format === "vec4<f32>"
     )!;
     const array = (node.props.positions as { array: Float32Array }).array;
     const xs: number[] = [];

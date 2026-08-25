@@ -13,7 +13,7 @@ function findNodes(node: RenderNode, component: string): RenderNode[] {
 const mapping = { x: "x", y: "y", z: "z" };
 const face = (spec: Parameters<typeof compile>[0]) =>
   findNodes(compile(spec), "ChunkedFace").find((node) =>
-    (node.props.positions as { format?: string })?.format === "vec4"
+    (node.props.positions as { format?: string })?.format === "vec4<f32>"
   );
 
 /** A complete 3x3 grid; z rises toward one corner. */

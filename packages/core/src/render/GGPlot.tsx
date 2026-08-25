@@ -152,7 +152,22 @@ export const PanelViewport = ({ bounds, children }: PanelViewportProps) => {
         0,
         0,
         0,
-        (y1 - y0) / 2,
+        // NEGATIVE y (gggplot-8zx). This is the one place a y-up space meets a
+        // y-down one. plot's <Cartesian> maps the data range onto clip space
+        // with +y UP, while the surrounding overlay is y-DOWN: compile/axes.ts
+        // places the tick label for the y MINIMUM at the larger y coordinate,
+        // and that label renders at the bottom of the panel. Scaling by a
+        // positive (y1 - y0) / 2 carried Cartesian's +y straight through, so
+        // every mark, grid line, and axis line inside the panel came out
+        // mirrored against the very ticks that label them — a bar for value v
+        // occupied [ymax - v, ymax] instead of [0, v].
+        //
+        // The flip belongs here rather than on the Cartesian range because
+        // PanelViewport is 2D-only. Reversing the range instead also reaches
+        // the 3D scene's Cartesian, which sits under Scene3D with no y-down
+        // bridge and was never mirrored; doing that visibly turned the 3D
+        // showcases upside down.
+        -(y1 - y0) / 2,
         0,
         0,
         0,
@@ -459,17 +474,14 @@ export const Scene3D = (
 const SceneExtras = ({ content }: { content?: unknown }) =>
   content == null ? null : createElement(Fragment, {}, content);
 
-/** vec4 point tensors need the explicit WGSL source format used by use.gpu. */
+/**
+ * vec4 point tensors are handed to plot's <Point> as a raw source rather than
+ * a plain positions prop. No format translation any more: FlatTensor.format is
+ * already the canonical WGSL spelling (gggplot-iti).
+ */
 const PointNode = (props: Record<string, unknown>) => {
   const positions = props.positions as FlatTensor | undefined;
-  const markSource = (tensor: FlatTensor): Record<string, unknown> => ({
-    ...tensor,
-    format: tensor.format === "vec4"
-      ? "vec4<f32>"
-      : tensor.format === "vec2"
-      ? "vec2<f32>"
-      : "f32",
-  });
+  const markSource = (tensor: FlatTensor): Record<string, unknown> => ({ ...tensor });
   return createElement(Point, {
     ...props,
     ...(positions?.dims === 4

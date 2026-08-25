@@ -150,7 +150,7 @@ Deno.test("nested-array tripwire SELF-TEST: a FlatTensor-carrying node is correc
     props: {
       positions: {
         array: new Float32Array([0, 0, 1, 1]),
-        format: "vec2",
+        format: "vec2<f32>",
         dims: 2,
         length: 2,
         size: [2],

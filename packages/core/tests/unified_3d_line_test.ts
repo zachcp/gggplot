@@ -95,7 +95,7 @@ Deno.test("emitted 3D polylines keep vec4 tensors and the shared Scene3D", async
   const source = emitSource(tree, "Line3D");
   assertStringIncludes(source, "<Scene3D");
   assertStringIncludes(source, "<ChunkedLine");
-  assertStringIncludes(source, 'format: "vec4"');
+  assertStringIncludes(source, 'format: "vec4<f32>"');
   assertStringIncludes(source, 'mode="transparent"');
   assertStringIncludes(source, "depthWrite={false}");
 

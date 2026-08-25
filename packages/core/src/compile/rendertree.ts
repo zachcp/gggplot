@@ -1,3 +1,4 @@
+import type { TensorArray } from "@use-gpu/core";
 // Render Tree — an abstract, serializable description of a UseGPU/plot component
 // tree. It is the single output of the compiler and the single input to both
 // backends (renderLive, emitSource), decoupling the ggplot front-end from the
@@ -91,12 +92,40 @@ export interface RenderNode {
  */
 export interface FlatTensor {
   array: Float32Array;
-  format: "f32" | "vec2" | "vec4";
+  /**
+   * WGSL spelling, matching use.GPU's TensorArray exactly (gggplot-iti).
+   *
+   * These used to be compiler-internal short forms ("vec2"/"vec4") that every
+   * consumer had to translate on the way to the GPU, and four separate copies
+   * of that translation existed. A FlatTensor is structurally acceptable
+   * wherever a TensorArray is expected, so a component that forgot to
+   * translate still type-checked and simply handed the GPU a format string it
+   * did not understand. Naming them canonically removes the translation step
+   * rather than centralising it.
+   *
+   * Deliberately NARROWER than use.GPU's full UniformType: this union is the
+   * set gggplot actually packs, and it stays paired with `dims` below. Widening
+   * it to UniformType would admit shapes (array<...>, matrices) that `dims`
+   * cannot describe. The FLAT_TENSOR_IS_TENSOR_ARRAY check below pins the
+   * assignability that matters.
+   */
+  format: "f32" | "vec2<f32>" | "vec4<f32>";
   dims: 1 | 2 | 4;
   length: number; // element count = array.length / dims
   size: number[]; // [length]
   version: number; // 0 for fresh packs; identity is the cache key
 }
+
+/**
+ * Compile-time proof that a FlatTensor IS a use.GPU TensorArray.
+ *
+ * Type-only, erased at runtime, so the headless compiler keeps no dependency
+ * on the renderer. If the two ever drift again this stops compiling here,
+ * where the contract is stated, rather than silently at a draw call.
+ */
+type _FlatTensorIsTensorArray = FlatTensor extends TensorArray ? true : never;
+const FLAT_TENSOR_IS_TENSOR_ARRAY: _FlatTensorIsTensorArray = true;
+export { FLAT_TENSOR_IS_TENSOR_ARRAY };
 
 /**
  * Renderer-facing topology: separate from float data, integer TypedArrays,
