@@ -83,6 +83,20 @@ Deno.test("row-independent geoms drop the row; the mark count falls", () => {
   }
 });
 
+Deno.test("geom_tile does not treat its z value channel as a position", () => {
+  const build = (z: Array<number | null>) =>
+    ggplot(
+      { x: [0, 1, 2], y: [0, 1, 2], z },
+      { x: "x", y: "y", z: "z" },
+    ).add(geomTile()).build();
+
+  assertEquals(
+    markCoords(build([1, null, 3])).length,
+    markCoords(build([1, 2, 3])).length,
+    "a missing non-positional z value must not remove a tile with valid x/y",
+  );
+});
+
 Deno.test("topological geoms keep the row, because the gap is the information", () => {
   // geom_path must BREAK at a missing value, not join across it, so the row
   // has to survive lowering. ggplot2 does the same.

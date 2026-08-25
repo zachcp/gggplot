@@ -69,11 +69,13 @@ export function censorToScaleLimits(
   spec: GGSpec,
   mapping: Aes,
   data: DataFrame,
+  nonPositionalAes: readonly (keyof Aes)[] = [],
 ): DataFrame {
   const active = (["x", "y", "z"] as const).flatMap((axis) => {
     const declared = spec.scales.find((scale) => scale.aes === axis);
     if (!declared?.domain) return [];
     const columns = POSITION_FAMILY[axis]
+      .filter((aes) => !nonPositionalAes.includes(aes))
       .map((aes) => mapping[aes])
       .filter((column): column is string => !!column && column in data);
     return columns.length ? [{ declared, columns }] : [];
@@ -116,9 +118,11 @@ export function censorToScaleLimits(
 export function removeMissingPositions(
   mapping: Aes,
   data: DataFrame,
+  nonPositionalAes: readonly (keyof Aes)[] = [],
 ): DataFrame {
   const columns = (["x", "y", "z"] as const)
     .flatMap((axis) => POSITION_FAMILY[axis])
+    .filter((aes) => !nonPositionalAes.includes(aes))
     .map((aes) => mapping[aes])
     .filter((column): column is string => !!column && column in data);
   if (!columns.length) return data;

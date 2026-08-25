@@ -8,7 +8,7 @@ import {
   scaleSizeValue,
   type TrainedScale,
 } from "../scale/mod.ts";
-import { CATEGORICAL_PALETTE, OTHER_COLOR } from "../scale/palette.ts";
+import { CATEGORICAL_PALETTE } from "../scale/palette.ts";
 import { colorWithAlpha } from "../geom/shared.ts";
 import { labelNode } from "./guide_text.ts";
 
@@ -97,6 +97,9 @@ export function legendNodes(
   // tinted by the scale — differing only in which scale supplies the color.
   const discreteSwatchLegend = (scale: TrainedScale, aes: "color" | "fill") => {
     const levels = scale.domain as string[];
+    // A prior guide can consume the remaining canvas. Do not place this
+    // guide's title or keys beyond the overlay edge.
+    if (y > 1) return;
     pushTitle(scale, aes);
 
     // Two independent limits, both of which used to be ignored (gggplot-i5m.21).
@@ -109,15 +112,21 @@ export function legendNodes(
     // 2. THE CANVAS. Keys stack downward from y with no upper bound and ran
     //    off the +1 edge of the guide overlay, silently losing the tail.
     //    Truncate to what fits and spend the last row saying what was cut.
-    const paletted = levels.length > CATEGORICAL_PALETTE.length
+    // A user-provided range can distinguish more levels than the built-in
+    // palette. Only fold levels once both the built-in and custom ranges are
+    // exhausted, matching the colors scaleColorValue actually draws.
+    const paletteCapacity = scale.rangeExplicit
+      ? Math.max(CATEGORICAL_PALETTE.length, scale.range?.length ?? 0)
+      : CATEGORICAL_PALETTE.length;
+    const paletted = levels.length > paletteCapacity
       ? [
-        ...levels.slice(0, CATEGORICAL_PALETTE.length).map((level) => ({
+        ...levels.slice(0, paletteCapacity).map((level) => ({
           label: level,
           color: scaleColorValue(scale, level),
         })),
         {
-          label: `Other (${levels.length - CATEGORICAL_PALETTE.length})`,
-          color: OTHER_COLOR,
+          label: `Other (${levels.length - paletteCapacity})`,
+          color: scaleColorValue(scale, levels[paletteCapacity]),
         },
       ]
       : levels.map((level) => ({
@@ -127,7 +136,8 @@ export function legendNodes(
 
     // Rows between the current cursor and the overlay's bottom edge. Floor,
     // so a partially-visible final row never counts as fitting.
-    const rowsAvailable = Math.max(1, Math.floor((1 - y) / keyStep));
+    const rowsAvailable = Math.max(0, Math.floor((1 - y) / keyStep));
+    if (!rowsAvailable) return;
     const truncated = paletted.length > rowsAvailable;
     // One row is spent on the "+N more" note, so it is never itself clipped.
     const shown = truncated ? paletted.slice(0, rowsAvailable - 1) : paletted;

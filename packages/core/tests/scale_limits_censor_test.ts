@@ -11,6 +11,7 @@ import {
   geomErrorbar,
   geomHistogram,
   geomPoint,
+  geomTile,
   ggplot,
   scaleXContinuous,
   scaleXDiscrete,
@@ -121,6 +122,16 @@ Deno.test("a z domain censors in 3D", () => {
     ).add(geomPoint(), scaleZContinuous({ domain: [0, 10] })).build(),
   ) as RenderNode;
   assertEquals(rowsOf(tree, "Point"), 2);
+});
+
+Deno.test("a z domain does not censor geom_tile's z value channel", () => {
+  const tree = compile(
+    ggplot(
+      { x: [0, 1, 2], y: [0, 1, 2], z: [0, 1, 50] },
+      { x: "x", y: "y", z: "z" },
+    ).add(geomTile(), scaleZContinuous({ domain: [0, 10] })).build(),
+  ) as RenderNode;
+  assertEquals(rowsOf(tree, "ChunkedFace"), 12);
 });
 
 Deno.test("missing values are left to gggplot-bab, not censored here", () => {

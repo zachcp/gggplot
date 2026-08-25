@@ -15,7 +15,7 @@
 //   A palette-capped 9-row legend fits down to h=200 but not below, so short
 //   canvases still need truncation.
 import { assertEquals } from "@std/assert";
-import { geomPoint, ggplot } from "../src/dsl/mod.ts";
+import { geomPoint, ggplot, scaleColor } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import { CATEGORICAL_PALETTE, OTHER_COLOR } from "../src/scale/palette.ts";
@@ -114,4 +114,55 @@ Deno.test("a truncated legend says how many rows it dropped", () => {
 Deno.test("a legend that fits gets no +N more row", () => {
   const { labels } = legendKeys(9, 300);
   assertEquals(labels.some((text) => text.endsWith("more")), false);
+});
+
+Deno.test("a custom palette keeps every color it can distinguish", () => {
+  const levels = Array.from({ length: 10 }, (_, i) => `c${i}`);
+  const range = levels.map((_, i) =>
+    `#${(i + 1).toString(16).padStart(6, "0")}`
+  );
+  const tree = compile(
+    ggplot(
+      { x: levels.map((_, i) => i), y: levels.map((_, i) => i), g: levels },
+      { x: "x", y: "y", color: "g" },
+    ).add(geomPoint(), scaleColor({ range })).build(),
+    {
+      layout: { width: 800, height: 600, measureText: approximateTextMeasurer },
+    },
+  ) as RenderNode;
+  const labels = findNodes(tree, "Label").flatMap((node) =>
+    (node.props.labels ?? []) as string[]
+  );
+  assertEquals(labels.includes("Other (2)"), false);
+  assertEquals(levels.every((level) => labels.includes(level)), true);
+});
+
+Deno.test("a second discrete legend never starts beyond the canvas", () => {
+  const levels = Array.from({ length: 9 }, (_, i) => `c${i}`);
+  const fills = Array.from({ length: 9 }, (_, i) => `f${i}`);
+  const tree = compile(
+    ggplot(
+      {
+        x: levels.map((_, i) => i),
+        y: levels.map((_, i) => i),
+        color: levels,
+        fill: fills,
+      },
+      { x: "x", y: "y", color: "color", fill: "fill" },
+    ).add(geomPoint()).build(),
+    {
+      layout: { width: 800, height: 120, measureText: approximateTextMeasurer },
+    },
+  ) as RenderNode;
+
+  const legendYs = findNodes(tree, "Label")
+    .filter((node) =>
+      ((node.props.labels ?? []) as string[]).some((text) =>
+        /^(color|fill|c\d+|f\d+|Other|\+\d+ more)$/.test(text)
+      )
+    )
+    .flatMap((node) =>
+      ((node.props.positions ?? []) as [number, number][]).map(([, y]) => y)
+    );
+  assertEquals(legendYs.every((y) => y <= 1), true, legendYs.join(", "));
 });

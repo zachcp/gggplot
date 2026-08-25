@@ -208,18 +208,28 @@ export function compile(
       const mapping = layer.inheritAes === false
         ? (layer.mapping ?? {})
         : { ...spec.mapping, ...layer.mapping };
+      const geom = GEOM_REGISTRY[layer.geom];
       // ggplot2 order: scale limits censor the data BEFORE the stat runs, so
       // stat_bin and friends never see rows the user excluded (gggplot-wjw).
       // Two row filters, in ggplot2's order and for different reasons. Missing
       // positions go first (a row that was never plottable), then scale limits
       // (a row the user chose to exclude) — both before the stat, so neither
       // is counted by stat_bin and then hidden at draw time.
-      const source = GEOM_REGISTRY[layer.geom].dropsMissingPositions
-        ? removeMissingPositions(mapping, layer.data ?? panel.data)
+      const source = geom.dropsMissingPositions
+        ? removeMissingPositions(
+          mapping,
+          layer.data ?? panel.data,
+          geom.nonPositionalAes,
+        )
         : layer.data ?? panel.data;
-      const data = censorToScaleLimits(spec, mapping, source);
+      const data = censorToScaleLimits(
+        spec,
+        mapping,
+        source,
+        geom.nonPositionalAes,
+      );
       const resident = options.resident
-        ? GEOM_REGISTRY[layer.geom].residentPlan?.(
+        ? geom.residentPlan?.(
           spec,
           layer,
           mapping,
