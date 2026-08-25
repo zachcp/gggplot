@@ -10,6 +10,8 @@ import {
   type GGSpec,
   type PrismInstance3D,
   PrismInstances3D,
+  ScenePicker,
+  type ScenePickPublish,
 } from "@gggplot/core";
 import { withSiteChartTheme3d } from "./chart_theme.ts";
 
@@ -17,6 +19,8 @@ interface Props {
   canvas: HTMLCanvasElement;
   spec: GGSpec;
   prismInstances?: readonly PrismInstance3D[];
+  /** When present, receives the scene's pointer-to-ray function. */
+  publishPick?: ScenePickPublish;
 }
 
 const fontResources = createFontResources([
@@ -34,16 +38,25 @@ const fontResources = createFontResources([
   },
 ]);
 
-export const Scene3D = ({ canvas, spec, prismInstances }: Props) => (
-  <WebGPU fallback={null}>
-    <AutoCanvas canvas={canvas} backgroundColor={[0.05, 0.05, 0.07, 1]}>
-      <GGPlot
-        spec={withSiteChartTheme3d(spec)}
-        fontResources={fontResources}
-        sceneExtras={prismInstances?.length
-          ? createElement(PrismInstances3D, { instances: prismInstances })
-          : undefined}
-      />
-    </AutoCanvas>
-  </WebGPU>
-);
+export const Scene3D = ({ canvas, spec, prismInstances, publishPick }: Props) => {
+  // Both extras must sit inside the panel's Cartesian node: the prisms to share
+  // its transform, the picker to read the 3D camera's ViewContext rather than
+  // the flat overlay's.
+  const extras = [
+    ...(prismInstances?.length
+      ? [createElement(PrismInstances3D, { instances: prismInstances })]
+      : []),
+    ...(publishPick ? [createElement(ScenePicker, { publish: publishPick })] : []),
+  ];
+  return (
+    <WebGPU fallback={null}>
+      <AutoCanvas canvas={canvas} backgroundColor={[0.05, 0.05, 0.07, 1]}>
+        <GGPlot
+          spec={withSiteChartTheme3d(spec)}
+          fontResources={fontResources}
+          sceneExtras={extras.length ? extras : undefined}
+        />
+      </AutoCanvas>
+    </WebGPU>
+  );
+};

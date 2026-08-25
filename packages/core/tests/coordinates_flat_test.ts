@@ -57,7 +57,7 @@ function flatPositions(
   });
   return {
     array,
-    format: "vec2",
+    format: "vec2<f32>",
     dims: 2,
     length: pts.length,
     size: [pts.length],
@@ -191,7 +191,7 @@ Deno.test("companion (2-color) repetition stays aligned through loop munching", 
       0, 0, 1, 1, // v2 blue
       0, 0, 1, 1, // v3 blue
     ]),
-    format: "vec4",
+    format: "vec4<f32>",
     dims: 4,
     length: 4,
     size: [4],

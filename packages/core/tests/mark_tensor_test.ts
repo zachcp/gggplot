@@ -22,7 +22,7 @@ import { serializeTypedArrays } from "../../../scripts/capture_geom_fixtures.ts"
 Deno.test("packMarkRows positions are interleaved [x0,y0,x1,y1,...], not planar", () => {
   const packed = packMarkRows({ xs: [1, 3], ys: [2, 4] });
   assertEquals(Array.from(packed.positions.array), [1, 2, 3, 4]);
-  assertEquals(packed.positions.format, "vec2");
+  assertEquals(packed.positions.format, "vec2<f32>");
   assertEquals(packed.positions.dims, 2);
   assertEquals(packed.positions.length, 2);
   assertEquals(packed.positions.size, [2]);
@@ -72,7 +72,7 @@ Deno.test("expandByOwners expands a per-row bar color to its 4 vertices, keeping
   // Two bars, 4 vertices each, row-major colors: bar0 red, bar1 blue.
   const rowColors: FlatTensor = {
     array: Float32Array.from([1, 0, 0, 1, /* red */ 0, 0, 1, 1 /* blue */]),
-    format: "vec4",
+    format: "vec4<f32>",
     dims: 4,
     length: 2,
     size: [2],
@@ -84,7 +84,7 @@ Deno.test("expandByOwners expands a per-row bar color to its 4 vertices, keeping
 
   assertEquals(expanded.length, 8);
   assertEquals(expanded.dims, 4);
-  assertEquals(expanded.format, "vec4");
+  assertEquals(expanded.format, "vec4<f32>");
   for (let v = 0; v < 4; v++) {
     assertEquals(
       Array.from(expanded.array.slice(v * 4, v * 4 + 4)),
@@ -135,7 +135,7 @@ Deno.test("MarkTopology/PackedGeometry separation: owners lives only on PackedGe
   const geom: PackedGeometry = {
     positions: {
       array: new Float32Array(0),
-      format: "vec2",
+      format: "vec2<f32>",
       dims: 2,
       length: 0,
       size: [0],
@@ -165,7 +165,7 @@ Deno.test("colorWithAlpha expands #rgb and folds alpha into a #rrggbbaa string",
 Deno.test("packColorsRGBA normalizes hex colors to 0..1 and folds per-row alpha", () => {
   const mask = new Uint8Array([1, 1]);
   const packed = packColorsRGBA(["#ff0000", "#0000ff"], mask, [1, 0.5]);
-  assertEquals(packed.format, "vec4");
+  assertEquals(packed.format, "vec4<f32>");
   assertEquals(packed.dims, 4);
   assertEquals(packed.length, 2);
   assertEquals(Array.from(packed.array), [1, 0, 0, 1, 0, 0, 1, 0.5]);
@@ -197,7 +197,7 @@ function point(x: number, y: number): PackedGeometry {
   return {
     positions: {
       array: Float32Array.from([x, y]),
-      format: "vec2",
+      format: "vec2<f32>",
       dims: 2,
       length: 1,
       size: [1],
@@ -211,7 +211,7 @@ function emptyGroup(): PackedGeometry {
   return {
     positions: {
       array: new Float32Array(0),
-      format: "vec2",
+      format: "vec2<f32>",
       dims: 2,
       length: 0,
       size: [0],
@@ -225,7 +225,7 @@ Deno.test("concatPacked concatenates positions and emits per-group chunk lengths
   const groupA: PackedGeometry = {
     positions: {
       array: Float32Array.from([0, 0, 1, 1]),
-      format: "vec2",
+      format: "vec2<f32>",
       dims: 2,
       length: 2,
       size: [2],
@@ -236,7 +236,7 @@ Deno.test("concatPacked concatenates positions and emits per-group chunk lengths
   const groupB: PackedGeometry = {
     positions: {
       array: Float32Array.from([2, 2, 3, 3, 4, 4]),
-      format: "vec2",
+      format: "vec2<f32>",
       dims: 2,
       length: 3,
       size: [3],
@@ -268,7 +268,7 @@ Deno.test("concatPacked re-bases owners by each preceding group's own row span",
   const groupA: PackedGeometry = {
     positions: {
       array: Float32Array.from([0, 0, 0, 1, 1, 0, 1, 1]),
-      format: "vec2",
+      format: "vec2<f32>",
       dims: 2,
       length: 4,
       size: [4],
@@ -280,7 +280,7 @@ Deno.test("concatPacked re-bases owners by each preceding group's own row span",
   const groupB: PackedGeometry = {
     positions: {
       array: Float32Array.from([2, 0, 2, 1, 3, 0, 3, 1]),
-      format: "vec2",
+      format: "vec2<f32>",
       dims: 2,
       length: 4,
       size: [4],

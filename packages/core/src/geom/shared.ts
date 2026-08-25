@@ -1,3 +1,4 @@
+import type { DepthPolicy } from "./types.ts";
 // Pure aesthetic-extraction helpers shared by the per-geom lowering modules:
 // they turn mapped columns + trained scales into per-row visual values
 // (colors, sizes, positions, band/step geometry). They take explicit trained
@@ -343,3 +344,28 @@ export function stepPositions(
 // the many `../geom/shared.ts` importers keep resolving unchanged.
 // ---------------------------------------------------------------------------
 export * from "./packing.ts";
+
+/**
+ * Resolve a mode's depth policy into render-node props.
+ *
+ * `transparent` is the layer's *observed* transparency — any alpha below 1 —
+ * not a declaration, because an `alphaAware` geom is opaque until its data
+ * says otherwise. Returning the props rather than setting them keeps the
+ * decision in one place while each geom stays in charge of its own node.
+ */
+export function depthProps(
+  policy: DepthPolicy | undefined,
+  transparent: boolean,
+): Record<string, unknown> {
+  if (policy === "overlay") {
+    return { depthTest: false, depthWrite: false, mode: "transparent" };
+  }
+  // "opaque" ignores observed alpha: the geom has declared that it always
+  // writes depth, so a translucent tint must not silently disable occlusion.
+  const translucent = policy !== "opaque" && transparent;
+  return {
+    depthTest: true,
+    depthWrite: !translucent,
+    ...(translucent ? { mode: "transparent" } : {}),
+  };
+}

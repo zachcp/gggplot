@@ -145,7 +145,9 @@ export function trainPositionScale(
       ? [mapping.y, mapping.ymin, mapping.ymax, mapping.yend]
       : aesName === "x"
       ? [mapping.x, mapping.xmin, mapping.xmax, mapping.xend]
-      : [mapping.z];
+      // zend widens the z domain exactly as xend/yend widen x/y; without it a
+      // 3D segment reaching past the z extent would be scaled off the cube.
+      : [mapping.z, mapping.zend];
     for (const col of cols) {
       if (!col || !(col in data)) continue;
       const extent = continuousExtent(columnValues(data, col));

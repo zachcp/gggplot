@@ -49,6 +49,7 @@ export type AesName =
   | "ymax"
   | "xend"
   | "yend"
+  | "zend"
   | "angle"
   | "radius"
   | "lower"
@@ -91,6 +92,8 @@ export type GeomKind =
   | "step"
   | "curve"
   | "spoke"
+  | "voxel"
+  | "surface"
   | "rug";
 
 export type StatKind =
@@ -104,6 +107,7 @@ export type StatKind =
   | "ydensity"
   | "dotplot"
   | "bin2d"
+  | "bin3d"
   | "binhex"
   | "summary2d"
   | "summaryhex"

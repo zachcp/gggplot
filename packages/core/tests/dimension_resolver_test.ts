@@ -1,14 +1,22 @@
-import { assertEquals, assertThrows } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1";
 import {
   camera3d,
   facetWrap,
+  geomBar,
+  geomBoxplot,
+  geomCol,
   geomBlank,
   geomPoint,
   geomTile,
   ggplot,
+  statSummary2d,
 } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
-import { resolvePlotDimension, selectGeomMode } from "../src/geom/mod.ts";
+import {
+  GEOM_REGISTRY,
+  resolvePlotDimension,
+  selectGeomMode,
+} from "../src/geom/mod.ts";
 import type { GeomDefinition } from "../src/geom/mod.ts";
 import type { Layer } from "../src/ir/types.ts";
 
@@ -46,6 +54,66 @@ Deno.test("a tile z value remains 2D while point z is positional", () => {
     () => resolvePlotDimension(mixed),
     Error,
     "mixed 2D/3D layers",
+  );
+});
+
+Deno.test("a mapped z with nothing to consume it fails instead of vanishing", () => {
+  // Derived from the registry rather than a hardcoded list: this test broke
+  // twice as geoms gained 3D modes, which is the test's own fault for naming
+  // them. Any geom that declares no 3D mode, does not read z as a value
+  // channel, and still contributes a dimension must reject a mapped z.
+  const twoDOnly = Object.entries(GEOM_REGISTRY).filter(([, definition]) =>
+    !(definition.modes ?? []).some((mode) => mode.dimensions === 3) &&
+    !(definition.nonPositionalAes ?? []).includes("z") &&
+    definition.contributesDimension !== false
+  );
+  assert(twoDOnly.length > 0, "expected some geoms to remain 2D-only");
+
+  for (const [kind, definition] of twoDOnly) {
+    const layer = {
+      geom: kind,
+      stat: definition.defaultStat,
+      position: definition.defaultPosition ?? "identity",
+      params: {},
+    } as unknown as Layer;
+    assertThrows(
+      () => selectGeomMode(layer, { x: "x", y: "y", z: "z" }, definition),
+      Error,
+      "z is not supported",
+      `geom_${kind} should reject a mapped z`,
+    );
+  }
+});
+
+Deno.test("z stays legal wherever something actually reads it", () => {
+  // A stat that reduces z as a value channel.
+  assertEquals(
+    resolvePlotDimension(
+      ggplot(data, { x: "x", y: "y", z: "z" }).add(statSummary2d({ bins: 2 }))
+        .build(),
+    ).dimensions,
+    2,
+  );
+  // A geom that documents z as a value channel.
+  assertEquals(
+    resolvePlotDimension(
+      ggplot(data, { x: "x", y: "y", z: "z" }).add(geomTile()).build(),
+    ).dimensions,
+    2,
+  );
+  // A geom that only trains scales.
+  assertEquals(
+    resolvePlotDimension(
+      ggplot(data, { x: "x", y: "y", z: "z" }).add(geomBlank()).build(),
+    ).dimensions,
+    2,
+  );
+  // And a geom whose 3D mode takes z as a position.
+  assertEquals(
+    resolvePlotDimension(
+      ggplot(data, { x: "x", y: "y", z: "z" }).add(geomPoint()).build(),
+    ).dimensions,
+    3,
   );
 });
 

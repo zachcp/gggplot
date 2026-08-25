@@ -1,5 +1,24 @@
-import type { Aes, GGSpec, Layer } from "../ir/types.ts";
+import type { Aes, GGSpec, Layer, StatKind } from "../ir/types.ts";
 import type { GeomDefinition, GeomMode, PlotDimension } from "./types.ts";
+
+/**
+ * Stats that read a mapped `z` as a value channel rather than a position.
+ *
+ * Whether `z` is positional is a property of the stat, not the geom: contour
+ * reads it as a height field and summary_2d reduces it per cell, both while
+ * drawing an ordinary 2D plot. Keeping the list here — rather than inferring
+ * it — is what lets an unconsumed `z` be reported instead of discarded.
+ */
+const Z_VALUE_STATS: readonly StatKind[] = [
+  "contour",
+  "contourfilled",
+  // summary2d, summaryhex, and summarybin all resolve to statSummary2d, which
+  // reduces the mapped z per cell; they are listed individually because the
+  // allow-list is keyed by StatKind, not by implementation.
+  "summary2d",
+  "summaryhex",
+  "summarybin",
+];
 
 const DEFAULT_2D_MODE: GeomMode = {
   dimensions: 2,
@@ -37,13 +56,51 @@ export function selectGeomMode(
   const modes = definition.modes ?? [DEFAULT_2D_MODE];
   const two = modes.find((mode) => mode.dimensions === 2);
   const three = modes.find((mode) => mode.dimensions === 3);
-  const mode = mapping.z != null && three?.requiredPosition.includes("z")
-    ? three
-    : two ?? three;
+  // Selecting on a mapped z alone is not enough: geom_contour maps z as a stat
+  // value channel and would otherwise claim geom_segment's 3D mode, which
+  // needs six positions. A 3D mode is chosen only when its whole position set
+  // is present.
+  const threeSatisfied = three != null &&
+    three.requiredPosition.every((aes) => mapping[aes] != null);
+  const mode = threeSatisfied ? three : two ?? three;
   if (!mode) {
     throw new Error(
       `[gggplot] geom_${layer.geom} declares no dimensional mode`,
     );
+  }
+
+  // A mapped z that nothing consumes used to fall through to the 2D mode and
+  // be discarded in silence, so every geom without a 3D mode was a quiet
+  // no-op rather than a "not yet".
+  //
+  // z is legitimate without being a position in three ways: the stat reads it
+  // as a value (contour's height field, summary_2d's reduction), the geom
+  // declares it as a value channel (geom_tile), or the layer only trains
+  // scales without drawing (geomBlank). Those cases share one exemption so the
+  // two diagnostics below cannot disagree about what counts.
+  const zIsValueChannel = Z_VALUE_STATS.includes(layer.stat) ||
+    (definition.nonPositionalAes ?? []).includes("z") ||
+    definition.contributesDimension === false;
+
+  if (mapping.z != null && !zIsValueChannel) {
+    // A geom that HAS a 3D mode but did not satisfy it needs a different
+    // message from one that has none at all: "z is not supported" would be a
+    // lie, and the useful information is which positions are still missing.
+    const missing = three != null && mode !== three
+      ? three.requiredPosition.filter((aes) => mapping[aes] == null)
+      : [];
+    if (missing.length) {
+      throw new Error(
+        `[gggplot] 3D geom_${layer.geom} requires mapped position aesthetic(s): ${
+          missing.join(", ")
+        }`,
+      );
+    }
+    if (!mode.requiredPosition.includes("z")) {
+      throw new Error(
+        `[gggplot] geom_${layer.geom} has no 3D mode; z is not supported`,
+      );
+    }
   }
 
   // Non-identity stats may synthesize their geom's required positions (QQ is

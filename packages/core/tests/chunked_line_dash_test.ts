@@ -72,7 +72,7 @@ Deno.test("packDashUniforms: a pattern longer than MAX_DASH_SEGMENTS truncates t
 function tensor(values: number[]): FlatTensor {
   return {
     array: Float32Array.from(values),
-    format: "vec2",
+    format: "vec2<f32>",
     dims: 2,
     length: values.length / 2,
     size: [values.length / 2],

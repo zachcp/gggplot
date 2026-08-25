@@ -115,6 +115,47 @@ export const statFunction = (
   fun: (x: number) => number,
   opts: GeomOpts = {},
 ): SpecPart => geom("line", { ...opts, fun, stat: opts.stat ?? "function" });
+/**
+ * A grid-connected height field, z = f(x, y).
+ *
+ * Named `surface` rather than `mesh`: it triangulates by grid adjacency and
+ * nothing else, so "mesh" would promise arbitrary topology it does not
+ * provide. Requires a complete grid — every combination of the distinct x and
+ * y values, exactly once. A missing z leaves a hole rather than being
+ * interpolated across.
+ */
+export const geomSurface = (opts: GeomOpts = {}): SpecPart =>
+  geom("surface", opts);
+
+/**
+ * Occupancy cells for binned 3D observations.
+ *
+ * Named for what it draws, not for the reduction behind it: `stat_bin_3d`
+ * counts observations into lattice cells and `geom_voxel` renders the
+ * occupied ones. There is no 2D `geom_bin` alias — `geom_bin2d` already
+ * covers rectangular 2D binning.
+ */
+export const geomVoxel = (opts: GeomOpts = {}): SpecPart =>
+  geom("voxel", { ...opts, stat: opts.stat ?? "bin3d" });
+
+/**
+ * Rectangles from mapped bounds.
+ *
+ * `annotate("rect", ...)` covers literal bounds; this is the data-driven form,
+ * and the only way to reach the 3D mode, which positions each rectangle in the
+ * plane at its row's z.
+ */
+export const geomRect = (opts: GeomOpts = {}): SpecPart => geom("rect", opts);
+
+/**
+ * Straight segments between mapped endpoints.
+ *
+ * `annotate("segment", ...)` covers literal endpoints; this is the data-driven
+ * form, and the only way to reach the 3D mode, which needs six mapped
+ * positions rather than six constants.
+ */
+export const geomSegment = (opts: GeomOpts = {}): SpecPart =>
+  geom("segment", opts);
 export const geomContour = (opts: GeomOpts = {}): SpecPart =>
   geom("segment", { ...opts, stat: opts.stat ?? "contour" });
 export const geomContourFilled = (opts: GeomOpts = {}): SpecPart =>

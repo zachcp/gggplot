@@ -75,7 +75,7 @@ export function packColorsRGBA(
   }
   return {
     array,
-    format: "vec4",
+    format: "vec4<f32>",
     dims: 4,
     length: kept,
     size: [kept],
@@ -147,7 +147,7 @@ export function packPoints3d(input: PackPoints3dInput): PackedPoints3d {
   }
   const positions: FlatTensor = {
     array,
-    format: "vec4",
+    format: "vec4<f32>",
     dims: 4,
     length: kept,
     size: [kept],
@@ -190,7 +190,7 @@ export function packMarkRows(input: PackMarkRowsInput): PackedMarkRows {
   }
   const positions: FlatTensor = {
     array,
-    format: "vec2",
+    format: "vec2<f32>",
     dims: 2,
     length: kept,
     size: [kept],
@@ -263,7 +263,7 @@ export function concatPacked(geoms: PackedGeometry[]): PackedGeometry {
   if (nonEmpty.length === 0) {
     const empty: FlatTensor = {
       array: new Float32Array(0),
-      format: "vec2",
+      format: "vec2<f32>",
       dims: 2,
       length: 0,
       size: [0],
@@ -402,7 +402,7 @@ export function packFaceLoops(loops: FaceLoop[]): PackedFaceGeometry {
     return {
       positions: {
         array,
-        format: "vec2",
+        format: "vec2<f32>",
         dims: 2,
         length: loop.positions.length,
         size: [loop.positions.length],
@@ -461,7 +461,7 @@ export function packUniformChunks(
     return {
       positions: {
         array: new Float32Array(0),
-        format: "vec2",
+        format: "vec2<f32>",
         dims: 2,
         length: 0,
         size: [0],
@@ -483,7 +483,7 @@ export function packUniformChunks(
   return {
     positions: {
       array,
-      format: "vec2",
+      format: "vec2<f32>",
       dims: 2,
       length,
       size: [chunkLen, chunkCount],
@@ -495,4 +495,113 @@ export function packUniformChunks(
       loops: false,
     },
   };
+}
+
+/**
+ * The vec4 analogue of packUniformChunks, for disjoint 3D chunks.
+ *
+ * Rows arrive already filtered: a segment with any non-finite component is
+ * dropped whole by the caller rather than half-packed, since half a segment is
+ * a line to nowhere.
+ */
+export function packUniformChunks3d(
+  chunkPoints: readonly (readonly [number, number, number])[][],
+): PackedGeometry {
+  const chunkCount = chunkPoints.length;
+  if (chunkCount === 0) {
+    return {
+      positions: {
+        array: new Float32Array(0),
+        format: "vec4<f32>",
+        dims: 4,
+        length: 0,
+        size: [0],
+        version: 0,
+      },
+      topology: { kind: "polyline" },
+    };
+  }
+  const chunkLen = chunkPoints[0].length;
+  const array = new Float32Array(chunkCount * chunkLen * 4);
+  let w = 0;
+  for (const chunk of chunkPoints) {
+    for (const [x, y, z] of chunk) {
+      array[w++] = x;
+      array[w++] = y;
+      array[w++] = z;
+      array[w++] = 1;
+    }
+  }
+  const length = chunkCount * chunkLen;
+  return {
+    positions: {
+      array,
+      format: "vec4<f32>",
+      dims: 4,
+      length,
+      // Flat length, with chunk boundaries carried in topology. The 2D packer
+      // uses the [chunkLen, chunkCount] size form so @use-gpu/plot's own Line
+      // can auto-detect uniform chunks; the 3D path renders through our own
+      // ChunkedLine instead, which reads topology.chunks and translates our
+      // internal format string into the WGSL one use.gpu expects.
+      size: [length],
+      version: 0,
+    },
+    topology: {
+      kind: "polyline",
+      chunks: new Uint32Array(chunkCount).fill(chunkLen),
+      loops: false,
+    },
+  };
+}
+
+/** A planar surface ring placed in 3D. Vertices carry z; nothing is extruded. */
+export interface FaceLoop3D {
+  positions: [number, number, number][];
+  fill: string;
+  alpha?: number;
+}
+
+/**
+ * The vec4 analogue of packFaceLoops.
+ *
+ * Rings arrive already filtered: a loop with any non-finite vertex is dropped
+ * whole by the caller rather than closed across the gap, which would invent
+ * area the data never had.
+ */
+export function packFaceLoops3d(loops: FaceLoop3D[]): PackedFaceGeometry {
+  const pieces: PackedGeometry[] = loops.map((loop) => {
+    const array = new Float32Array(loop.positions.length * 4);
+    loop.positions.forEach(([x, y, z], v) => {
+      array[v * 4] = x;
+      array[v * 4 + 1] = y;
+      array[v * 4 + 2] = z;
+      array[v * 4 + 3] = 1;
+    });
+    return {
+      positions: {
+        array,
+        format: "vec4<f32>",
+        dims: 4,
+        length: loop.positions.length,
+        size: [loop.positions.length],
+        version: 0,
+      },
+      topology: { kind: "loops", loops: true } as MarkTopology,
+      // Local all-0 owners, rebased by concatPacked exactly as the 2D packer
+      // relies on; see packFaceLoops for why a global index here would double.
+      owners: new Uint32Array(loop.positions.length).fill(0),
+    };
+  });
+  const combined = concatPacked(pieces);
+  const rowMask = new Uint8Array(loops.length).fill(1);
+  const rowColors = packColorsRGBA(
+    loops.map((l) => l.fill),
+    rowMask,
+    loops.map((l) => l.alpha ?? 1),
+  );
+  const colors = combined.owners
+    ? expandByOwners(rowColors, combined.owners)
+    : rowColors;
+  return { positions: combined.positions, topology: combined.topology, colors };
 }

@@ -11,6 +11,7 @@ import {
 } from "./binning.ts";
 import { statSmooth } from "./smoothing.ts";
 import { statQuantileProduct } from "./quantile.ts";
+import { statBin3d } from "./bin3d.ts";
 import { statSummary } from "./summary.ts";
 import {
   statBin2d,
@@ -49,6 +50,7 @@ export * from "./summary.ts";
 export * from "./distributions.ts";
 export * from "./analytic.ts";
 export * from "./contours.ts";
+export { statBin3d } from "./bin3d.ts";
 export * from "./alignment.ts";
 
 const REGISTRY: Record<Layer["stat"], StatFn> = {
@@ -64,6 +66,7 @@ const REGISTRY: Record<Layer["stat"], StatFn> = {
   dotplot: statDotplot,
   bin2d: statBin2d,
   binhex: statBin2d,
+  bin3d: statBin3d,
   summary2d: statSummary2d,
   summaryhex: statSummary2d,
   summarybin: statSummary2d,

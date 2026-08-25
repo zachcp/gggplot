@@ -99,3 +99,9 @@ export {
   type OnnxSessionOptionsLike,
   type OnnxTensorMetadataLike,
 } from "./onnx.ts";
+
+export {
+  type PickedEntity,
+  type PickedEntityKind,
+  pickSceneEntity,
+} from "./picking.ts";

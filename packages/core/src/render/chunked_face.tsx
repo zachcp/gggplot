@@ -43,6 +43,7 @@
 
 import type { LiveElement } from "@use-gpu/live";
 import type { FlatTensor, MarkTopology } from "../compile/rendertree.ts";
+import { parseColorRGBA } from "../color/mod.ts";
 import { withMarkAttribution } from "./gpu_instrument.ts";
 import {
   createElement,
@@ -54,13 +55,6 @@ import {
   useNoRawTensorSource,
   useRawTensorSource,
 } from "../runtime/usegpu_compat.ts";
-
-/** Our compiler-internal FlatTensor.format to the WGSL-style format string useRawTensorSource expects. */
-function toWgslFormat(format: FlatTensor["format"]): string {
-  if (format === "vec2") return "vec2<f32>";
-  if (format === "vec4") return "vec4<f32>";
-  return "f32";
-}
 
 /**
  * Uploads a FlatTensor as a raw GPU source, using workbench's paired no-op
@@ -76,7 +70,7 @@ function useOptionalTensorSource(tensor: FlatTensor | undefined): unknown {
     return withMarkAttribution(() =>
       useRawTensorSource({
         array: tensor.array,
-        format: toWgslFormat(tensor.format),
+        format: tensor.format,
         size: tensor.size,
         version: tensor.version,
       })
@@ -148,8 +142,12 @@ export const ChunkedFace = (props: ChunkedFaceProps): LiveElement => {
     ...(concave
       ? { indices: indexed!.indices }
       : { segments: fan!.segments, count: fan!.count }),
-    ...(colorsSource ? { colors: colorsSource } : { color: color ?? "#3b82f6" }),
-    ...(opacity != null ? { opacity } : {}),
+    // Same raw-primitive contract as chunked_line.tsx (gggplot-frg): FaceLayer
+    // takes a numeric vec4, never a CSS string, and has no 'opacity' prop —
+    // fold it into alpha here rather than passing a prop nothing reads.
+    ...(colorsSource
+      ? { colors: colorsSource, ...(opacity != null ? { opacity } : {}) }
+      : { color: parseColorRGBA(color ?? "#3b82f6", opacity ?? 1) }),
     ...rest,
   });
 };

@@ -8,7 +8,11 @@ import {
 // Type-only, so the renderer is erased at runtime and this module stays
 // headless while still describing the prisms the host will draw.
 import type { PrismInstance3D } from "@gggplot/core";
-import { buildModelScene3D, type ModelDocument } from "@gggplot/model-inspect";
+import {
+  buildModelScene3D,
+  type ModelDocument,
+  type ModelScene3D,
+} from "@gggplot/model-inspect";
 
 interface SceneRow extends Record<string, unknown> {
   x: number;
@@ -69,13 +73,29 @@ function prismEdges(
   );
 }
 
-function modelScene(document: ModelDocument) {
+/**
+ * Build the scene, or reuse one the caller already built.
+ *
+ * Callers that ALSO pick against the scene must pass the same object they drew,
+ * not just the same document: layout is deterministic today, but a picker
+ * resolving rays against a separately built scene would silently address a
+ * stale layout the moment that stops being true.
+ */
+export function modelScene3d(document: ModelDocument): ModelScene3D {
   return buildModelScene3D(document);
 }
 
+function sceneOf(source: ModelDocument | ModelScene3D): ModelScene3D {
+  return "kind" in source && source.kind === "model_scene_3d"
+    ? source
+    : buildModelScene3D(source as ModelDocument);
+}
+
 /** Filled mini-prisms for the bounded tensor cells; no tensor values are copied. */
-export function modelScene3dPrisms(document: ModelDocument): PrismInstance3D[] {
-  return modelScene(document).slabs.flatMap((slab) => {
+export function modelScene3dPrisms(
+  source: ModelDocument | ModelScene3D,
+): PrismInstance3D[] {
+  return sceneOf(source).slabs.flatMap((slab) => {
     const [rows, columns] = slab.displayShape;
     const cellSize: [number, number, number] = [
       // A little overscan in the thin axis makes the side faces visible as
@@ -103,8 +123,8 @@ export function modelScene3dPrisms(document: ModelDocument): PrismInstance3D[] {
 }
 
 /** Lower bounded 3D scene instances into the existing orbit-enabled WebGPU host. */
-export function modelScene3dSpec(document: ModelDocument): GGSpec {
-  const scene = modelScene(document);
+export function modelScene3dSpec(source: ModelDocument | ModelScene3D): GGSpec {
+  const scene = sceneOf(source);
   const slabFrames = scene.slabs.flatMap((slab, index) =>
     prismEdges(slab.center, slab.size, index * 12)
   );

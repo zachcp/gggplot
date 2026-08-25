@@ -7,7 +7,7 @@ import { node, type RenderNode } from "../compile/rendertree.ts";
 import type { FlatTensor } from "../compile/rendertree.ts";
 import { splitByEffectiveGroup } from "../group/mod.ts";
 import { scalePosition } from "../scale/mod.ts";
-import type { LayerContext } from "./types.ts";
+import type { DepthPolicy, LayerContext } from "./types.ts";
 import {
   alphasOf,
   colorsOf,
@@ -21,8 +21,15 @@ import {
   sortByX,
   stepPositions,
   valuesOf,
+  depthProps,
 } from "./shared.ts";
 import { packPoints3d, packScalar } from "./packing.ts";
+
+/**
+ * Polylines fade with alpha exactly as points do; the shared policy keeps the
+ * two from re-deriving `depthWrite: !transparent` separately.
+ */
+export const LINE_3D_DEPTH: DepthPolicy = "alphaAware";
 
 /** One effective group's already-scaled/ordered row data, ready to pack. */
 export interface LineGroupRows {
@@ -110,13 +117,7 @@ export function packChunkedLineNodes(
       widths: concatFlatTensors(bucket.widthTensors),
       ...(bucket.dash ? { dash: bucket.dash } : {}),
       ...(opacity != null ? { opacity } : {}),
-      ...(threeD
-        ? {
-          depthTest: true,
-          depthWrite: !bucket.transparent,
-          ...(bucket.transparent ? { mode: "transparent" } : {}),
-        }
-        : {}),
+      ...(threeD ? depthProps(LINE_3D_DEPTH, bucket.transparent) : {}),
     });
   });
 }

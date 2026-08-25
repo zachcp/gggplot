@@ -64,6 +64,14 @@ export {
   PrismInstances3D,
 } from "./render/prism_instances_3d.tsx";
 export {
+  pointerToUV,
+  type ScenePickFn,
+  type ScenePickPoint,
+  ScenePicker,
+  type ScenePickPublish,
+  type SceneRay,
+} from "./render/scene_picker.tsx";
+export {
   approximateTextMeasurer,
   createFontResources,
   createGlyphTextMeasurer,

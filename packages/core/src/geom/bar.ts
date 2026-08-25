@@ -1,3 +1,4 @@
+import { lowerPrism3d } from "./surface_3d.ts";
 // geom_bar / geom_col — stacked/dodged/filled rectangle Polygons.
 //
 // The GPU-side grid-to-bar topology adapter (createHistogramBarTopologyPlan)
@@ -43,6 +44,7 @@ export function lowerBar(
   data: DataFrame,
   ctx: LayerContext,
 ): RenderNode[] {
+  if (mapping.z != null) return lowerPrism3d(layer, mapping, data, ctx);
   const xScale = ctx.scales.x;
   const yScale = ctx.scales.y;
   const colorScale = ctx.scales.color;
