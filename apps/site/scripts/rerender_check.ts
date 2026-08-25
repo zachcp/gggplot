@@ -14,6 +14,7 @@
  * Usage: deno task test:rerender   (add --route=model-inspection to narrow)
  */
 import { chromium } from "npm:playwright@^1.61.1";
+import { browserArgs } from "./browser_args.ts";
 
 // Routes with a control that re-renders a chart subtree. model-inspection is
 // gggplot-cfe's original repro (its tensor dropdown re-renders sibling charts).
@@ -61,7 +62,7 @@ try {
   await waitForServer();
   const browser = await chromium.launch({
     headless: true,
-    args: ["--enable-unsafe-webgpu", "--enable-webgpu-developer-features"],
+    args: browserArgs(),
   });
   const failures: string[] = [];
   try {

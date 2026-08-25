@@ -7,6 +7,7 @@
  * failure has a route screenshot and machine-readable diagnostic beside it.
  */
 import { chromium } from "npm:playwright@^1.61.1";
+import { browserArgs } from "./browser_args.ts";
 
 const host = "127.0.0.1";
 // A fresh high port prevents a user's running dev server from becoming the
@@ -50,7 +51,7 @@ try {
   await waitForServer();
   const browser = await chromium.launch({
     headless: true,
-    args: ["--enable-unsafe-webgpu", "--enable-webgpu-developer-features"],
+    args: browserArgs(),
   });
   try {
     if (!requestedRoute) await verifyPngExport(browser);

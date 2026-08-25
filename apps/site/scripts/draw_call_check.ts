@@ -14,6 +14,7 @@
  * Usage: deno task test:draw-calls   (add --route=three-d to narrow)
  */
 import { chromium } from "npm:playwright@^1.61.1";
+import { browserArgs } from "./browser_args.ts";
 
 // Routes whose charts must reach the GPU. Keep 2D and 3D here so neither
 // pipeline can regress into a silent blank canvas.
@@ -82,7 +83,7 @@ try {
   await waitForServer();
   const browser = await chromium.launch({
     headless: true,
-    args: ["--enable-unsafe-webgpu", "--enable-webgpu-developer-features"],
+    args: browserArgs(),
   });
   try {
     for (const route of routes) {
