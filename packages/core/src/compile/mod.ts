@@ -2,7 +2,11 @@
 import type { Aes, AesName, DataFrame, GGSpec, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "./rendertree.ts";
 import { applyStat } from "../stat/mod.ts";
-import { type TrainedScale, trainScales } from "../scale/mod.ts";
+import {
+  censorToScaleLimits,
+  type TrainedScale,
+  trainScales,
+} from "../scale/mod.ts";
 import {
   facetPanelGeometry,
   facetPanelGuideOverlays,
@@ -203,7 +207,13 @@ export function compile(
       const mapping = layer.inheritAes === false
         ? (layer.mapping ?? {})
         : { ...spec.mapping, ...layer.mapping };
-      const data = layer.data ?? panel.data;
+      // ggplot2 order: scale limits censor the data BEFORE the stat runs, so
+      // stat_bin and friends never see rows the user excluded (gggplot-wjw).
+      const data = censorToScaleLimits(
+        spec,
+        mapping,
+        layer.data ?? panel.data,
+      );
       const resident = options.resident
         ? GEOM_REGISTRY[layer.geom].residentPlan?.(
           spec,
