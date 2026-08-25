@@ -305,6 +305,58 @@ device identity, buffer usage, dtype, shape, strides, byte range, synchronizatio
 and lifetime. If any check fails, it falls back to a bounded copy rather than
 silently reading back through the CPU.
 
+### Measured: ORT WebGPU does not share a device (2026-08-25)
+
+`runtime-shared` was an unvalidated optimization until this was run against a
+real ONNX Runtime Web session with a real WebGPU device. The outcome is that
+the shared path is **not currently reachable with onnxruntime-web 1.27.0**, and
+the reason is worth recording precisely because it fails silently.
+
+WebGPU buffers cannot cross devices, so a zero-copy path requires ORT and
+useGPU to share one. The direction is forced: useGPU's `WebGPU` component
+always creates its own device (`mountGPUDevice`, no injection prop) and
+publishes it on `DeviceContext`, so ORT is the side that must adopt. ORT
+appears to support exactly that — `env.webgpu.device` is documented as
+settable before the first session, and the backend is then meant to use it.
+
+It does not. Measured end to end (`apps/site/scripts/ort_device_probe.ts`):
+
+```
+ourDevice: created
+device injected: set before first session
+readback before session: SAME as ours (setter took)
+session: created, outputs=["Plus214_Output_0"]
+device identity: DIFFERENT from ours
+output location: gpu-buffer
+gpuBuffer: size=64 usage=0x18c   (COPY_SRC | COPY_DST | STORAGE | INDIRECT)
+cross-device copy validation: REJECTED:
+  [Buffer (unlabeled)] is associated with [Device], and cannot be used with [Device].
+```
+
+Three things matter here.
+
+1. **The setter registers and is then discarded.** Reading `env.webgpu.device`
+   back before session creation returns our device, so the assignment took.
+   After the session exists, the backend reports a different device. ORT
+   created its own during initialization and ignored the injected one.
+2. **Nothing throws.** No error, no warning, at any point. The session runs and
+   returns a `gpu-buffer` tensor that looks entirely usable. The only thing that
+   objects is WebGPU itself, at the moment another device touches the buffer.
+3. **Everything else about the tensor is fine.** The output really is on the
+   GPU, and its usage flags (`STORAGE | COPY_SRC`) are what a shared consumer
+   would want. Device identity is the sole blocker.
+
+This validates the existing design rather than changing it. `sharedTensorCompatibility`
+checks `deviceToken` first, and that check is the only thing standing between a
+caller and a buffer that silently belongs to someone else. `visualizer-owned`
+remains the semantic contract and `runtime-copy-on-demand` the correct fallback
+for ORT.
+
+Scope of the result: onnxruntime-web 1.27.0, the asyncify/JSEP wasm build, the
+`webgpu` execution provider, headless Chromium with a hardware adapter. A
+future ORT release honouring the documented contract would flip this, which is
+what the probe script is for — re-run it on upgrade rather than re-deriving it.
+
 ### Post-loading storage policy
 
 Loading and visualization should be separate phases:

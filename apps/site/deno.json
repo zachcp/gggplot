@@ -8,7 +8,8 @@
     "test:gpu-instrument": "deno task build && deno run -A scripts/gpu_instrument_check.ts",
     "test:draw-calls": "deno task build && deno run -A scripts/draw_call_check.ts",
     "test:pixels": "deno task build && deno run -A scripts/mark_pixel_check.ts",
-    "test:rerender": "deno task build && deno run -A scripts/rerender_check.ts"
+    "test:rerender": "deno task build && deno run -A scripts/rerender_check.ts",
+    "test:ort-device": "deno run -A scripts/ort_device_probe.ts"
   },
   "imports": {
     "react": "npm:react@^18.3.1",
