@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import wasm from "vite-plugin-wasm";
 import wgslRollup from "@use-gpu/wgsl-loader/rollup";
 import { createReadStream } from "node:fs";
-import { copyFile, mkdir } from "node:fs/promises";
+import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -78,6 +78,105 @@ function ortWasmAssets(): PluginOption {
   };
 }
 
+/**
+ * Null-guard @use-gpu/traits' sameArray (gggplot-cfe).
+ *
+ * traits/mjs/should.mjs:
+ *   sameArray  = (same)=>(a, b)=>{ const isA = typeof a === 'object' && 'length' in a; ...
+ *   sameObject = (same)=>(a, b)=>{ const isA = typeof a === 'object' && !!a; ...
+ *
+ * typeof null === 'object', so sameArray throws "Cannot use 'in' operator to
+ * search for 'length' in null". sameObject directly below it guards with !!a;
+ * sameArray does not, and sameShallow tries sameArray FIRST.
+ *
+ * @use-gpu/plot's Grid is memoized with
+ * shouldEqual({ first: sameShallow(), second: sameShallow() }), and null is
+ * the SUPPORTED "do not draw this side" value — grid.mjs itself branches on
+ * props.first !== null. compile/mod.ts and compile/guides_3d.ts pass exactly
+ * that, one null per single-axis grid, so every grid-bearing chart throws an
+ * uncaught page error on RE-RENDER. Mount-only charts never showed it.
+ *
+ * There is no local encoding that avoids the null: suppressing a side by
+ * generating zero ticks instead was implemented and measured, and it binds a
+ * zero-size WebGPU buffer, which errors on every route on FIRST render — worse
+ * than the bug. 0.20.0 is the latest published traits, so there is nothing to
+ * bump to either. That leaves patching the dependency.
+ *
+ * Applied twice on purpose: `transform` covers the rollup build, and the
+ * optimizeDeps esbuild plugin covers the dev server, which pre-bundles deps
+ * and never runs plugin transforms.
+ *
+ * This THROWS rather than skipping when the expected source is absent. A patch
+ * that silently stopped applying would let an uncaught page error back in with
+ * nothing to notice it, which is the failure mode worth defending against on a
+ * dependency-version bump.
+ */
+const TRAITS_SHOULD_MODULE = /@use-gpu[/\\+]traits.*should\.mjs$/;
+
+/** The unguarded shape, matched by structure so upstream whitespace or
+ * variable renames do not trip the guard: `typeof x === 'object' && 'length'
+ * in x`, once for each side of the comparison. */
+const UNGUARDED_LENGTH_TEST = /typeof (\w+) === 'object' && 'length' in \1/g;
+
+function patchSameArrayNullGuard(code: string, id: string): string {
+  const applied = (code.match(UNGUARDED_LENGTH_TEST) ?? []).length;
+  if (applied !== 2) {
+    throw new Error(
+      `[gggplot-cfe] Expected 2 unguarded sameArray length tests in ${id}, ` +
+        `found ${applied}. @use-gpu/traits changed shape: re-read should.mjs, ` +
+        `then update this patch or drop it if upstream fixed the null guard.`,
+    );
+  }
+  return code.replace(
+    UNGUARDED_LENGTH_TEST,
+    (_match, name: string) =>
+      `typeof ${name} === 'object' && ${name} !== null && 'length' in ${name}`,
+  );
+}
+
+function useGpuTraitsNullGuard(): PluginOption {
+  return {
+    name: "gggplot-use-gpu-traits-null-guard",
+    enforce: "pre",
+    // Build (rollup) path.
+    transform(code, id) {
+      if (!TRAITS_SHOULD_MODULE.test(id)) return null;
+      return { code: patchSameArrayNullGuard(code, id), map: null };
+    },
+    // Dev path: deps are pre-bundled by esbuild, which never sees `transform`.
+    config() {
+      return {
+        optimizeDeps: {
+          esbuildOptions: {
+            plugins: [{
+              name: "gggplot-use-gpu-traits-null-guard-esbuild",
+              setup(build: {
+                onLoad(
+                  filter: { filter: RegExp },
+                  cb: (args: { path: string }) => Promise<
+                    { contents: string; loader: "js" }
+                  >,
+                ): void;
+              }) {
+                build.onLoad(
+                  { filter: TRAITS_SHOULD_MODULE },
+                  async ({ path }) => ({
+                    contents: patchSameArrayNullGuard(
+                      await readFile(path, "utf8"),
+                      path,
+                    ),
+                    loader: "js",
+                  }),
+                );
+              },
+            }],
+          },
+        },
+      };
+    },
+  };
+}
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -115,6 +214,7 @@ export default defineConfig({
     wasmPlugin(),
     wgslPlugin(),
     ortWasmAssets(),
+    useGpuTraitsNullGuard(),
   ],
   server: { port: 8080 },
   preview: { port: 8080 },
