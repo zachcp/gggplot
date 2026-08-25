@@ -286,8 +286,18 @@ async function inspectRoute(
           return {
             width: Math.round(box.width),
             height: Math.round(box.height),
-            accessible: surface.getAttribute("role") === "img" &&
-              Boolean(surface.getAttribute("aria-label")?.trim()),
+            // A chart surface must be named, and must carry a role that
+            // describes what it actually is. "img" suits a static 2D plot:
+            // it is a leaf in the accessibility tree, which is correct when
+            // there is nothing inside to reach. The 3D surface is NOT that —
+            // it holds orbit/pan/zoom affordances and a real Reset camera
+            // button — and role="img" would prune those from the tree
+            // entirely. So "group" is the right role there, and this gate
+            // accepts both rather than forcing an accessibility regression to
+            // satisfy itself (gggplot-5xq).
+            accessible: ["img", "group"].includes(
+              surface.getAttribute("role") ?? "",
+            ) && Boolean(surface.getAttribute("aria-label")?.trim()),
           };
         }),
     );
