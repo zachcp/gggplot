@@ -165,10 +165,18 @@ export function legendNodes(
       })
     ));
     nodes.push(
-      labelNode(labelX, y, [
-        String(Number(hi.toFixed(2))),
-        String(Number(lo.toFixed(2))),
-      ], theme, undefined, 0, keyStep),
+      labelNode(
+        labelX,
+        y,
+        [
+          String(Number(hi.toFixed(2))),
+          String(Number(lo.toFixed(2))),
+        ],
+        theme,
+        undefined,
+        0,
+        keyStep,
+      ),
     );
     y += 0.36 * rowScale;
   };
@@ -283,6 +291,10 @@ export function legendNodes(
  */
 export function plotLabelNodes(labels: PlotLabels, theme: Theme): RenderNode[] {
   const nodes: RenderNode[] = [];
+  // These anchors sit a fixed 4% in from an edge, so they must be aligned to
+  // that edge rather than centred on it — see labelNode's `placement` note and
+  // gggplot-5ze. Left-corner text grows rightward; the right-corner tag grows
+  // leftward.
   if (labels.title) {
     nodes.push(
       labelNode(
@@ -291,12 +303,24 @@ export function plotLabelNodes(labels: PlotLabels, theme: Theme): RenderNode[] {
         [labels.title],
         theme,
         (theme.fontSize ?? 14) + 4,
+        0,
+        undefined,
+        "left",
       ),
     );
   }
   if (labels.subtitle) {
     nodes.push(
-      labelNode(-0.92, -0.84, [labels.subtitle], theme, theme.fontSize ?? 14),
+      labelNode(
+        -0.92,
+        -0.84,
+        [labels.subtitle],
+        theme,
+        theme.fontSize ?? 14,
+        0,
+        undefined,
+        "left",
+      ),
     );
   }
   if (labels.caption) {
@@ -307,12 +331,24 @@ export function plotLabelNodes(labels: PlotLabels, theme: Theme): RenderNode[] {
         [labels.caption],
         theme,
         Math.max((theme.fontSize ?? 13) - 1, 8),
+        0,
+        undefined,
+        "left",
       ),
     );
   }
   if (labels.tag) {
     nodes.push(
-      labelNode(0.92, -0.92, [labels.tag], theme, theme.fontSize ?? 14),
+      labelNode(
+        0.92,
+        -0.92,
+        [labels.tag],
+        theme,
+        theme.fontSize ?? 14,
+        0,
+        undefined,
+        "right",
+      ),
     );
   }
   return nodes;
