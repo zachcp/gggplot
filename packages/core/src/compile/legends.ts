@@ -8,6 +8,7 @@ import {
   scaleSizeValue,
   type TrainedScale,
 } from "../scale/mod.ts";
+import { CATEGORICAL_PALETTE, OTHER_COLOR } from "../scale/palette.ts";
 import { colorWithAlpha } from "../geom/shared.ts";
 import { labelNode } from "./guide_text.ts";
 
@@ -97,12 +98,50 @@ export function legendNodes(
   const discreteSwatchLegend = (scale: TrainedScale, aes: "color" | "fill") => {
     const levels = scale.domain as string[];
     pushTitle(scale, aes);
+
+    // Two independent limits, both of which used to be ignored (gggplot-i5m.21).
+    //
+    // 1. THE PALETTE. Past CATEGORICAL_PALETTE.length levels every further
+    //    level is drawn in the same OTHER_COLOR, so listing them individually
+    //    printed N rows carrying identical swatches and different labels —
+    //    advertising distinctions the plot cannot draw. Fold them into one
+    //    row that says how many, matching what the marks actually show.
+    // 2. THE CANVAS. Keys stack downward from y with no upper bound and ran
+    //    off the +1 edge of the guide overlay, silently losing the tail.
+    //    Truncate to what fits and spend the last row saying what was cut.
+    const paletted = levels.length > CATEGORICAL_PALETTE.length
+      ? [
+        ...levels.slice(0, CATEGORICAL_PALETTE.length).map((level) => ({
+          label: level,
+          color: scaleColorValue(scale, level),
+        })),
+        {
+          label: `Other (${levels.length - CATEGORICAL_PALETTE.length})`,
+          color: OTHER_COLOR,
+        },
+      ]
+      : levels.map((level) => ({
+        label: level,
+        color: scaleColorValue(scale, level),
+      }));
+
+    // Rows between the current cursor and the overlay's bottom edge. Floor,
+    // so a partially-visible final row never counts as fitting.
+    const rowsAvailable = Math.max(1, Math.floor((1 - y) / keyStep));
+    const truncated = paletted.length > rowsAvailable;
+    // One row is spent on the "+N more" note, so it is never itself clipped.
+    const shown = truncated ? paletted.slice(0, rowsAvailable - 1) : paletted;
+    const hidden = paletted.length - shown.length;
+
     nodes.push(node("Point", {
-      positions: swatchColumn(levels.length),
-      colors: levels.map((level) => scaleColorValue(scale, level)),
+      positions: swatchColumn(shown.length),
+      colors: shown.map((entry) => entry.color),
       size: 7,
     }));
-    pushKeyLabels(levels);
+    pushKeyLabels([
+      ...shown.map((entry) => entry.label),
+      ...(truncated ? [`+${hidden} more`] : []),
+    ]);
   };
 
   if (
