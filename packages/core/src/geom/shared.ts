@@ -30,6 +30,24 @@ export function valuesOf(
   return column && column in data ? columnValues(data, column) : undefined;
 }
 
+/**
+ * True when a raw (pre-scale) position value carries no position at all.
+ *
+ * This has to be tested BEFORE scalePosition, not after. ingest() turns NaN
+ * into null, and scalePosition maps null onto a perfectly finite coordinate:
+ * a continuous scale runs Number(null) === 0, and a discrete one runs
+ * String(null).indexOf() === -1. So a finiteness test on the SCALED value
+ * cannot distinguish "row 2 sits at the origin" from "row 2 has no y", and a
+ * missing row silently acquires a coordinate its data never had (gggplot-ybv).
+ *
+ * Callers should still keep their existing finiteness check on the scaled
+ * result — this predicate covers missing input, that one covers values which
+ * scale to something unplottable (a non-numeric string, log of a negative).
+ */
+export function isMissingPosition(raw: unknown): boolean {
+  return raw == null || (typeof raw === "number" && !Number.isFinite(raw));
+}
+
 /** Pull an [x,y] position array for a layer from its mapped columns. */
 export function positionsOf(
   mapping: Aes,
@@ -195,7 +213,13 @@ export function strokesOf(
   data: GGSpec["data"],
   strokeScale: TrainedScale | undefined,
 ): number[] | undefined {
-  return scaledColumn(mapping, data, "stroke", strokeScale, scaleLinewidthValue);
+  return scaledColumn(
+    mapping,
+    data,
+    "stroke",
+    strokeScale,
+    scaleLinewidthValue,
+  );
 }
 
 /** A connected Line has one dash style; grouping has already isolated its level. */
@@ -337,7 +361,6 @@ export function stepPositions(
   }
   return out;
 }
-
 
 // ---------------------------------------------------------------------------
 // FlatTensor packing primitives live in geom/packing.ts; re-exported here so

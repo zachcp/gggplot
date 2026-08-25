@@ -10,6 +10,7 @@ import {
   colorsOf,
   depthProps,
   type FaceLoop,
+  isMissingPosition,
   normalizeFontface,
   packFaceLoops,
   packMarkRows,
@@ -72,6 +73,10 @@ export function lowerText(
     row++
   ) {
     if (rawLabels[row] == null) continue;
+    // Check the raw values before scaling, not only the result: scalePosition
+    // maps a missing value onto a finite coordinate, so a finiteness test
+    // alone would place a glyph where the data has no position (gggplot-ybv).
+    if (isMissingPosition(rawX[row]) || isMissingPosition(rawY[row])) continue;
     const position: [number, number] = [
       scalePosition(xScale, rawX[row]),
       scalePosition(yScale, rawY[row]),
@@ -339,10 +344,11 @@ function lowerText3d(
   );
   for (let row = 0; row < rows; row++) {
     if (rawLabels[row] == null) continue;
-    // Check the raw values before scaling, not only the result: ingest turns
-    // NaN into null, and scalePosition maps null onto a finite coordinate, so
-    // a finiteness test alone would place a glyph for a missing position.
-    if (rawX[row] == null || rawY[row] == null || rawZ[row] == null) continue;
+    // Same pre-scale guard as the 2D path above; see isMissingPosition.
+    if (
+      isMissingPosition(rawX[row]) || isMissingPosition(rawY[row]) ||
+      isMissingPosition(rawZ[row])
+    ) continue;
     const x = scalePosition(ctx.scales.x, rawX[row]);
     const y = scalePosition(ctx.scales.y, rawY[row]);
     const z = scalePosition(ctx.scales.z, rawZ[row]);
