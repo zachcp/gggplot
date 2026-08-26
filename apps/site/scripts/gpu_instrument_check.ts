@@ -14,6 +14,7 @@
  * alongside visual_smoke.ts's own artifacts.
  */
 import { chromium } from "npm:playwright@^1.61.1";
+import { browserArgs } from "./browser_args.ts";
 
 const host = "127.0.0.1";
 const port = 20_000 + Math.floor(Math.random() * 20_000);
@@ -55,10 +56,12 @@ try {
   await waitForServer();
   const browser = await chromium.launch({
     headless: true,
-    args: ["--enable-unsafe-webgpu", "--enable-webgpu-developer-features"],
+    args: browserArgs(),
   });
   try {
-    const page = await browser.newPage({ viewport: { width: 640, height: 480 } });
+    const page = await browser.newPage({
+      viewport: { width: 640, height: 480 },
+    });
     const consoleErrors: string[] = [];
     page.on("console", (message) => {
       if (Deno.env.get("GGGPLOT_DEBUG_CONSOLE")) {
@@ -77,14 +80,21 @@ try {
         const probe = (window as unknown as {
           __gggplotInstrumentProbe?: () => Promise<ProbeResult>;
         }).__gggplotInstrumentProbe;
-        if (!probe) throw new Error("__gggplotInstrumentProbe was not installed");
+        if (!probe) {
+          throw new Error("__gggplotInstrumentProbe was not installed");
+        }
         return await probe();
       }) as ProbeResult;
 
       await Deno.writeTextFile(
         new URL("gpu-instrument-report.json", output),
         JSON.stringify(
-          { baseUrl, generatedAt: new Date().toISOString(), result, consoleErrors },
+          {
+            baseUrl,
+            generatedAt: new Date().toISOString(),
+            result,
+            consoleErrors,
+          },
           null,
           2,
         ),

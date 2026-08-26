@@ -261,7 +261,10 @@ export const residentCases: Array<{ name: string; build: () => Spec }> = [
   },
 ];
 
-const dir = new URL(
+/** Where the saved RenderTree baselines live. Exported so the drift test
+ * (packages/core/tests/geom_fixture_drift_test.ts) reads exactly the files
+ * this script writes, rather than repeating the path. */
+export const fixtureDir = new URL(
   "../packages/core/tests/fixtures/geom_registry/",
   import.meta.url,
 );
@@ -300,16 +303,12 @@ function treeForResident(build: () => Spec): unknown {
   };
 }
 
-// Guarded behind import.meta.main so serializeTypedArrays (and the case
-// tables above) can be imported from tests without running the fixture
-// read/write/compare side effects — e.g. packages/core/tests/mark_tensor_test.ts
-// exercises the serializer in isolation.
-if (import.meta.main) {
-  const check = Deno.args.includes("--check");
-  if (!check) await Deno.mkdir(dir, { recursive: true });
-
-  let failures = 0;
-  const allCases: Array<{ name: string; json: string }> = [
+/** Compiles every case and serializes it exactly as the saved fixtures are
+ * written. Exported so the drift test compares against the same bytes this
+ * script would write — a check that re-derived the serialization could pass
+ * while the on-disk baseline was stale. */
+export function renderFixtures(): Array<{ name: string; json: string }> {
+  return [
     ...cases.map(({ name, build }) => ({
       name,
       json: JSON.stringify(treeFor(build), serializeTypedArrays, 2),
@@ -319,8 +318,19 @@ if (import.meta.main) {
       json: JSON.stringify(treeForResident(build), serializeTypedArrays, 2),
     })),
   ];
-  for (const { name, json } of allCases) {
-    const file = new URL(`${name}.json`, dir);
+}
+
+// Guarded behind import.meta.main so serializeTypedArrays, renderFixtures, and
+// the case tables above can be imported from tests without running the fixture
+// read/write/compare side effects — e.g. packages/core/tests/mark_tensor_test.ts
+// exercises the serializer in isolation.
+if (import.meta.main) {
+  const check = Deno.args.includes("--check");
+  if (!check) await Deno.mkdir(fixtureDir, { recursive: true });
+
+  let failures = 0;
+  for (const { name, json } of renderFixtures()) {
+    const file = new URL(`${name}.json`, fixtureDir);
     if (check) {
       const prev = await Deno.readTextFile(file);
       if (prev !== json) {

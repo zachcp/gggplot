@@ -7,6 +7,7 @@
  * failure has a route screenshot and machine-readable diagnostic beside it.
  */
 import { chromium } from "npm:playwright@^1.61.1";
+import { browserArgs } from "./browser_args.ts";
 
 const host = "127.0.0.1";
 // A fresh high port prevents a user's running dev server from becoming the
@@ -50,10 +51,35 @@ try {
   await waitForServer();
   const browser = await chromium.launch({
     headless: true,
-    args: ["--enable-unsafe-webgpu", "--enable-webgpu-developer-features"],
+    args: browserArgs(),
   });
   try {
-    if (!requestedRoute) await verifyPngExport(browser);
+    if (!requestedRoute) {
+      try {
+        await verifyPngExport(browser);
+      } catch (error) {
+        // CI's software WebGPU path is expected to fail this probe today. Keep
+        // that failure actionable by writing the report before rethrowing; the
+        // workflow uploads this directory even when the gate exits non-zero.
+        await Deno.writeTextFile(
+          new URL("report.json", output),
+          JSON.stringify(
+            {
+              baseUrl,
+              viewport,
+              generatedAt: new Date().toISOString(),
+              results: [],
+              probeError: error instanceof Error
+                ? error.message
+                : String(error),
+            },
+            null,
+            2,
+          ),
+        );
+        throw error;
+      }
+    }
     const discoveryPage = await browser.newPage({ viewport });
     const discovered = await discoverRoutes(discoveryPage);
     await discoveryPage.close();
@@ -286,8 +312,18 @@ async function inspectRoute(
           return {
             width: Math.round(box.width),
             height: Math.round(box.height),
-            accessible: surface.getAttribute("role") === "img" &&
-              Boolean(surface.getAttribute("aria-label")?.trim()),
+            // A chart surface must be named, and must carry a role that
+            // describes what it actually is. "img" suits a static 2D plot:
+            // it is a leaf in the accessibility tree, which is correct when
+            // there is nothing inside to reach. The 3D surface is NOT that —
+            // it holds orbit/pan/zoom affordances and a real Reset camera
+            // button — and role="img" would prune those from the tree
+            // entirely. So "group" is the right role there, and this gate
+            // accepts both rather than forcing an accessibility regression to
+            // satisfy itself (gggplot-5xq).
+            accessible: ["img", "group"].includes(
+              surface.getAttribute("role") ?? "",
+            ) && Boolean(surface.getAttribute("aria-label")?.trim()),
           };
         }),
     );

@@ -13,11 +13,7 @@ import { LINE_3D_DEPTH, lowerLine } from "./line.ts";
 import { barDomainContribution, barResidentPlan, lowerBar } from "./bar.ts";
 import { areaDomainContribution, lowerArea } from "./area.ts";
 import { lowerPolygon } from "./polygon.ts";
-import {
-  lowerSurface3d,
-  lowerVoxel,
-  SURFACE_3D_DEPTH,
-} from "./surface_3d.ts";
+import { lowerSurface3d, lowerVoxel, SURFACE_3D_DEPTH } from "./surface_3d.ts";
 import { lowerTile, tileDomainContribution, tileResidentPlan } from "./tile.ts";
 import { lowerHex } from "./hex.ts";
 import { lowerInterval } from "./errorbar.ts";
@@ -70,6 +66,7 @@ const doc = (
 /** Every GeomKind maps to exactly one definition; several kinds may share a lower fn. */
 export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
   point: {
+    dropsMissingPositions: true,
     defaultStat: "identity",
     lower: lowerPoint,
     dimensionalParams: ["sizeMode"],
@@ -93,6 +90,7 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
     ]),
   },
   dotplot: {
+    dropsMissingPositions: true,
     defaultStat: "dotplot",
     lower: lowerPoint,
     doc: doc("Bin observations into stacked dots.", ["x"], [
@@ -152,6 +150,7 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
     ),
   },
   bar: {
+    dropsMissingPositions: true,
     defaultStat: "count",
     defaultPosition: "stack",
     lower: lowerBar,
@@ -166,6 +165,7 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
     }),
   },
   col: {
+    dropsMissingPositions: true,
     defaultStat: "identity",
     defaultPosition: "stack",
     lower: lowerBar,
@@ -248,6 +248,7 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
     ]),
   },
   tile: {
+    dropsMissingPositions: true,
     defaultStat: "identity",
     lower: lowerTile,
     // z is a value channel here, not a position; see dimension_resolver_test.
@@ -399,6 +400,7 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
     ], [...lineVisual]),
   },
   rect: {
+    dropsMissingPositions: true,
     defaultStat: "identity",
     lower: lowerRect,
     modes: [
@@ -502,16 +504,21 @@ export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
         depth: SURFACE_3D_DEPTH,
       },
     ],
-    doc: doc("Draw occupancy cells for binned 3D observations.", [
-      "x",
-      "y",
-      "z",
-    ], ["fill", "color", "alpha", "group"], {
-      bins: "Bin count per axis; scalar or [x, y, z].",
-      binwidth: "Bin width per axis; scalar or [x, y, z]. Overrides bins.",
-      boundary: "Bin edge alignment; scalar or [x, y, z].",
-      padding: "Shrink each cell toward its center, 0 to 1, for legibility.",
-    }),
+    doc: doc(
+      "Draw occupancy cells for binned 3D observations.",
+      [
+        "x",
+        "y",
+        "z",
+      ],
+      ["fill", "color", "alpha", "group"],
+      {
+        bins: "Bin count per axis; scalar or [x, y, z].",
+        binwidth: "Bin width per axis; scalar or [x, y, z]. Overrides bins.",
+        boundary: "Bin edge alignment; scalar or [x, y, z].",
+        padding: "Shrink each cell toward its center, 0 to 1, for legibility.",
+      },
+    ),
   },
   blank: {
     defaultStat: "identity",

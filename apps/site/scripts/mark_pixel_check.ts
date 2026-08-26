@@ -26,6 +26,7 @@
  * Usage: deno task test:pixels
  */
 import { chromium } from "npm:playwright@^1.61.1";
+import { browserArgs } from "./browser_args.ts";
 
 // WebGPU globals exist in the page, not in Deno: every page.evaluate callback
 // below is serialized and run by the browser. Declaring them keeps `deno check`
@@ -72,7 +73,11 @@ const ORIENTATION = {
  * Showcases whose geom is given a literal colour param, matched by a substring
  * of the surface's aria-label. Keep these in sync with docs/example_3d.ts.
  */
-const MARK_COLORS: { match: string; color: [number, number, number]; min: number }[] = [
+const MARK_COLORS: {
+  match: string;
+  color: [number, number, number];
+  min: number;
+}[] = [
   // geom_segment({ color: "#38bdf8" }) — the original gggplot-frg regression.
   { match: "swirl field", color: [56, 189, 248], min: 1000 },
 ];
@@ -254,18 +259,23 @@ try {
   await waitForServer();
   const browser = await chromium.launch({
     headless: true,
-    args: ["--enable-unsafe-webgpu", "--enable-webgpu-developer-features"],
+    args: browserArgs(),
   });
   try {
-    const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+    const page = await browser.newPage({
+      viewport: { width: 1400, height: 1000 },
+    });
     await page.addInitScript(INSTRUMENT);
     await page.goto(`${baseUrl}/#three-d`, { waitUntil: "networkidle" });
     await page.waitForTimeout(9000);
 
     const installError = await page.evaluate(() =>
-      (globalThis as unknown as { __markShotInstallError?: string }).__markShotInstallError
+      (globalThis as unknown as { __markShotInstallError?: string })
+        .__markShotInstallError
     );
-    if (installError) throw new Error(`instrumentation failed: ${installError}`);
+    if (installError) {
+      throw new Error(`instrumentation failed: ${installError}`);
+    }
 
     const stats = await page.evaluate(
       async ({ background, tolerance, markColors }) => {
@@ -321,7 +331,11 @@ try {
             pixels: shot.width * shot.height,
             nonBackground,
             black,
-            marks: wanted.map((m, k) => ({ match: m.match, count: hits[k], min: m.min })),
+            marks: wanted.map((m, k) => ({
+              match: m.match,
+              count: hits[k],
+              min: m.min,
+            })),
           });
         }
         return out;
@@ -330,19 +344,25 @@ try {
     );
 
     if (!stats.length) {
-      failures.push("no 3D canvas was captured at all — the probe never saw a frame.");
+      failures.push(
+        "no 3D canvas was captured at all — the probe never saw a frame.",
+      );
     }
     const seen = new Set<string>();
     for (const shot of stats) {
       const short = shot.label.slice(0, 46);
       const coverage = shot.nonBackground / shot.pixels;
       console.log(
-        `${short}: coverage=${(coverage * 100).toFixed(1)}% black=${shot.black}` +
+        `${short}: coverage=${
+          (coverage * 100).toFixed(1)
+        }% black=${shot.black}` +
           shot.marks.map((m) => ` ${m.match}=${m.count}`).join(""),
       );
       if (coverage < MIN_NON_BACKGROUND) {
         failures.push(
-          `"${short}" is blank: only ${(coverage * 100).toFixed(2)}% of the canvas ` +
+          `"${short}" is blank: only ${
+            (coverage * 100).toFixed(2)
+          }% of the canvas ` +
             `differs from the background (floor ${MIN_NON_BACKGROUND * 100}%).`,
         );
       }
@@ -373,16 +393,23 @@ try {
       failures.push("no showcase available to test orbit interaction against.");
     } else {
       const box = await page.evaluate((label: string) => {
-        const surface = Array.from(document.querySelectorAll("[data-chart-surface]"))
+        const surface = Array.from(
+          document.querySelectorAll("[data-chart-surface]"),
+        )
           .find((el) => el.getAttribute("aria-label") === label);
         if (!surface) return null;
         surface.scrollIntoView({ block: "center" });
         const rect = surface.getBoundingClientRect();
-        return { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
+        return {
+          cx: rect.left + rect.width / 2,
+          cy: rect.top + rect.height / 2,
+        };
       }, orbitTarget);
       const short = orbitTarget.slice(0, 46);
       if (!box) {
-        failures.push(`could not locate the surface for "${short}" to orbit it.`);
+        failures.push(
+          `could not locate the surface for "${short}" to orbit it.`,
+        );
       } else {
         await page.waitForTimeout(1200);
         await page.evaluate(
@@ -417,11 +444,19 @@ try {
         if (changed == null) {
           failures.push(`orbit check could not read frames for "${short}".`);
         } else {
-          console.log(`orbit "${short}": ${(changed * 100).toFixed(1)}% of pixels changed`);
+          console.log(
+            `orbit "${short}": ${
+              (changed * 100).toFixed(1)
+            }% of pixels changed`,
+          );
           if (changed < MIN_ORBIT_CHANGE) {
             failures.push(
-              `dragging "${short}" changed only ${(changed * 100).toFixed(2)}% of the ` +
-                `canvas (floor ${MIN_ORBIT_CHANGE * 100}%) — the orbit camera is not ` +
+              `dragging "${short}" changed only ${
+                (changed * 100).toFixed(2)
+              }% of the ` +
+                `canvas (floor ${
+                  MIN_ORBIT_CHANGE * 100
+                }%) — the orbit camera is not ` +
                 `responding to pointer input.`,
             );
           }
@@ -430,7 +465,9 @@ try {
     }
 
     // --- Orientation: is the scene the right way up? (gggplot-8zx)
-    const oriented = stats.find((shot) => shot.label.toLowerCase().includes(ORIENTATION.match));
+    const oriented = stats.find((shot) =>
+      shot.label.toLowerCase().includes(ORIENTATION.match)
+    );
     if (!oriented) {
       failures.push(
         `no captured showcase matched "${ORIENTATION.match}" — the orientation ` +
@@ -441,7 +478,11 @@ try {
         ({ label, low, high, tolerance }) => {
           const shots = (globalThis as unknown as {
             __markShots: Record<string, {
-              buffer: GPUBuffer; bytesPerRow: number; width: number; height: number; format: string;
+              buffer: GPUBuffer;
+              bytesPerRow: number;
+              width: number;
+              height: number;
+              format: string;
             }>;
           }).__markShots;
           const shot = shots[label];
@@ -454,7 +495,8 @@ try {
             shot.buffer.unmap();
             const bgra = (shot.format || "").startsWith("bgra");
             const near = (r: number, g: number, b: number, c: number[]) =>
-              Math.abs(r - c[0]) <= tolerance && Math.abs(g - c[1]) <= tolerance &&
+              Math.abs(r - c[0]) <= tolerance &&
+              Math.abs(g - c[1]) <= tolerance &&
               Math.abs(b - c[2]) <= tolerance;
             let lowSum = 0, lowN = 0, highSum = 0, highN = 0;
             for (let y = 0; y < shot.height; y++) {
@@ -463,11 +505,21 @@ try {
                 const r = bgra ? bytes[i + 2] : bytes[i];
                 const g = bytes[i + 1];
                 const b = bgra ? bytes[i] : bytes[i + 2];
-                if (near(r, g, b, low)) { lowSum += y; lowN++; }
-                else if (near(r, g, b, high)) { highSum += y; highN++; }
+                if (near(r, g, b, low)) {
+                  lowSum += y;
+                  lowN++;
+                } else if (near(r, g, b, high)) {
+                  highSum += y;
+                  highN++;
+                }
               }
             }
-            return { low: lowN ? lowSum / lowN : null, high: highN ? highSum / highN : null, lowN, highN };
+            return {
+              low: lowN ? lowSum / lowN : null,
+              high: highN ? highSum / highN : null,
+              lowN,
+              highN,
+            };
           })();
         },
         {
@@ -480,14 +532,22 @@ try {
       const short = oriented.label.slice(0, 46);
       if (!centroids || centroids.low == null || centroids.high == null) {
         failures.push(
-          `could not find both height bands in "${short}" (low=${centroids?.lowN ?? 0}px, ` +
-            `high=${centroids?.highN ?? 0}px) — the orientation guard cannot run.`,
+          `could not find both height bands in "${short}" (low=${
+            centroids?.lowN ?? 0
+          }px, ` +
+            `high=${
+              centroids?.highN ?? 0
+            }px) — the orientation guard cannot run.`,
         );
       } else {
         const separation = centroids.low - centroids.high;
         console.log(
-          `orientation "${short}": low band centroid row ${centroids.low.toFixed(0)}, ` +
-            `high band ${centroids.high.toFixed(0)}, separation ${separation.toFixed(0)}px`,
+          `orientation "${short}": low band centroid row ${
+            centroids.low.toFixed(0)
+          }, ` +
+            `high band ${centroids.high.toFixed(0)}, separation ${
+              separation.toFixed(0)
+            }px`,
         );
         if (separation < ORIENTATION.minSeparationPx) {
           failures.push(

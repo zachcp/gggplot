@@ -8,6 +8,7 @@ import {
   scaleSizeValue,
   type TrainedScale,
 } from "../scale/mod.ts";
+import { CATEGORICAL_PALETTE } from "../scale/palette.ts";
 import { colorWithAlpha } from "../geom/shared.ts";
 import { labelNode } from "./guide_text.ts";
 
@@ -85,6 +86,16 @@ export function legendNodes(
       { length: count },
       (_, i): [number, number] => [swatchX, y + i * keyStep],
     );
+  const fitKeyRows = <T>(entries: readonly T[]) => {
+    const slots = Math.max(0, Math.floor((1 - y) / keyStep));
+    if (entries.length <= slots) {
+      return { shown: [...entries], hidden: 0, slots };
+    }
+    // Reserve the final available row for a notice, so truncation itself is
+    // visible and the notice cannot be the row that falls off-canvas.
+    const shown = entries.slice(0, Math.max(0, slots - 1));
+    return { shown, hidden: entries.length - shown.length, slots };
+  };
   // size/alpha/linewidth all key a continuous domain by [lo, mid, hi]
   // representative values (or just [lo] when the domain is a single point).
   const representativeValues = (scale: TrainedScale): number[] => {
@@ -96,13 +107,55 @@ export function legendNodes(
   // tinted by the scale — differing only in which scale supplies the color.
   const discreteSwatchLegend = (scale: TrainedScale, aes: "color" | "fill") => {
     const levels = scale.domain as string[];
+    // A prior guide can consume the remaining canvas. Do not place this
+    // guide's title or keys beyond the overlay edge.
+    if (y > 1) return;
     pushTitle(scale, aes);
+
+    // Two independent limits, both of which used to be ignored (gggplot-i5m.21).
+    //
+    // 1. THE PALETTE. Past CATEGORICAL_PALETTE.length levels every further
+    //    level is drawn in the same OTHER_COLOR, so listing them individually
+    //    printed N rows carrying identical swatches and different labels —
+    //    advertising distinctions the plot cannot draw. Fold them into one
+    //    row that says how many, matching what the marks actually show.
+    // 2. THE CANVAS. Keys stack downward from y with no upper bound and ran
+    //    off the +1 edge of the guide overlay, silently losing the tail.
+    //    Truncate to what fits and spend the last row saying what was cut.
+    // A user-provided range can distinguish more levels than the built-in
+    // palette. Only fold levels once both the built-in and custom ranges are
+    // exhausted, matching the colors scaleColorValue actually draws.
+    const paletteCapacity = scale.rangeExplicit
+      ? Math.max(CATEGORICAL_PALETTE.length, scale.range?.length ?? 0)
+      : CATEGORICAL_PALETTE.length;
+    const paletted = levels.length > paletteCapacity
+      ? [
+        ...levels.slice(0, paletteCapacity).map((level) => ({
+          label: level,
+          color: scaleColorValue(scale, level),
+        })),
+        {
+          label: `Other (${levels.length - paletteCapacity})`,
+          color: scaleColorValue(scale, levels[paletteCapacity]),
+        },
+      ]
+      : levels.map((level) => ({
+        label: level,
+        color: scaleColorValue(scale, level),
+      }));
+
+    const { shown, hidden, slots } = fitKeyRows(paletted);
+    if (!slots) return;
+
     nodes.push(node("Point", {
-      positions: swatchColumn(levels.length),
-      colors: levels.map((level) => scaleColorValue(scale, level)),
+      positions: swatchColumn(shown.length),
+      colors: shown.map((entry) => entry.color),
       size: 7,
     }));
-    pushKeyLabels(levels);
+    pushKeyLabels([
+      ...shown.map((entry) => entry.label),
+      ...(hidden ? [`+${hidden} more`] : []),
+    ]);
   };
 
   if (
@@ -165,10 +218,18 @@ export function legendNodes(
       })
     ));
     nodes.push(
-      labelNode(labelX, y, [
-        String(Number(hi.toFixed(2))),
-        String(Number(lo.toFixed(2))),
-      ], theme, undefined, 0, keyStep),
+      labelNode(
+        labelX,
+        y,
+        [
+          String(Number(hi.toFixed(2))),
+          String(Number(lo.toFixed(2))),
+        ],
+        theme,
+        undefined,
+        0,
+        keyStep,
+      ),
     );
     y += 0.36 * rowScale;
   };
@@ -215,8 +276,11 @@ export function legendNodes(
     typeof shapeScale.domain[0] === "string"
   ) {
     const levels = shapeScale.domain as string[];
+    if (y > 1) return nodes;
     pushTitle(shapeScale, "shape");
-    levels.forEach((level, i) => {
+    const { shown, hidden, slots } = fitKeyRows(levels);
+    if (!slots) return nodes;
+    shown.forEach((level, i) => {
       nodes.push(node("Point", {
         positions: [[swatchX, y + i * keyStep]],
         shape: scaleShapeValue(shapeScale, level),
@@ -224,7 +288,7 @@ export function legendNodes(
         size: 7,
       }));
     });
-    pushKeyLabels(levels);
+    pushKeyLabels([...shown, ...(hidden ? [`+${hidden} more`] : [])]);
   }
 
   if (
@@ -232,8 +296,11 @@ export function legendNodes(
     typeof linetypeScale.domain[0] === "string"
   ) {
     const levels = linetypeScale.domain as string[];
+    if (y > 1) return nodes;
     pushTitle(linetypeScale, "linetype");
-    levels.forEach((level, i) => {
+    const { shown, hidden, slots } = fitKeyRows(levels);
+    if (!slots) return nodes;
+    shown.forEach((level, i) => {
       const dash = scaleLinetypeValue(linetypeScale, level);
       nodes.push(node("Line", {
         positions: [[swatchX - 0.025, y + i * keyStep], [
@@ -245,7 +312,7 @@ export function legendNodes(
         ...(dash ? { dash } : {}),
       }));
     });
-    pushKeyLabels(levels);
+    pushKeyLabels([...shown, ...(hidden ? [`+${hidden} more`] : [])]);
   }
 
   if (linewidthScale && !Array.isArray(linewidthScale.domain[0])) {
@@ -283,6 +350,10 @@ export function legendNodes(
  */
 export function plotLabelNodes(labels: PlotLabels, theme: Theme): RenderNode[] {
   const nodes: RenderNode[] = [];
+  // These anchors sit a fixed 4% in from an edge, so they must be aligned to
+  // that edge rather than centred on it — see labelNode's `placement` note and
+  // gggplot-5ze. Left-corner text grows rightward; the right-corner tag grows
+  // leftward.
   if (labels.title) {
     nodes.push(
       labelNode(
@@ -291,12 +362,24 @@ export function plotLabelNodes(labels: PlotLabels, theme: Theme): RenderNode[] {
         [labels.title],
         theme,
         (theme.fontSize ?? 14) + 4,
+        0,
+        undefined,
+        "left",
       ),
     );
   }
   if (labels.subtitle) {
     nodes.push(
-      labelNode(-0.92, -0.84, [labels.subtitle], theme, theme.fontSize ?? 14),
+      labelNode(
+        -0.92,
+        -0.84,
+        [labels.subtitle],
+        theme,
+        theme.fontSize ?? 14,
+        0,
+        undefined,
+        "left",
+      ),
     );
   }
   if (labels.caption) {
@@ -307,12 +390,24 @@ export function plotLabelNodes(labels: PlotLabels, theme: Theme): RenderNode[] {
         [labels.caption],
         theme,
         Math.max((theme.fontSize ?? 13) - 1, 8),
+        0,
+        undefined,
+        "left",
       ),
     );
   }
   if (labels.tag) {
     nodes.push(
-      labelNode(0.92, -0.92, [labels.tag], theme, theme.fontSize ?? 14),
+      labelNode(
+        0.92,
+        -0.92,
+        [labels.tag],
+        theme,
+        theme.fontSize ?? 14,
+        0,
+        undefined,
+        "right",
+      ),
     );
   }
   return nodes;

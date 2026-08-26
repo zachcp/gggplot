@@ -18,6 +18,7 @@
     "gggplot": "deno run -A packages/core/src/cli.ts",
     "parity:matrix": "deno run -A scripts/generate_gribouille_parity_matrix.ts",
     "parity:check": "deno run -A scripts/generate_gribouille_parity_matrix.ts --check",
+    "fixtures:capture": "deno run -A scripts/capture_geom_fixtures.ts",
     "fixtures:check": "deno run -A scripts/capture_geom_fixtures.ts --check"
   }
 }

@@ -265,6 +265,7 @@ function trainColorScale(
       name: declared?.name,
       guide: declared?.guide,
       domain: levels,
+      ...(declared?.range != null ? { rangeExplicit: true } : {}),
       range: (declared?.range as string[] | undefined) ??
         categoricalRange(levels.length),
     };
