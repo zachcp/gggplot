@@ -15,7 +15,7 @@
 //   A palette-capped 9-row legend fits down to h=200 but not below, so short
 //   canvases still need truncation.
 import { assertEquals } from "@std/assert";
-import { geomPoint, ggplot, scaleColor } from "../src/dsl/mod.ts";
+import { geomLine, geomPoint, ggplot, scaleColor } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import { CATEGORICAL_PALETTE, OTHER_COLOR } from "../src/scale/palette.ts";
@@ -165,4 +165,51 @@ Deno.test("a second discrete legend never starts beyond the canvas", () => {
       ((node.props.positions ?? []) as [number, number][]).map(([, y]) => y)
     );
   assertEquals(legendYs.every((y) => y <= 1), true, legendYs.join(", "));
+});
+
+Deno.test("shape and linetype legends truncate before the canvas edge", () => {
+  const levels = Array.from({ length: 20 }, (_, i) => `level${i}`);
+  const data = {
+    x: levels.map((_, i) => i),
+    y: levels.map((_, i) => i),
+    level: levels,
+  };
+  const trees = [
+    compile(
+      ggplot(data, { x: "x", y: "y", shape: "level" }).add(geomPoint())
+        .build(),
+      {
+        layout: {
+          width: 800,
+          height: 120,
+          measureText: approximateTextMeasurer,
+        },
+      },
+    ),
+    compile(
+      ggplot(data, { x: "x", y: "y", linetype: "level" }).add(geomLine())
+        .build(),
+      {
+        layout: {
+          width: 800,
+          height: 120,
+          measureText: approximateTextMeasurer,
+        },
+      },
+    ),
+  ];
+
+  for (const tree of trees) {
+    const keyLabels = findNodes(tree, "Label").filter((node) =>
+      ((node.props.labels ?? []) as string[]).some((text) =>
+        text.startsWith("level") || /^\+\d+ more$/.test(text)
+      )
+    );
+    const ys = keyLabels.flatMap((node) =>
+      ((node.props.positions ?? []) as [number, number][]).map(([, y]) => y)
+    );
+    const texts = keyLabels.flatMap((node) => node.props.labels as string[]);
+    assertEquals(ys.every((y) => y <= 1), true, ys.join(", "));
+    assertEquals(texts.at(-1)?.endsWith("more"), true, texts.join(", "));
+  }
 });

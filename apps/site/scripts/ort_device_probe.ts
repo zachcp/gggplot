@@ -102,7 +102,11 @@ async () => {
     log("output location", String(tensor.location));
 
     const buffer = tensor.gpuBuffer ?? (tensor.getGpuBuffer ? tensor.getGpuBuffer() : undefined);
-    if (!buffer) { log("gpuBuffer", "none"); out.ok = true; return out; }
+    if (!buffer) {
+      log("gpuBuffer", "none");
+      out.error = "ORT returned no accessible GPU buffer; device sharing was not tested";
+      return out;
+    }
     log("gpuBuffer", "size=" + buffer.size + " usage=0x" + buffer.usage.toString(16));
 
     // The decisive test. Identity comparison can be fooled by module
@@ -110,13 +114,19 @@ async () => {
     ourDevice.pushErrorScope("validation");
     const dst = ourDevice.createBuffer({ size: buffer.size, usage: 0x0008 | 0x0001 });
     const encoder = ourDevice.createCommandEncoder();
+    let copyFailure;
     try {
       encoder.copyBufferToBuffer(buffer, 0, dst, 0, buffer.size);
       ourDevice.queue.submit([encoder.finish()]);
     } catch (e) {
-      log("cross-device copy", "threw " + String(e).slice(0, 140));
+      copyFailure = String(e).slice(0, 140);
+      log("cross-device copy", "threw " + copyFailure);
     }
     const error = await ourDevice.popErrorScope();
+    if (copyFailure) {
+      out.error = "device-sharing copy threw before validation completed: " + copyFailure;
+      return out;
+    }
     log(
       "shared path",
       error
@@ -154,6 +164,9 @@ try {
     for (const step of result.steps ?? []) console.log("  " + step);
     if (result.fatal) throw new Error(`probe could not start: ${result.fatal}`);
     if (result.error) throw new Error(`probe failed: ${result.error}`);
+    if (!result.ok || typeof result.shared !== "boolean") {
+      throw new Error("probe completed without a device-sharing verdict");
+    }
     console.log(
       result.shared
         ? "\nruntime-shared IS reachable — update MODEL_INSPECTION_PLAN.md."
@@ -164,5 +177,10 @@ try {
     await browser.close();
   }
 } finally {
-  server.kill();
+  try {
+    server.kill("SIGTERM");
+  } catch {
+    // Preserve an earlier startup/runtime failure if Vite already exited.
+  }
+  await server.status;
 }

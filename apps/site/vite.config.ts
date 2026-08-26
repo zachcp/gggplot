@@ -147,6 +147,10 @@ function useGpuTraitsNullGuard(): PluginOption {
     config() {
       return {
         optimizeDeps: {
+          // The ORT probe imports this only after page load. Pre-bundle it at
+          // dev-server startup so first use cannot trigger Vite's optimization
+          // reload and destroy the probe's execution context.
+          include: ["onnxruntime-web/webgpu"],
           esbuildOptions: {
             plugins: [{
               name: "gggplot-use-gpu-traits-null-guard-esbuild",

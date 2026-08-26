@@ -131,5 +131,10 @@ try {
   }
   console.log(`Re-render gate passed for ${routes.length} route(s).`);
 } finally {
-  server.kill();
+  try {
+    server.kill("SIGTERM");
+  } catch {
+    // Preserve an earlier startup/runtime failure if Vite already exited.
+  }
+  await server.status;
 }

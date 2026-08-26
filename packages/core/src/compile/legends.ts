@@ -86,6 +86,16 @@ export function legendNodes(
       { length: count },
       (_, i): [number, number] => [swatchX, y + i * keyStep],
     );
+  const fitKeyRows = <T>(entries: readonly T[]) => {
+    const slots = Math.max(0, Math.floor((1 - y) / keyStep));
+    if (entries.length <= slots) {
+      return { shown: [...entries], hidden: 0, slots };
+    }
+    // Reserve the final available row for a notice, so truncation itself is
+    // visible and the notice cannot be the row that falls off-canvas.
+    const shown = entries.slice(0, Math.max(0, slots - 1));
+    return { shown, hidden: entries.length - shown.length, slots };
+  };
   // size/alpha/linewidth all key a continuous domain by [lo, mid, hi]
   // representative values (or just [lo] when the domain is a single point).
   const representativeValues = (scale: TrainedScale): number[] => {
@@ -134,14 +144,8 @@ export function legendNodes(
         color: scaleColorValue(scale, level),
       }));
 
-    // Rows between the current cursor and the overlay's bottom edge. Floor,
-    // so a partially-visible final row never counts as fitting.
-    const rowsAvailable = Math.max(0, Math.floor((1 - y) / keyStep));
-    if (!rowsAvailable) return;
-    const truncated = paletted.length > rowsAvailable;
-    // One row is spent on the "+N more" note, so it is never itself clipped.
-    const shown = truncated ? paletted.slice(0, rowsAvailable - 1) : paletted;
-    const hidden = paletted.length - shown.length;
+    const { shown, hidden, slots } = fitKeyRows(paletted);
+    if (!slots) return;
 
     nodes.push(node("Point", {
       positions: swatchColumn(shown.length),
@@ -150,7 +154,7 @@ export function legendNodes(
     }));
     pushKeyLabels([
       ...shown.map((entry) => entry.label),
-      ...(truncated ? [`+${hidden} more`] : []),
+      ...(hidden ? [`+${hidden} more`] : []),
     ]);
   };
 
@@ -272,8 +276,11 @@ export function legendNodes(
     typeof shapeScale.domain[0] === "string"
   ) {
     const levels = shapeScale.domain as string[];
+    if (y > 1) return nodes;
     pushTitle(shapeScale, "shape");
-    levels.forEach((level, i) => {
+    const { shown, hidden, slots } = fitKeyRows(levels);
+    if (!slots) return nodes;
+    shown.forEach((level, i) => {
       nodes.push(node("Point", {
         positions: [[swatchX, y + i * keyStep]],
         shape: scaleShapeValue(shapeScale, level),
@@ -281,7 +288,7 @@ export function legendNodes(
         size: 7,
       }));
     });
-    pushKeyLabels(levels);
+    pushKeyLabels([...shown, ...(hidden ? [`+${hidden} more`] : [])]);
   }
 
   if (
@@ -289,8 +296,11 @@ export function legendNodes(
     typeof linetypeScale.domain[0] === "string"
   ) {
     const levels = linetypeScale.domain as string[];
+    if (y > 1) return nodes;
     pushTitle(linetypeScale, "linetype");
-    levels.forEach((level, i) => {
+    const { shown, hidden, slots } = fitKeyRows(levels);
+    if (!slots) return nodes;
+    shown.forEach((level, i) => {
       const dash = scaleLinetypeValue(linetypeScale, level);
       nodes.push(node("Line", {
         positions: [[swatchX - 0.025, y + i * keyStep], [
@@ -302,7 +312,7 @@ export function legendNodes(
         ...(dash ? { dash } : {}),
       }));
     });
-    pushKeyLabels(levels);
+    pushKeyLabels([...shown, ...(hidden ? [`+${hidden} more`] : [])]);
   }
 
   if (linewidthScale && !Array.isArray(linewidthScale.domain[0])) {

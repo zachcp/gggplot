@@ -54,7 +54,32 @@ try {
     args: browserArgs(),
   });
   try {
-    if (!requestedRoute) await verifyPngExport(browser);
+    if (!requestedRoute) {
+      try {
+        await verifyPngExport(browser);
+      } catch (error) {
+        // CI's software WebGPU path is expected to fail this probe today. Keep
+        // that failure actionable by writing the report before rethrowing; the
+        // workflow uploads this directory even when the gate exits non-zero.
+        await Deno.writeTextFile(
+          new URL("report.json", output),
+          JSON.stringify(
+            {
+              baseUrl,
+              viewport,
+              generatedAt: new Date().toISOString(),
+              results: [],
+              probeError: error instanceof Error
+                ? error.message
+                : String(error),
+            },
+            null,
+            2,
+          ),
+        );
+        throw error;
+      }
+    }
     const discoveryPage = await browser.newPage({ viewport });
     const discovered = await discoverRoutes(discoveryPage);
     await discoveryPage.close();

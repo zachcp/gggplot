@@ -20,7 +20,7 @@
     "@gggplot/core/compile": "../../packages/core/src/compile/mod.ts",
     "@gggplot/core": "../../packages/core/src/mod.ts",
     "@gggplot/model-inspect": "../../packages/model-inspect/src/mod.ts",
-    "onnxruntime-web/webgpu": "npm:onnxruntime-web@^1.27.0/webgpu",
+    "onnxruntime-web/webgpu": "npm:onnxruntime-web@1.27.0/webgpu",
     "@use-gpu/core": "npm:@use-gpu/core@^0.20.0",
     "@use-gpu/react": "npm:@use-gpu/react@^0.20.0",
     "@use-gpu/interact": "npm:@use-gpu/interact@^0.20.0",
