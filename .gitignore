@@ -19,3 +19,6 @@ __pycache__/
 # the site ships only its OFL-licensed faces.
 apps/site/public/fonts/SFNS*.ttf
 .beads.gate.lock
+
+# Per-gate browser build outputs (gggplot-8au); dist/ is the real artifact.
+apps/site/dist-*/
