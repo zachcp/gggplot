@@ -98,6 +98,26 @@ export function gridDivision(values: readonly unknown[]): GridDivision | null {
   };
 }
 
+/**
+ * Where the axis titles belong, in NDC, derived from the bands `guideLayout`
+ * already reserves for them (gggplot-1wj).
+ *
+ * The titles used to be anchored by magic fractions of the margin -- 0.3 of the
+ * left gap, 0.7 of the bottom gap -- which had nothing to do with the space the
+ * layout actually set aside. The y title landed ~8px left of its own
+ * reservation and the error grew with the label, so a long label ran off the
+ * canvas; the x title landed ~12px below its band, inside the outer margin.
+ *
+ * Only available when a text measurer is supplied. Without one there are no
+ * bands to anchor to and the old heuristic remains the best guess.
+ */
+export interface AxisTitleAnchors {
+  /** NDC x at the centre of the band reserved for the y-axis title. */
+  yTitle: number;
+  /** NDC y at the centre of the band reserved for the x-axis title. */
+  xTitle: number;
+}
+
 export function guideLayout(
   width: number | undefined,
   height: number | undefined,
@@ -106,7 +126,11 @@ export function guideLayout(
   labels: PlotLabels,
   mapping: Aes,
   scales: Partial<Record<AesName, TrainedScale>>,
-): { bounds: [number, number, number, number]; tickCount: number } {
+): {
+  bounds: [number, number, number, number];
+  tickCount: number;
+  titleAnchors?: AxisTitleAnchors;
+} {
   const xScale = scales.x;
   const yScale = scales.y;
   const legendScales = [
@@ -218,6 +242,10 @@ export function guideLayout(
     ),
   );
   const rightPx = legendLabels.length ? 44 + legendWidth : 16;
+  // Each title sits at the centre of its own reserved band. The bands are the
+  // outermost strip inside the margin on each side -- title first, then ticks,
+  // then the panel -- which is exactly how leftPx and bottomPx are summed
+  // above, so these two expressions and those two sums have to stay in step.
   return {
     bounds: [
       -1 + 2 * leftPx / width,
@@ -226,6 +254,10 @@ export function guideLayout(
       1 - 2 * bottomPx / height,
     ],
     tickCount,
+    titleAnchors: {
+      yTitle: -1 + 2 * (14 + yTitleBand / 2) / width,
+      xTitle: -1 + 2 * (height - 18 - xTitleHeight / 2) / height,
+    },
   };
 }
 
@@ -272,6 +304,7 @@ export function axisGuideOverlay(
     width?: number;
     height?: number;
     tickSize?: number;
+    titleAnchors?: AxisTitleAnchors;
   } = {},
 ): RenderNode {
   const [left, bottom, right, top] = panelBounds;
@@ -325,14 +358,17 @@ export function axisGuideOverlay(
       ? [
         labelNode(
           (left + right) / 2,
-          top + (1 - top) * 0.7,
+          // Anchored to the band guideLayout reserved for this title. The
+          // fractions below are the pre-gggplot-1wj heuristic, kept only for
+          // the unmeasured path where no band exists to anchor to.
+          options.titleAnchors?.xTitle ?? top + (1 - top) * 0.7,
           [labelFor(labels, horizontal, mapping[horizontal] ?? horizontal)],
           theme,
           undefined,
           theme.axisTitleXAngle ?? 0,
         ),
         labelNode(
-          -1 + (left + 1) * 0.3,
+          options.titleAnchors?.yTitle ?? -1 + (left + 1) * 0.3,
           (bottom + top) / 2,
           [labelFor(labels, vertical, mapping[vertical] ?? vertical)],
           theme,

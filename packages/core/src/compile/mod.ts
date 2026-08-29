@@ -364,7 +364,7 @@ export function compile(
   const axes = resolveAxes2d(spec.coord);
 
   const theme = spec.theme;
-  const { bounds: panelBounds, tickCount } = guideLayout(
+  const { bounds: panelBounds, tickCount, titleAnchors } = guideLayout(
     options.layout?.width,
     options.layout?.height,
     options.layout?.measureText,
@@ -712,6 +712,7 @@ export function compile(
             axes,
             panelBounds,
             tickCount,
+            { titleAnchors },
           ),
         ]
         : []),
@@ -783,7 +784,12 @@ export function compile(
       axes,
       panelBounds,
       tickCount,
-      { horizontalTicks: false, verticalTicks: false, titles: true },
+      {
+        horizontalTicks: false,
+        verticalTicks: false,
+        titles: true,
+        titleAnchors,
+      },
     ),
     ...plotLabelNodes(labels, theme),
     ...legendNodes(
