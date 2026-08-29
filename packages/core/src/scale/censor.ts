@@ -33,6 +33,17 @@ const POSITION_FAMILY: Record<PositionAxis, readonly (keyof Aes)[]> = {
 };
 
 /**
+ * A filtered frame plus how many rows the filter dropped.
+ *
+ * `data` is the SAME reference as the input when nothing was removed, which
+ * the pack cache depends on for its stage-A reuse.
+ */
+export interface FilterResult {
+  data: DataFrame;
+  removed: number;
+}
+
+/**
  * Whether a raw value falls outside a continuous scale's limits.
  *
  * Missing values are NOT censored here. null/NaN means "no position", which is
@@ -64,13 +75,17 @@ function outsideDiscrete(raw: unknown, levels: readonly string[]): boolean {
  * Scope: position scales only. Limits on a colour or fill scale raise a
  * separate question — ggplot2 maps those to NA rather than dropping the row —
  * and are deliberately left alone.
+ *
+ * Reports how many rows it removed so the compiler can surface ggplot2's
+ * "Removed N rows containing non-finite values" (gggplot-9v6). `data` keeps
+ * its identity when nothing is dropped, which the pack cache relies on.
  */
 export function censorToScaleLimits(
   spec: GGSpec,
   mapping: Aes,
   data: DataFrame,
   nonPositionalAes: readonly (keyof Aes)[] = [],
-): DataFrame {
+): FilterResult {
   const active = (["x", "y", "z"] as const).flatMap((axis) => {
     const declared = spec.scales.find((scale) => scale.aes === axis);
     if (!declared?.domain) return [];
@@ -80,7 +95,7 @@ export function censorToScaleLimits(
       .filter((column): column is string => !!column && column in data);
     return columns.length ? [{ declared, columns }] : [];
   });
-  if (!active.length) return data;
+  if (!active.length) return { data, removed: 0 };
 
   const rows = rowCount(data);
   const keep: number[] = [];
@@ -98,7 +113,9 @@ export function censorToScaleLimits(
     }
     if (!excluded) keep.push(row);
   }
-  return keep.length === rows ? data : sliceRows(data, keep);
+  return keep.length === rows
+    ? { data, removed: 0 }
+    : { data: sliceRows(data, keep), removed: rows - keep.length };
 }
 
 /**
@@ -114,18 +131,21 @@ export function censorToScaleLimits(
  * filter was implemented and measured, and it broke geom_surface's complete-
  * grid contract and geom_polygon's ring topology, because for those geoms the
  * gap IS the information. See the field's own documentation.
+ *
+ * Reports how many rows it removed so the compiler can surface ggplot2's
+ * "Removed N rows containing missing values" (gggplot-9v6).
  */
 export function removeMissingPositions(
   mapping: Aes,
   data: DataFrame,
   nonPositionalAes: readonly (keyof Aes)[] = [],
-): DataFrame {
+): FilterResult {
   const columns = (["x", "y", "z"] as const)
     .flatMap((axis) => POSITION_FAMILY[axis])
     .filter((aes) => !nonPositionalAes.includes(aes))
     .map((aes) => mapping[aes])
     .filter((column): column is string => !!column && column in data);
-  if (!columns.length) return data;
+  if (!columns.length) return { data, removed: 0 };
 
   const rows = rowCount(data);
   const keep: number[] = [];
@@ -135,7 +155,9 @@ export function removeMissingPositions(
     );
     if (!missing) keep.push(row);
   }
-  return keep.length === rows ? data : sliceRows(data, keep);
+  return keep.length === rows
+    ? { data, removed: 0 }
+    : { data: sliceRows(data, keep), removed: rows - keep.length };
 }
 
 /** null, undefined, NaN or an infinity — the forms "no position" arrives in. */
