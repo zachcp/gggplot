@@ -28,6 +28,7 @@ Deno.test("the lazily loaded mtcars asset remains typed and supports numeric lin
   );
   const data = await loadStaticDataset(
     "mtcars",
+    // deno-lint-ignore require-await -- must match typeof fetch.
     async () => new Response(csv, { status: 200 }),
   );
   assertEquals(data.mpg.type, "numeric");

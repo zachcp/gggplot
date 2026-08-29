@@ -5,14 +5,17 @@ import { scatterLine } from "./docs/examples.tsx";
 import { helix3dSpec } from "./docs/example_3d.ts";
 import { InstrumentProbe } from "./InstrumentProbe.tsx";
 
+// Declared as a global `var` rather than on `interface Window`: the probe is
+// reached through `globalThis`, and only a var declaration types that. An
+// interface member types `window.` alone.
 declare global {
-  interface Window {
-    __gggplotExportProbe?: (
+  var __gggplotExportProbe:
+    | ((
       width: number,
       height: number,
       physical?: boolean,
-    ) => Promise<Record<string, unknown>>;
-  }
+    ) => Promise<Record<string, unknown>>)
+    | undefined;
 }
 
 const exportProbeMode = new URLSearchParams(location.search).get(
@@ -47,7 +50,7 @@ if (exportProbeMode) {
       leakedHosts: document.querySelectorAll('div[style*="-100000px"]').length,
     };
   };
-  window.__gggplotExportProbe = probe;
+  globalThis.__gggplotExportProbe = probe;
   const trigger = document.createElement("button");
   trigger.id = "gggplot-export-probe";
   trigger.textContent = "Run export probe";

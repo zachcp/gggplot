@@ -5,12 +5,7 @@ import { node, type RenderNode } from "../compile/rendertree.ts";
 import { scalePosition } from "../scale/mod.ts";
 import type { LayerContext } from "./types.ts";
 import type { DepthPolicy } from "./types.ts";
-import {
-  colorsOf,
-  depthProps,
-  resolutionOf,
-  valuesOf,
-} from "./shared.ts";
+import { colorsOf, depthProps, resolutionOf, valuesOf } from "./shared.ts";
 import { splitByEffectiveGroup } from "../group/mod.ts";
 import { type FaceLoop3D, packFaceLoops3d } from "./packing.ts";
 
@@ -51,7 +46,13 @@ function ringsFrom(
         !Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)
       )
     ) continue;
-    const colors = colorsOf(m, d, ctx.scales.color, ctx.scales.fill, "fillOrColor");
+    const colors = colorsOf(
+      m,
+      d,
+      ctx.scales.color,
+      ctx.scales.fill,
+      "fillOrColor",
+    );
     loops.push({
       positions: points.map((p): [number, number, number] => [p.x, p.y, p.z]),
       fill: colors?.[0] ?? fallbackFill,
@@ -260,7 +261,11 @@ export function boxLoops(
 /** Emit a set of boxes as one packed surface node. */
 export function boxNode(
   layer: Layer,
-  boxes: { center: [number, number, number]; size: [number, number, number]; fill: string }[],
+  boxes: {
+    center: [number, number, number];
+    size: [number, number, number];
+    fill: string;
+  }[],
 ): RenderNode[] {
   return surfaceNode(
     layer,

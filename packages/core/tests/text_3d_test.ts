@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 import { geomLabel, geomText, ggplot } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
 import { emitSource } from "../src/emit/mod.ts";
@@ -30,7 +30,12 @@ const glyphNodes = (spec: Parameters<typeof compile>[0]) =>
 Deno.test("3D text anchors glyphs at vec4 world positions", () => {
   const nodes = glyphNodes(ggplot(data, mapping).add(geomText()).build());
   assertEquals(nodes.length, 1);
-  const positions = nodes[0].props.positions as [number, number, number, number][];
+  const positions = nodes[0].props.positions as [
+    number,
+    number,
+    number,
+    number,
+  ][];
   assertEquals(positions.length, 3);
   assertEquals(nodes[0].props.labels, ["a", "b", "c"]);
   // Homogeneous w stays 1 on every anchor.
@@ -119,6 +124,6 @@ Deno.test("3D text rejects non-identity stats and unknown size modes", () => {
         ggplot(data, mapping).add(geomText({ sizeMode: "wobble" })).build(),
       ),
     Error,
-    'must be one of: constant, perspective',
+    "must be one of: constant, perspective",
   );
 });

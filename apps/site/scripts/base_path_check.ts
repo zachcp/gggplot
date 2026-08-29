@@ -15,7 +15,7 @@
  * under a non-root base and assert no 4xx and no chart error boundary. The base
  * used here only has to differ from `/`; it is not tied to the deployed name.
  */
-import { chromium } from "npm:playwright@^1.61.1";
+import { chromium } from "playwright";
 import { browserArgs } from "./browser_args.ts";
 
 const host = "127.0.0.1";
@@ -145,7 +145,7 @@ async function waitForServer() {
 }
 
 async function discoverRoutes(
-  page: import("npm:playwright").Page,
+  page: import("playwright").Page,
 ): Promise<string[]> {
   await page.goto(baseUrl + "/", { waitUntil: "networkidle" });
   const slugs = await page.locator("[data-doc-route-link]").evaluateAll((

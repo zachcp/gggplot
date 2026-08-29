@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals } from "@std/assert";
 import { geomLine, geomPoint, ggplot } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
 import { emitSource } from "../src/emit/mod.ts";
@@ -64,10 +64,12 @@ Deno.test("every 3D mode declares a depth policy", () => {
 });
 
 Deno.test("point and line depth behaviour is unchanged by the refactor", () => {
-  for (const [alpha, expected] of [
-    [1, { depthTest: true, depthWrite: true, mode: undefined }],
-    [0.5, { depthTest: true, depthWrite: false, mode: "transparent" }],
-  ] as const) {
+  for (
+    const [alpha, expected] of [
+      [1, { depthTest: true, depthWrite: true, mode: undefined }],
+      [0.5, { depthTest: true, depthWrite: false, mode: "transparent" }],
+    ] as const
+  ) {
     const point = findNodes(
       compile(
         ggplot(data, { x: "x", y: "y", z: "z" }).add(geomPoint({ alpha }))

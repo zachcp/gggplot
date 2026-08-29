@@ -4,7 +4,7 @@ import type {
   WgpuKernelPlan,
 } from "./types.ts";
 
-export const CLEAR_U32_WGSL = `
+export const CLEAR_U32_WGSL: string = `
 @group(0) @binding(0) var<storage, read_write> values: array<u32>;
 @group(0) @binding(1) var<uniform> len: u32;
 
@@ -19,7 +19,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 `.trim();
 
 /** Initializes the ordered-float [minimum, maximum] domain accumulator. */
-export const DOMAIN_CLEAR_WGSL = `
+export const DOMAIN_CLEAR_WGSL: string = `
 @group(0) @binding(0) var<storage, read_write> domain: array<atomic<u32>>;
 
 @compute @workgroup_size(1)
@@ -30,7 +30,7 @@ fn main() {
 `.trim();
 
 /** Reduces finite f32 values to an ordered-bit [minimum, maximum] pair. */
-export const FINITE_DOMAIN_1D_WGSL = `
+export const FINITE_DOMAIN_1D_WGSL: string = `
 @group(0) @binding(0) var<storage, read> values: array<f32>;
 @group(0) @binding(1) var<storage, read_write> domain: array<atomic<u32>>;
 @group(0) @binding(2) var<uniform> rows: u32;
@@ -63,7 +63,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `.trim();
 
-export const GROUPED_HISTOGRAM_1D_WGSL = `
+export const GROUPED_HISTOGRAM_1D_WGSL: string = `
 struct HistogramParams {
   rows: u32,
   bins: u32,
@@ -108,7 +108,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `.trim();
 
-export const GROUPED_COUNT_1D_WGSL = `
+export const GROUPED_COUNT_1D_WGSL: string = `
 struct CountParams {
   rows: u32,
   values: u32,
@@ -137,7 +137,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 `.trim();
 
 /** Expands a [group, category] count grid into 0.9-wide categorical bars. */
-export const COUNT_BAR_VERTICES_WGSL = `
+export const COUNT_BAR_VERTICES_WGSL: string = `
 struct CountParams {
   rows: u32,
   values: u32,
@@ -209,7 +209,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
  * It encodes identity, stack, dodge, and fill directly into GPU vertices so
  * the Face mark never needs a CPU count-grid readback.
  */
-export const HISTOGRAM_BAR_VERTICES_WGSL = `
+export const HISTOGRAM_BAR_VERTICES_WGSL: string = `
 struct HistogramParams {
   rows: u32,
   bins: u32,
@@ -293,7 +293,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
  * Counts remain resident for a later color/opacity field; even zero cells keep
  * their declared topology and therefore need no CPU sparse-row reconstruction.
  */
-export const HISTOGRAM_TILE_VERTICES_WGSL = `
+export const HISTOGRAM_TILE_VERTICES_WGSL: string = `
 struct HistogramParams {
   rows: u32,
   bins: u32,
@@ -330,7 +330,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 `.trim();
 
 /** Produces compact [group totals..., stacked maximum] metadata from counts. */
-export const HISTOGRAM_SUMMARY_WGSL = `
+export const HISTOGRAM_SUMMARY_WGSL: string = `
 struct HistogramParams {
   rows: u32,
   bins: u32,
@@ -381,7 +381,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
  * source — the same trick HISTOGRAM_SUMMARY_WGSL relies on. A larger bound
  * uniform buffer (32 bytes) is legal against this three-field view.
  */
-export const GRID_BAR_VERTEX_COLORS_WGSL = `
+export const GRID_BAR_VERTEX_COLORS_WGSL: string = `
 struct GridParams {
   rows: u32,
   perGroup: u32,
@@ -409,7 +409,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `.trim();
 
-export const GROUPED_HISTOGRAM_2D_WGSL = `
+export const GROUPED_HISTOGRAM_2D_WGSL: string = `
 struct Histogram2DParams {
   rows: u32,
   xBins: u32,

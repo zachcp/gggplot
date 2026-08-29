@@ -18,7 +18,13 @@ import {
   residentBinRequest,
   residentColorGroups,
 } from "./resident_shared.ts";
-import { colorsOf, type FaceLoop, packFaceLoops, resolutionOf, valuesOf } from "./shared.ts";
+import {
+  colorsOf,
+  type FaceLoop,
+  packFaceLoops,
+  resolutionOf,
+  valuesOf,
+} from "./shared.ts";
 
 /**
  * geom_tile domain contribution: cells extend half a cell beyond their center

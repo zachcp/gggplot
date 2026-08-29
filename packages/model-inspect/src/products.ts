@@ -465,6 +465,13 @@ function numericWidth(dtype: ModelDType): number | undefined {
     u8: 1,
     u16: 2,
     u32: 4,
+    // 64-bit integers are inspectable. They are decoded through BigInt and
+    // narrowed to number, which is exact to 2^53 and loses low bits beyond it
+    // (see decodeValue). Omitting them here silently demoted every i64 tensor
+    // to a metadata-only product, which hides ONNX shape, index, and label
+    // tensors -- the dtype those are almost always stored in.
+    i64: 8,
+    u64: 8,
     bool: 1,
   } as Record<string, number>)[dtype];
 }
@@ -550,6 +557,13 @@ function decodeValue(
       return view.getInt32(offset, true);
     case "u32":
       return view.getUint32(offset, true);
+    // Exact for |v| <= Number.MAX_SAFE_INTEGER, which covers the shape, index,
+    // and token-id tensors this dtype is actually used for. Larger magnitudes
+    // round, and the product is a numeric view rather than a lossless copy.
+    case "i64":
+      return Number(view.getBigInt64(offset, true));
+    case "u64":
+      return Number(view.getBigUint64(offset, true));
     case "f16":
     case "bf16": {
       const bits = view.getUint16(offset, true);

@@ -82,6 +82,9 @@ export function fixtureRuntimeAdapter(
     (options.captures ?? []).map((capture) => [capture.artifact.id, capture]),
   );
 
+  // Conforms to the async runtime capture contract; the fixture backend
+  // resolves from memory.
+  // deno-lint-ignore require-await
   const capture = async (
     request: RuntimeOutputRequest,
   ): Promise<FixtureRuntimeTensorOutput> => {

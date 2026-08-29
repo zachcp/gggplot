@@ -13,22 +13,52 @@ const document: ModelDocument = {
   graphs: [{
     id: "main",
     inputs: [{ id: "input", tensorId: "input", dtype: "f32", shape: [1, 4] }],
-    outputs: [{ id: "output", tensorId: "output", dtype: "f32", shape: [1, 2] }],
+    outputs: [{
+      id: "output",
+      tensorId: "output",
+      dtype: "f32",
+      shape: [1, 2],
+    }],
     nodes: [
-      { id: "in", kind: "input", inputs: [], outputs: [{ id: "input", tensorId: "input" }] },
+      {
+        id: "in",
+        kind: "input",
+        inputs: [],
+        outputs: [{ id: "input", tensorId: "input" }],
+      },
       {
         id: "linear",
         kind: "operator",
         op: "Gemm",
-        inputs: [{ id: "input", tensorId: "input" }, { id: "weight", tensorId: "weight" }],
+        inputs: [{ id: "input", tensorId: "input" }, {
+          id: "weight",
+          tensorId: "weight",
+        }],
         outputs: [{ id: "hidden", tensorId: "hidden" }],
         parameters: ["weight"],
       },
-      { id: "out", kind: "output", inputs: [{ id: "hidden", tensorId: "hidden" }], outputs: [] },
+      {
+        id: "out",
+        kind: "output",
+        inputs: [{ id: "hidden", tensorId: "hidden" }],
+        outputs: [],
+      },
     ],
     edges: [
-      { id: "input", from: "in", to: "linear", valueId: "input", tensorId: "input" },
-      { id: "output", from: "linear", to: "out", valueId: "hidden", tensorId: "hidden" },
+      {
+        id: "input",
+        from: "in",
+        to: "linear",
+        valueId: "input",
+        tensorId: "input",
+      },
+      {
+        id: "output",
+        from: "linear",
+        to: "out",
+        valueId: "hidden",
+        tensorId: "hidden",
+      },
     ],
   }],
   tensors: {
@@ -39,7 +69,10 @@ const document: ModelDocument = {
   },
 };
 
-const scene = buildModelScene3D(document, { maxTileRows: 8, maxTileColumns: 12 });
+const scene = buildModelScene3D(document, {
+  maxTileRows: 8,
+  maxTileColumns: 12,
+});
 
 /**
  * A ray aimed at a box centre, starting just outside its near face.
@@ -102,12 +135,19 @@ Deno.test("a ray through a module but no slab still picks the module", () => {
     const moduleTop = module.center[1] + Math.abs(module.size[1]) / 2;
     return { module, slabTop, moduleTop };
   }).filter((c) => c.moduleTop - c.slabTop > 1e-6);
-  assert(candidates.length, "fixture must have a module with space above its slabs");
+  assert(
+    candidates.length,
+    "fixture must have a module with space above its slabs",
+  );
   const { module, slabTop, moduleTop } = candidates[0];
   const y = (moduleTop + slabTop) / 2;
   const hit = pickSceneEntity(
     scene,
-    [module.center[0] - Math.abs(module.size[0]) / 2 - 1e-3, y, module.center[2]],
+    [
+      module.center[0] - Math.abs(module.size[0]) / 2 - 1e-3,
+      y,
+      module.center[2],
+    ],
     [1, 0, 0],
   );
   // Strengthen the case: this ray must ALSO reach a slab further along, in a
@@ -131,7 +171,11 @@ Deno.test("a ray pointing away from the scene picks nothing", () => {
   const slab = scene.slabs[0];
   const hit = pickSceneEntity(
     scene,
-    [slab.center[0] - Math.abs(slab.size[0]) / 2 - 1e-3, slab.center[1], slab.center[2]],
+    [
+      slab.center[0] - Math.abs(slab.size[0]) / 2 - 1e-3,
+      slab.center[1],
+      slab.center[2],
+    ],
     [-1, 0, 0],
   );
   assertEquals(hit, null);

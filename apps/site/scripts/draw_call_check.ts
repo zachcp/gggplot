@@ -13,7 +13,7 @@
  *
  * Usage: deno task test:draw-calls   (add --route=three-d to narrow)
  */
-import { chromium } from "npm:playwright@^1.61.1";
+import { chromium } from "playwright";
 import { browserArgs } from "./browser_args.ts";
 
 // Routes whose charts must reach the GPU. Keep 2D and 3D here so neither

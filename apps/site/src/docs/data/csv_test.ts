@@ -1,4 +1,4 @@
-import { assertEquals, assertThrows } from "jsr:@std/assert@1";
+import { assertEquals, assertThrows } from "@std/assert";
 import { parseCsvColumns } from "./csv_parse.ts";
 
 Deno.test("CSV assets parse quoted values while retaining column shape", () => {

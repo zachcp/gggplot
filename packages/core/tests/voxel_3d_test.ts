@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 import { geomVoxel, ggplot } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
 import { applyStat } from "../src/stat/mod.ts";
@@ -24,7 +24,10 @@ const corners = {
   z: [0, 1, 0, 1, 0, 1, 0, 1],
 };
 
-const binned = (data: Record<string, unknown[]>, params: Record<string, unknown> = {}) =>
+const binned = (
+  data: Record<string, unknown[]>,
+  params: Record<string, unknown> = {},
+) =>
   applyStat(
     {
       geom: "voxel",
@@ -87,7 +90,12 @@ Deno.test("stat_bin_3d rejects weights and incomplete mappings", () => {
   assertThrows(
     () =>
       applyStat(
-        { geom: "voxel", stat: "bin3d", position: "identity", params: {} } as never,
+        {
+          geom: "voxel",
+          stat: "bin3d",
+          position: "identity",
+          params: {},
+        } as never,
         { x: "x", y: "y" } as never,
         corners as never,
       ),
@@ -111,7 +119,9 @@ Deno.test("voxels render one box per occupied cell", () => {
 
 Deno.test("padding shrinks cells without moving them", () => {
   const spec = (padding?: number) =>
-    ggplot(corners, mapping).add(geomVoxel({ bins: 2, ...(padding != null ? { padding } : {}) })).build();
+    ggplot(corners, mapping).add(
+      geomVoxel({ bins: 2, ...(padding != null ? { padding } : {}) }),
+    ).build();
   const extent = (padding?: number) => {
     const node = findNodes(compile(spec(padding)), "ChunkedFace").find((n) =>
       (n.props.positions as { format?: string })?.format === "vec4<f32>"

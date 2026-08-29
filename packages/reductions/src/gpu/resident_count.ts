@@ -127,15 +127,20 @@ export function createResidentCount1DFromSources(
     { binding: 1, resource: { buffer: summary } },
     { binding: 2, resource: { buffer: params } },
   ]);
-  const barsBind = bind(bars, [{ binding: 0, resource: { buffer: counts } }, {
-    binding: 1,
-    resource: { buffer: barVertices },
-    // Dodge slotting reads per-group totals; the summarize pass runs earlier
-    // in the same encoder, so this pass observes the current totals.
-  }, { binding: 2, resource: { buffer: params } }, {
-    binding: 3,
-    resource: { buffer: summary },
-  }]);
+  const barsBind = bind(bars, [
+    { binding: 0, resource: { buffer: counts } },
+    {
+      binding: 1,
+      resource: { buffer: barVertices },
+      // Dodge slotting reads per-group totals; the summarize pass runs earlier
+      // in the same encoder, so this pass observes the current totals.
+    },
+    { binding: 2, resource: { buffer: params } },
+    {
+      binding: 3,
+      resource: { buffer: summary },
+    },
+  ]);
   const colorBind = colorize && barColors && palette
     ? bind(colorize, [
       { binding: 0, resource: { buffer: palette } },

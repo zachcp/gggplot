@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 import { geomSurface, ggplot } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
@@ -35,7 +35,10 @@ Deno.test("a missing z leaves a hole rather than being interpolated", () => {
   // The center vertex touches all four cells of a 3x3 grid, so every cell
   // drops and nothing is drawn at all. Bridging the gap would fabricate
   // terrain the data never had.
-  assertEquals(face(ggplot(holed, mapping).add(geomSurface()).build()), undefined);
+  assertEquals(
+    face(ggplot(holed, mapping).add(geomSurface()).build()),
+    undefined,
+  );
 });
 
 Deno.test("a corner hole drops only the cells that touch it", () => {

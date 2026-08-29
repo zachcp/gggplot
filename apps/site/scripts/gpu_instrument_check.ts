@@ -13,7 +13,7 @@
  * Results are written to .artifacts/visual-smoke/gpu-instrument-report.json
  * alongside visual_smoke.ts's own artifacts.
  */
-import { chromium } from "npm:playwright@^1.61.1";
+import { chromium } from "playwright";
 import { browserArgs } from "./browser_args.ts";
 
 const host = "127.0.0.1";

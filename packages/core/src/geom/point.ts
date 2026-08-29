@@ -4,8 +4,9 @@ import { node, type RenderNode } from "../compile/rendertree.ts";
 import { jitter } from "../position/mod.ts";
 import type { DepthPolicy, LayerContext } from "./types.ts";
 import {
-  depthProps,  alphasOf,
+  alphasOf,
   colorsOf,
+  depthProps,
   packMarkRows,
   positionsXYOf,
   resolutionOf,

@@ -62,12 +62,14 @@ const {
   useShader,
   useShaderRef,
   useSource,
-} = Workbench as Record<string, any>; // deno-lint-ignore no-explicit-any
+  // deno-lint-ignore no-explicit-any
+} = Workbench as Record<string, any>;
 
 const { gather, memo, use, useMemo, useOne } = Live;
 
 /** LabelLayer-compatible component with an angle in degrees. */
-export const RotatedLabel = memo((props: Record<string, any>) => { // deno-lint-ignore no-explicit-any
+// deno-lint-ignore no-explicit-any
+export const RotatedLabel = memo((props: Record<string, any>) => {
   const {
     angle = 0,
     position,
@@ -114,7 +116,8 @@ export const RotatedLabel = memo((props: Record<string, any>) => { // deno-lint-
       size: detail,
       monochrome,
     }),
-    ([data]: any[]) => { // deno-lint-ignore no-explicit-any
+    // deno-lint-ignore no-explicit-any
+    ([data]: any[]) => {
       if (!data || data.count === 0) return null;
       const { count, sdf } = data;
       const { getTexture } = useSDFFontContext();

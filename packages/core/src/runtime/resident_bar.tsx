@@ -100,7 +100,9 @@ export const ResidentHistogramBars = (
     segments,
     chunks,
     // Per-group palette when present; otherwise the single scalar fill color.
-    ...(colors ? { colors: colorSource } : { color: parseColorRGBA(color ?? "#3b82f6", opacity ?? 1) }),
+    ...(colors
+      ? { colors: colorSource }
+      : { color: parseColorRGBA(color ?? "#3b82f6", opacity ?? 1) }),
     side: "both",
   });
 };

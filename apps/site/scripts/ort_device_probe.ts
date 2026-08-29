@@ -27,7 +27,7 @@
  *
  * Usage: deno task test:ort-device
  */
-import { chromium } from "npm:playwright@^1.61.1";
+import { chromium } from "playwright";
 import { browserArgs } from "./browser_args.ts";
 
 const host = "127.0.0.1";

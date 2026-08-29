@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { LiveCanvas } from "@use-gpu/react";
-import { aes, geomLine, geomPoint, ggplot, ingest, scaleXContinuous } from "@gggplot/core";
+import {
+  aes,
+  geomLine,
+  geomPoint,
+  ggplot,
+  ingest,
+  scaleXContinuous,
+} from "@gggplot/core";
 import { Scene } from "./scene.tsx";
 
 /**
@@ -31,9 +38,11 @@ const DATA = ingest({
   y: [1, 3, 2, 5, 4, 6, 3, 7, 5, 8],
 });
 
+// Declared as global `var`s rather than on `interface Window`: both are
+// reached through `globalThis`, and only a var declaration types that.
 declare global {
-  interface Window {
-    __gggplotGpuInstrument?: {
+  var __gggplotGpuInstrument:
+    | {
       getCounters: () => {
         markBufferCreations: number;
         markBufferWrites: number;
@@ -41,9 +50,11 @@ declare global {
         totalBufferWrites: number;
       };
       reset: () => void;
-    };
-    __gggplotInstrumentProbe?: () => Promise<Record<string, unknown>>;
-  }
+    }
+    | undefined;
+  var __gggplotInstrumentProbe:
+    | (() => Promise<Record<string, unknown>>)
+    | undefined;
 }
 
 function nextFrame(): Promise<void> {
@@ -52,7 +63,7 @@ function nextFrame(): Promise<void> {
 
 async function waitForInstrument(timeoutMs = 10_000): Promise<void> {
   const start = Date.now();
-  while (!window.__gggplotGpuInstrument) {
+  while (!globalThis.__gggplotGpuInstrument) {
     if (Date.now() - start > timeoutMs) {
       throw new Error("window.__gggplotGpuInstrument never installed");
     }
@@ -81,9 +92,9 @@ export function InstrumentProbe(): React.ReactElement {
   );
 
   useEffect(() => {
-    window.__gggplotInstrumentProbe = async () => {
+    globalThis.__gggplotInstrumentProbe = async () => {
       await waitForInstrument();
-      const instrument = window.__gggplotGpuInstrument!;
+      const instrument = globalThis.__gggplotGpuInstrument!;
       instrument.reset();
 
       const rerenderCount = 5;
@@ -111,9 +122,8 @@ export function InstrumentProbe(): React.ReactElement {
       };
     };
     return () => {
-      delete window.__gggplotInstrumentProbe;
+      delete globalThis.__gggplotInstrumentProbe;
     };
-    // deno-lint-ignore react-hooks/exhaustive-deps
   }, []);
 
   return (

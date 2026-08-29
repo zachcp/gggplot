@@ -13,6 +13,7 @@
     "test:ort-device": "deno run -A scripts/ort_device_probe.ts"
   },
   "imports": {
+    "@std/assert": "jsr:@std/assert@1",
     "react": "npm:react@^18.3.1",
     "react/jsx-runtime": "npm:react@^18.3.1/jsx-runtime",
     "react-dom": "npm:react-dom@^18.3.1",
@@ -36,12 +37,21 @@
     "@gggplot/reductions": "../../packages/reductions/src/mod.ts",
     "rollup": "npm:rollup@^4.24.0",
     "@vitejs/plugin-react": "npm:@vitejs/plugin-react@^5.2.0",
-    "vite-plugin-wasm": "npm:vite-plugin-wasm@^3.3.0"
+    "vite-plugin-wasm": "npm:vite-plugin-wasm@^3.3.0",
+    "playwright": "npm:playwright@^1.61.1"
   },
   "compilerOptions": {
     "jsx": "react-jsx",
     "jsxImportSource": "react",
-    "lib": ["dom", "dom.iterable", "esnext", "deno.ns"],
-    "types": ["npm:@types/react@^18.3.12", "npm:@types/react-dom@^18.3.0"]
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext",
+      "deno.ns"
+    ],
+    "types": [
+      "npm:@types/react@^18.3.12",
+      "npm:@types/react-dom@^18.3.0"
+    ]
   }
 }

@@ -1,0 +1,214 @@
+{
+  "framework": {
+    "dialect": "state_dict",
+    "name": "PyTorch"
+  },
+  "graphs": [
+    {
+      "edges": [],
+      "id": "tinynet:parameters",
+      "inputs": [],
+      "name": "parameters",
+      "nodes": [],
+      "outputs": []
+    }
+  ],
+  "id": "tinynet",
+  "metadata": {
+    "bridge": "gggplot-pytorch-bridge",
+    "graphStructure": "none",
+    "graphStructureReason": "a state_dict records weights, not topology; export to ONNX when graph structure is required"
+  },
+  "name": "tinynet",
+  "schema": "gggplot.model@1",
+  "source": {
+    "byteLength": 999,
+    "format": "safetensors",
+    "id": "file:tinynet.safetensors",
+    "kind": "file",
+    "uri": "tinynet.safetensors"
+  },
+  "tensors": {
+    "safetensors:file:tinynet.safetensors:tensor:fc1.bias": {
+      "byteLength": 12,
+      "dtype": "f32",
+      "id": "safetensors:file:tinynet.safetensors:tensor:fc1.bias",
+      "name": "fc1.bias",
+      "payload": {
+        "byteLength": 12,
+        "byteOffset": 823,
+        "encoding": "safetensors",
+        "sourceId": "file:tinynet.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        3
+      ]
+    },
+    "safetensors:file:tinynet.safetensors:tensor:fc1.weight": {
+      "byteLength": 48,
+      "dtype": "f32",
+      "id": "safetensors:file:tinynet.safetensors:tensor:fc1.weight",
+      "name": "fc1.weight",
+      "payload": {
+        "byteLength": 48,
+        "byteOffset": 775,
+        "encoding": "safetensors",
+        "sourceId": "file:tinynet.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        3,
+        4
+      ]
+    },
+    "safetensors:file:tinynet.safetensors:tensor:fc2.bias": {
+      "byteLength": 8,
+      "dtype": "f32",
+      "id": "safetensors:file:tinynet.safetensors:tensor:fc2.bias",
+      "name": "fc2.bias",
+      "payload": {
+        "byteLength": 8,
+        "byteOffset": 859,
+        "encoding": "safetensors",
+        "sourceId": "file:tinynet.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        2
+      ]
+    },
+    "safetensors:file:tinynet.safetensors:tensor:fc2.weight": {
+      "byteLength": 24,
+      "dtype": "f32",
+      "id": "safetensors:file:tinynet.safetensors:tensor:fc2.weight",
+      "name": "fc2.weight",
+      "payload": {
+        "byteLength": 24,
+        "byteOffset": 835,
+        "encoding": "safetensors",
+        "sourceId": "file:tinynet.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        2,
+        3
+      ]
+    },
+    "safetensors:file:tinynet.safetensors:tensor:probe.f64": {
+      "byteLength": 32,
+      "dtype": "f64",
+      "id": "safetensors:file:tinynet.safetensors:tensor:probe.f64",
+      "name": "probe.f64",
+      "payload": {
+        "byteLength": 32,
+        "byteOffset": 915,
+        "encoding": "safetensors",
+        "sourceId": "file:tinynet.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        2,
+        2
+      ]
+    },
+    "safetensors:file:tinynet.safetensors:tensor:probe.i16": {
+      "byteLength": 4,
+      "dtype": "i16",
+      "id": "safetensors:file:tinynet.safetensors:tensor:probe.i16",
+      "name": "probe.i16",
+      "payload": {
+        "byteLength": 4,
+        "byteOffset": 991,
+        "encoding": "safetensors",
+        "sourceId": "file:tinynet.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        2
+      ]
+    },
+    "safetensors:file:tinynet.safetensors:tensor:probe.i32": {
+      "byteLength": 12,
+      "dtype": "i32",
+      "id": "safetensors:file:tinynet.safetensors:tensor:probe.i32",
+      "name": "probe.i32",
+      "payload": {
+        "byteLength": 12,
+        "byteOffset": 979,
+        "encoding": "safetensors",
+        "sourceId": "file:tinynet.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        3
+      ]
+    },
+    "safetensors:file:tinynet.safetensors:tensor:probe.i64": {
+      "byteLength": 32,
+      "dtype": "i64",
+      "id": "safetensors:file:tinynet.safetensors:tensor:probe.i64",
+      "name": "probe.i64",
+      "payload": {
+        "byteLength": 32,
+        "byteOffset": 947,
+        "encoding": "safetensors",
+        "sourceId": "file:tinynet.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        2,
+        2
+      ]
+    },
+    "safetensors:file:tinynet.safetensors:tensor:probe.i8": {
+      "byteLength": 2,
+      "dtype": "i8",
+      "id": "safetensors:file:tinynet.safetensors:tensor:probe.i8",
+      "name": "probe.i8",
+      "payload": {
+        "byteLength": 2,
+        "byteOffset": 995,
+        "encoding": "safetensors",
+        "sourceId": "file:tinynet.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        2
+      ]
+    },
+    "safetensors:file:tinynet.safetensors:tensor:probe.transposed": {
+      "byteLength": 48,
+      "dtype": "f32",
+      "id": "safetensors:file:tinynet.safetensors:tensor:probe.transposed",
+      "name": "probe.transposed",
+      "payload": {
+        "byteLength": 48,
+        "byteOffset": 867,
+        "encoding": "safetensors",
+        "sourceId": "file:tinynet.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        4,
+        3
+      ]
+    },
+    "safetensors:file:tinynet.safetensors:tensor:probe.u8": {
+      "byteLength": 2,
+      "dtype": "u8",
+      "id": "safetensors:file:tinynet.safetensors:tensor:probe.u8",
+      "name": "probe.u8",
+      "payload": {
+        "byteLength": 2,
+        "byteOffset": 997,
+        "encoding": "safetensors",
+        "sourceId": "file:tinynet.safetensors"
+      },
+      "role": "parameter",
+      "shape": [
+        2
+      ]
+    }
+  }
+}

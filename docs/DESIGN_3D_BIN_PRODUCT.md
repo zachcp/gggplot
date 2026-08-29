@@ -25,20 +25,20 @@ reduces and `geom_tile` draws.
 ### No 2D `geom_bin` alias
 
 `geom_bin2d` already exists and means rectangular 2D binning. Adding a bare
-`geom_bin` alias would give the codebase three spellings for binning
-(`bin2d`, `bin`, `voxel`), and a name whose dimensionality is implicit is
-exactly the kind that gets mapped a `z` and silently ignored — the failure mode
-`gggplot-lcy.9` was filed to eliminate. Recommend **no alias**.
+`geom_bin` alias would give the codebase three spellings for binning (`bin2d`,
+`bin`, `voxel`), and a name whose dimensionality is implicit is exactly the kind
+that gets mapped a `z` and silently ignored — the failure mode `gggplot-lcy.9`
+was filed to eliminate. Recommend **no alias**.
 
 ## The product is sparse
 
 **Empty cells are dropped.** This is the load-bearing decision.
 
-A dense lattice at the 2D default of 30 bins per axis is 27,000 cells in 3D,
-and a real point cloud leaves the overwhelming majority empty. Retaining them
-would cost memory and draw calls proportional to the lattice rather than the
-data, and would draw nothing visible for the trouble — an empty cell has no
-count to encode.
+A dense lattice at the 2D default of 30 bins per axis is 27,000 cells in 3D, and
+a real point cloud leaves the overwhelming majority empty. Retaining them would
+cost memory and draw calls proportional to the lattice rather than the data, and
+would draw nothing visible for the trouble — an empty cell has no count to
+encode.
 
 Dropping matches `stat_summary_2d`, which already emits one row per occupied
 cell rather than one per lattice site. A `drop: false` parameter is
@@ -47,34 +47,34 @@ additive, and shipping it now would mean supporting a dense mode nothing asks
 for.
 
 The consequence to state plainly: **absence is not zero**. A missing cell means
-"no observations landed here", and a consumer that needs zeros must generate
-the lattice itself.
+"no observations landed here", and a consumer that needs zeros must generate the
+lattice itself.
 
 ## Serializable product schema
 
 `stat_bin_3d` emits one row per occupied cell, in the same column-frame shape
 every other stat produces:
 
-| Column | Meaning |
-| --- | --- |
-| *(x column name)* | Cell center on x, named for the mapped column, as `stat_summary_2d` does |
-| *(y column name)* | Cell center on y |
-| *(z column name)* | Cell center on z |
-| `count` | Observations in the cell; always present |
-| `density` | `count / (total × cellVolume)`; always present |
-| `value` | Summary of a mapped value column, when `fun` is supplied |
-| *(group columns)* | Carried through unchanged, one cell per group |
+| Column            | Meaning                                                                  |
+| ----------------- | ------------------------------------------------------------------------ |
+| _(x column name)_ | Cell center on x, named for the mapped column, as `stat_summary_2d` does |
+| _(y column name)_ | Cell center on y                                                         |
+| _(z column name)_ | Cell center on z                                                         |
+| `count`           | Observations in the cell; always present                                 |
+| `density`         | `count / (total × cellVolume)`; always present                           |
+| `value`           | Summary of a mapped value column, when `fun` is supplied                 |
+| _(group columns)_ | Carried through unchanged, one cell per group                            |
 
 Cell geometry **is** emitted per row, as `binWidthX`, `binWidthY`, and
 `binWidthZ`. This reverses the original plan, which put the lattice widths in
-resolved parameters to avoid repeating them across thousands of rows. That
-plan assumed a channel that does not exist: `StatResult` carries only `data`
-and `mapping`, so a stat has no way to hand resolved parameters to its geom.
+resolved parameters to avoid repeating them across thousands of rows. That plan
+assumed a channel that does not exist: `StatResult` carries only `data` and
+`mapping`, so a stat has no way to hand resolved parameters to its geom.
 
 Columns are the honest alternative. `geom_voxel` genuinely needs the cell size,
 and it cannot recover it from centers when an axis holds a single cell. The
-redundancy is real but bounded, and closing it would mean widening the
-stat/geom contract for one consumer.
+redundancy is real but bounded, and closing it would mean widening the stat/geom
+contract for one consumer.
 
 ### Density has a volume divisor
 
@@ -90,12 +90,12 @@ known bin widths, not merely check that density rises with count.
 Mirrors the 2D binning vocabulary so a reader who knows `stat_summary_2d` can
 predict this:
 
-| Parameter | Meaning |
-| --- | --- |
-| `bins` | Bin count per axis; scalar or `[x, y, z]` |
-| `binwidth` | Width per axis; scalar or `[x, y, z]`. Overrides `bins` |
-| `boundary` | Bin edge alignment; scalar or `[x, y, z]` |
-| `fun` | Optional summary over a mapped value column, producing `value` |
+| Parameter  | Meaning                                                        |
+| ---------- | -------------------------------------------------------------- |
+| `bins`     | Bin count per axis; scalar or `[x, y, z]`                      |
+| `binwidth` | Width per axis; scalar or `[x, y, z]`. Overrides `bins`        |
+| `boundary` | Bin edge alignment; scalar or `[x, y, z]`                      |
+| `fun`      | Optional summary over a mapped value column, producing `value` |
 
 Scalar-or-triple is the existing 2D convention (`params.binwidth` already
 accepts a scalar or a pair), extended by one axis.
@@ -130,9 +130,9 @@ axis-aligned, filled boxes from `{ center, size, color }` — which is exactly a
 voxel. It was built for the model-inspection scene, and nothing about it is
 model-specific.
 
-One change is required: it currently hardcodes `mode: "opaque"` with
-`depthTest` and `depthWrite` both true. Voxels need the resolved depth props
-from the layer's declared policy, because interior cells are invisible without
+One change is required: it currently hardcodes `mode: "opaque"` with `depthTest`
+and `depthWrite` both true. Voxels need the resolved depth props from the
+layer's declared policy, because interior cells are invisible without
 translucency.
 
 That makes the dependency chain concrete:
@@ -151,11 +151,11 @@ affordance, not part of the stat contract.
 
 ## Domain and scale behavior
 
-Cell centers train x, y, and z through the ordinary position scales. The
-extents must widen each domain by half a bin width on each side, or the outer
-half of every boundary cell falls outside the cube. `geom_tile` already does
-exactly this through `domainContribution`, and `geom_voxel` should use the same
-hook rather than a special case.
+Cell centers train x, y, and z through the ordinary position scales. The extents
+must widen each domain by half a bin width on each side, or the outer half of
+every boundary cell falls outside the cube. `geom_tile` already does exactly
+this through `domainContribution`, and `geom_voxel` should use the same hook
+rather than a special case.
 
 ## What this does not promise
 

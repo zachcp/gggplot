@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals } from "@std/assert";
 import type { GGSpec } from "@gggplot/core";
 import { withSiteChartTheme } from "./chart_theme.ts";
 

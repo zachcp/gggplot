@@ -256,7 +256,7 @@ const gallery = await Deno.readTextFile(galleryPath);
 const gallerySections = new Map<string, string>();
 for (
   const match of gallery.matchAll(
-    /^- slug: ([^\r\n]+)\r?\n  section: ([^\r\n]+)/gm,
+    /^- slug: ([^\r\n]+)\r?\n {2}section: ([^\r\n]+)/gm,
   )
 ) {
   gallerySections.set(match[1], match[2]);

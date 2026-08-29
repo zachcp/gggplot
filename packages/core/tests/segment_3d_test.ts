@@ -3,13 +3,8 @@ import {
   assertEquals,
   assertStringIncludes,
   assertThrows,
-} from "jsr:@std/assert@1";
-import {
-  geomContour,
-  geomHline,
-  geomSegment,
-  ggplot,
-} from "../src/dsl/mod.ts";
+} from "@std/assert";
+import { geomContour, geomHline, geomSegment, ggplot } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
 import { emitSource } from "../src/emit/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
@@ -162,12 +157,18 @@ Deno.test("a scalar mark colour is parsed before it reaches a raw layer", () => 
     ggplot(data, mapping).add(geomSegment({ color: "#38bdf8" })).build(),
   );
   assertEquals(node.props.color, "#38bdf8");
-  assertEquals(node.props.colors, undefined, "3D segments carry no color tensor");
+  assertEquals(
+    node.props.colors,
+    undefined,
+    "3D segments carry no color tensor",
+  );
 
   // The emitted standalone module must parse it too, or the two backends
   // disagree about what the same RenderTree looks like.
   const source = emitSource(
-    compile(ggplot(data, mapping).add(geomSegment({ color: "#38bdf8" })).build()),
+    compile(
+      ggplot(data, mapping).add(geomSegment({ color: "#38bdf8" })).build(),
+    ),
     "Segment3D",
   );
   assertStringIncludes(source, "const parseColorRGBA");

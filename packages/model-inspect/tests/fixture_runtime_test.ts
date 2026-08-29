@@ -16,7 +16,13 @@ const document: ModelDocument = {
     id: "g0",
     inputs: [],
     outputs: [],
-    nodes: [{ id: "n0", kind: "operator", op: "MatMul", inputs: [], outputs: [] }],
+    nodes: [{
+      id: "n0",
+      kind: "operator",
+      op: "MatMul",
+      inputs: [],
+      outputs: [],
+    }],
     edges: [],
   }],
   tensors: {},
@@ -118,7 +124,10 @@ Deno.test("shared ownership is granted only when the runtime can back it", async
     capabilities: { gpuTensorInterop: "shared" },
   });
   assertEquals(
-    (await sharing.capture!({ artifactId: "act-0", ownership: "runtime-shared" }))
+    (await sharing.capture!({
+      artifactId: "act-0",
+      ownership: "runtime-shared",
+    }))
       .ownership,
     "runtime-shared",
   );
@@ -129,7 +138,10 @@ Deno.test("shared ownership is granted only when the runtime can back it", async
     capabilities: { gpuTensorInterop: "shared" },
   });
   assertEquals(
-    (await writable.capture!({ artifactId: "act-0", ownership: "runtime-shared" }))
+    (await writable.capture!({
+      artifactId: "act-0",
+      ownership: "runtime-shared",
+    }))
       .ownership,
     "runtime-copy-on-demand",
   );

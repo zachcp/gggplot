@@ -33,8 +33,8 @@ import {
   concatFlatTensors,
   concatPacked,
   type FaceLoop,
-  packFaceLoops,
   type PackedGeometry,
+  packFaceLoops,
   packMarkRows,
 } from "../src/geom/shared.ts";
 import {
@@ -76,7 +76,9 @@ function pointRows(n: number) {
 function lineGroupRows(n: number, groupIndex: number) {
   const xs = new Array<number>(n);
   const ys = new Array<number>(n);
-  const colors = new Array<string>(n).fill(PALETTE[groupIndex % PALETTE.length]);
+  const colors = new Array<string>(n).fill(
+    PALETTE[groupIndex % PALETTE.length],
+  );
   const widths = new Array<number>(n).fill(2);
   for (let i = 0; i < n; i++) {
     xs[i] = i;
@@ -146,7 +148,9 @@ function transformPolarPoint(n: number): void {
     colors: packed.colors,
     sizes: packed.sizes,
   });
-  munchFlatNode(munchPolygonNode(polarizeNode(mark, 0, [0, n], -Math.PI, Math.PI)));
+  munchFlatNode(
+    munchPolygonNode(polarizeNode(mark, 0, [0, n], -Math.PI, Math.PI)),
+  );
 }
 
 function transformPolarGroupedLine(n: number): void {
@@ -165,7 +169,9 @@ function transformPolarGroupedLine(n: number): void {
     positions: combined.positions,
     topology: combined.topology,
   });
-  munchFlatNode(munchPolygonNode(polarizeNode(mark, 0, [0, perGroup], -Math.PI, Math.PI)));
+  munchFlatNode(
+    munchPolygonNode(polarizeNode(mark, 0, [0, perGroup], -Math.PI, Math.PI)),
+  );
 }
 
 function transformPolarStackedBar(n: number): void {
@@ -177,7 +183,9 @@ function transformPolarStackedBar(n: number): void {
     concave: false,
   });
   munchFlatNode(
-    munchPolygonNode(polarizeNode(mark, 0, [0, BAR_CATEGORY_COUNT], -Math.PI, Math.PI)),
+    munchPolygonNode(
+      polarizeNode(mark, 0, [0, BAR_CATEGORY_COUNT], -Math.PI, Math.PI),
+    ),
   );
 }
 
@@ -217,7 +225,9 @@ function barSpec(n: number) {
     .add(geomBar({ position: "stack" })).build();
 }
 
-function constructTree(buildSpec: () => ReturnType<typeof pointSpec>): RenderNode {
+function constructTree(
+  buildSpec: () => ReturnType<typeof pointSpec>,
+): RenderNode {
   return compile(buildSpec());
 }
 
@@ -235,39 +245,59 @@ for (const n of SIZES) {
   Deno.bench(`(a) pack point — ${n} rows`, { group: "pack-point" }, () => {
     packPoint(n);
   });
-  Deno.bench(`(a) pack grouped line — ${n} rows`, { group: "pack-line" }, () => {
-    packGroupedLine(n);
-  });
+  Deno.bench(
+    `(a) pack grouped line — ${n} rows`,
+    { group: "pack-line" },
+    () => {
+      packGroupedLine(n);
+    },
+  );
   Deno.bench(`(a) pack stacked bar — ${n} rows`, { group: "pack-bar" }, () => {
     packStackedBar(n);
   });
 
-  Deno.bench(`(b) polar transform point — ${n} rows`, { group: "transform-point" }, () => {
+  Deno.bench(`(b) polar transform point — ${n} rows`, {
+    group: "transform-point",
+  }, () => {
     transformPolarPoint(n);
   });
-  Deno.bench(`(b) polar transform grouped line — ${n} rows`, { group: "transform-line" }, () => {
+  Deno.bench(`(b) polar transform grouped line — ${n} rows`, {
+    group: "transform-line",
+  }, () => {
     transformPolarGroupedLine(n);
   });
-  Deno.bench(`(b) polar transform stacked bar — ${n} rows`, { group: "transform-bar" }, () => {
+  Deno.bench(`(b) polar transform stacked bar — ${n} rows`, {
+    group: "transform-bar",
+  }, () => {
     transformPolarStackedBar(n);
   });
 
-  Deno.bench(`(c) construct RenderTree point — ${n} rows`, { group: "construct-point" }, () => {
+  Deno.bench(`(c) construct RenderTree point — ${n} rows`, {
+    group: "construct-point",
+  }, () => {
     constructTree(() => pointSpec(n));
   });
-  Deno.bench(`(c) construct RenderTree grouped line — ${n} rows`, { group: "construct-line" }, () => {
+  Deno.bench(`(c) construct RenderTree grouped line — ${n} rows`, {
+    group: "construct-line",
+  }, () => {
     constructTree(() => lineSpec(n));
   });
-  Deno.bench(`(c) construct RenderTree stacked bar — ${n} rows`, { group: "construct-bar" }, () => {
+  Deno.bench(`(c) construct RenderTree stacked bar — ${n} rows`, {
+    group: "construct-bar",
+  }, () => {
     constructTree(() => barSpec(n));
   });
 
   Deno.bench(`(d) emit point — ${n} rows`, { group: "emit-point" }, () => {
     emit(() => pointSpec(n));
   });
-  Deno.bench(`(d) emit grouped line — ${n} rows`, { group: "emit-line" }, () => {
-    emit(() => lineSpec(n));
-  });
+  Deno.bench(
+    `(d) emit grouped line — ${n} rows`,
+    { group: "emit-line" },
+    () => {
+      emit(() => lineSpec(n));
+    },
+  );
   Deno.bench(`(d) emit stacked bar — ${n} rows`, { group: "emit-bar" }, () => {
     emit(() => barSpec(n));
   });
@@ -307,7 +337,11 @@ function boundedOnce(label: string, budgetMs: number, fn: () => void): number {
 // Budgets are deliberately generous ceilings (regression gates, not targets)
 // — see docs/PERF_BASELINE.md for the actual measured numbers from a run of
 // this file on the reference hardware documented there.
-boundedOnce("(a) pack point — 1,000,000 rows", 4_000, () => packPoint(ONE_MILLION));
+boundedOnce(
+  "(a) pack point — 1,000,000 rows",
+  4_000,
+  () => packPoint(ONE_MILLION),
+);
 boundedOnce(
   "(a) pack grouped line — 1,000,000 rows",
   4_000,
@@ -367,7 +401,9 @@ boundedOnce(
   () => emit(() => barSpec(ONE_MILLION)),
 );
 
-console.log("\n1M-row bounded stage results (fixed 1 warmup + 1 measured run):");
+console.log(
+  "\n1M-row bounded stage results (fixed 1 warmup + 1 measured run):",
+);
 console.table(
   boundResults.map((r) => ({
     stage: r.label,

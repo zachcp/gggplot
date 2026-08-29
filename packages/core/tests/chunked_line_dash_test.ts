@@ -111,14 +111,18 @@ Deno.test("computeArcLengths: a single-vertex chunk stays at 0 (no leg to accumu
 
 Deno.test("gggplot-xc9: a dashed geom_line's ChunkedLine node carries a 'dash' prop; a solid one does not", () => {
   const spec = ggplot(
-    { x: [0, 1, 2, 0, 1, 2], y: [1, 2, 1, 3, 4, 3], grp: [
-      "a",
-      "a",
-      "a",
-      "b",
-      "b",
-      "b",
-    ] },
+    {
+      x: [0, 1, 2, 0, 1, 2],
+      y: [1, 2, 1, 3, 4, 3],
+      grp: [
+        "a",
+        "a",
+        "a",
+        "b",
+        "b",
+        "b",
+      ],
+    },
     { x: "x", y: "y", group: "grp", linetype: "grp" },
   ).add(geomLine()).build();
   const tree = compile(spec);
@@ -140,7 +144,9 @@ Deno.test("gggplot-xc9: emitted module wires the dash material (MaterialContext 
   const src = emitSource(compile(spec), "DashedChart");
 
   // The specific mark node carries its dash pattern as a prop.
-  const markLine = src.split("\n").find((line) => line.includes("<ChunkedLine"))!;
+  const markLine = src.split("\n").find((line) =>
+    line.includes("<ChunkedLine")
+  )!;
   assertStringIncludes(markLine, "dash={[8,5]}");
 
   // The inlined ChunkedLine definition wires the dash uniforms into a
@@ -150,7 +156,10 @@ Deno.test("gggplot-xc9: emitted module wires the dash material (MaterialContext 
   assertStringIncludes(src, "const getDashColorSource = wgsl`");
   assertStringIncludes(src, "@link fn getWorldScale(w: f32, f: f32) -> f32;");
   assertStringIncludes(src, "function packDashUniforms(dash: any)");
-  assertStringIncludes(src, "function computeArcLengths(positions: any, chunks: any)");
+  assertStringIncludes(
+    src,
+    "function computeArcLengths(positions: any, chunks: any)",
+  );
   assertStringIncludes(
     src,
     "{ ...material, solid: { ...material.solid, getFragment: getDashColor } }",

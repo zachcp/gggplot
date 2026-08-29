@@ -38,6 +38,9 @@ export class ByteArrayTensorSource implements TensorSource {
     this.byteLength = bytes.byteLength;
   }
 
+  // Implements the async TensorSource contract; sources backed by network or
+  // disk do await here.
+  // deno-lint-ignore require-await
   async readRange(request: TensorRangeRequest): Promise<ArrayBuffer> {
     const errors = validateTensorRange(request, this.byteLength);
     if (errors.length > 0) {

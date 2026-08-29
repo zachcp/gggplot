@@ -43,7 +43,10 @@ const MARK_COMPONENTS = new Set<string>([
   "Label",
 ]);
 
-function findAllRaw(tree: RenderNode, match: (n: RenderNode) => boolean): RenderNode[] {
+function findAllRaw(
+  tree: RenderNode,
+  match: (n: RenderNode) => boolean,
+): RenderNode[] {
   return [
     ...(match(tree) ? [tree] : []),
     ...tree.children.flatMap((child) => findAllRaw(child, match)),
@@ -91,26 +94,34 @@ const CASES: { geom: string; component: string; spec: () => GGSpec }[] = [
   {
     geom: "point",
     component: "Point",
-    spec: () => ggplot(rows, aes({ x: "x", y: "y", z: "z" })).add(geomPoint()).build(),
+    spec: () =>
+      ggplot(rows, aes({ x: "x", y: "y", z: "z" })).add(geomPoint()).build(),
   },
   {
     geom: "line",
     component: "ChunkedLine",
     spec: () =>
-      ggplot(rows, aes({ x: "x", y: "y", z: "z", group: "g" })).add(geomLine()).build(),
+      ggplot(rows, aes({ x: "x", y: "y", z: "z", group: "g" })).add(geomLine())
+        .build(),
   },
   {
     geom: "path",
     component: "ChunkedLine",
     spec: () =>
-      ggplot(rows, aes({ x: "x", y: "y", z: "z", group: "g" })).add(geomPath()).build(),
+      ggplot(rows, aes({ x: "x", y: "y", z: "z", group: "g" })).add(geomPath())
+        .build(),
   },
   {
     geom: "segment",
     component: "ChunkedLine",
     spec: () =>
       ggplot(
-        { ...rows, xe: [1, 2, 3, 1, 2, 3], ye: [1, 2, 3, 2, 3, 4], ze: [1, 2, 3, 3, 2, 1] },
+        {
+          ...rows,
+          xe: [1, 2, 3, 1, 2, 3],
+          ye: [1, 2, 3, 2, 3, 4],
+          ze: [1, 2, 3, 3, 2, 1],
+        },
         aes({ x: "x", y: "y", z: "z", xend: "xe", yend: "ye", zend: "ze" }),
       ).add(geomSegment()).build(),
   },
@@ -127,18 +138,22 @@ const CASES: { geom: string; component: string; spec: () => GGSpec }[] = [
     geom: "area",
     component: "ChunkedFace",
     spec: () =>
-      ggplot(rows, aes({ x: "x", y: "y", z: "z", group: "g" })).add(geomArea()).build(),
+      ggplot(rows, aes({ x: "x", y: "y", z: "z", group: "g" })).add(geomArea())
+        .build(),
   },
   {
     geom: "col",
     component: "ChunkedFace",
-    spec: () => ggplot(rows, aes({ x: "x", y: "y", z: "z" })).add(geomCol()).build(),
+    spec: () =>
+      ggplot(rows, aes({ x: "x", y: "y", z: "z" })).add(geomCol()).build(),
   },
   {
     geom: "polygon",
     component: "ChunkedFace",
     spec: () =>
-      ggplot(rows, aes({ x: "x", y: "y", z: "z", group: "g" })).add(geomPolygon()).build(),
+      ggplot(rows, aes({ x: "x", y: "y", z: "z", group: "g" })).add(
+        geomPolygon(),
+      ).build(),
   },
   {
     geom: "ribbon",
@@ -161,21 +176,29 @@ const CASES: { geom: string; component: string; spec: () => GGSpec }[] = [
   {
     geom: "surface",
     component: "ChunkedFace",
-    spec: () => ggplot(gridRows(4), aes({ x: "x", y: "y", z: "z" })).add(geomSurface()).build(),
+    spec: () =>
+      ggplot(gridRows(4), aes({ x: "x", y: "y", z: "z" })).add(geomSurface())
+        .build(),
   },
   {
     geom: "voxel",
     component: "ChunkedFace",
     spec: () =>
-      ggplot(rows, aes({ x: "x", y: "y", z: "z" })).add(geomVoxel({ bins: 3 })).build(),
+      ggplot(rows, aes({ x: "x", y: "y", z: "z" })).add(geomVoxel({ bins: 3 }))
+        .build(),
   },
 ];
 
 Deno.test("every 3D-capable geom is covered by a node-budget case", () => {
   const capable = Object.entries(
-    GEOM_REGISTRY as unknown as Record<string, { modes?: { dimensions: number }[] }>,
+    GEOM_REGISTRY as unknown as Record<
+      string,
+      { modes?: { dimensions: number }[] }
+    >,
   )
-    .filter(([, def]) => (def.modes ?? []).some((mode) => mode.dimensions === 3))
+    .filter(([, def]) =>
+      (def.modes ?? []).some((mode) => mode.dimensions === 3)
+    )
     .map(([name]) => name)
     .sort();
   assertEquals(

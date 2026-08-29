@@ -138,7 +138,9 @@ const getDashColorSource = wgsl`
  */
 export function packDashUniforms(
   dash: readonly number[] | undefined,
-): { array: [number, number, number, number]; count: number; total: number } | null {
+):
+  | { array: [number, number, number, number]; count: number; total: number }
+  | null {
   if (!dash || dash.length === 0) return null;
   const segments = dash.slice(0, MAX_DASH_SEGMENTS);
   if (dash.length > MAX_DASH_SEGMENTS) {
@@ -175,7 +177,8 @@ export function computeArcLengths(
       if (k > 0) {
         let sumSq = 0;
         for (let d = 0; d < dims; d++) {
-          const delta = array[vertex * dims + d] - array[(vertex - 1) * dims + d];
+          const delta = array[vertex * dims + d] -
+            array[(vertex - 1) * dims + d];
           sumSq += delta * delta;
         }
         acc += Math.sqrt(sumSq);
@@ -183,7 +186,14 @@ export function computeArcLengths(
       out[vertex] = acc;
     }
   }
-  return { array: out, format: "f32", dims: 1, length, size: [length], version };
+  return {
+    array: out,
+    format: "f32",
+    dims: 1,
+    length,
+    size: [length],
+    version,
+  };
 }
 
 /**
@@ -233,8 +243,17 @@ export interface ChunkedLineProps {
  * geom/shared.ts's concatPacked) — gggplot-tzc.3.
  */
 export const ChunkedLine = (props: ChunkedLineProps): LiveElement => {
-  const { positions, topology, colors, widths, width, color, opacity, dash, ...rest } =
-    props;
+  const {
+    positions,
+    topology,
+    colors,
+    widths,
+    width,
+    color,
+    opacity,
+    dash,
+    ...rest
+  } = props;
   const chunks = topology.chunks ?? Uint32Array.of(positions.length);
   // gggplot-tzc.8: MarkTopology's chunks array is also mark data (integer
   // topology, not a per-row float attribute, but still a Use.GPU raw source

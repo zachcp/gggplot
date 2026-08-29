@@ -43,11 +43,11 @@ export function useResolvedExample(example: DocExample): ResolvedExample {
 
 export function useViewportWidth(): number {
   const [width, setWidth] = React.useState(() =>
-    typeof window === "undefined" ? 1280 : window.innerWidth
+    typeof window === "undefined" ? 1280 : globalThis.innerWidth
   );
 
   React.useEffect(() => {
-    const onResize = () => setWidth(window.innerWidth);
+    const onResize = () => setWidth(globalThis.innerWidth);
     addEventListener("resize", onResize);
     return () => removeEventListener("resize", onResize);
   }, []);

@@ -217,7 +217,10 @@ Deno.test("resident conformance: binned tile strip is resident-eligible standalo
     "identity",
   );
   // No CPU tile lowering remains in the tree.
-  assertEquals(nodes(compile(spec, { resident: true }), "ChunkedFace").length, 0);
+  assertEquals(
+    nodes(compile(spec, { resident: true }), "ChunkedFace").length,
+    0,
+  );
 });
 
 Deno.test("resident conformance: tile strip falls back to CPU when ineligible", () => {

@@ -17,7 +17,6 @@ import {
   packUniformChunks,
   valuesOf,
 } from "./shared.ts";
-import { packPoints3d } from "./packing.ts";
 import type { DepthPolicy } from "./types.ts";
 
 /**

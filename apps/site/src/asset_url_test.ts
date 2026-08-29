@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals } from "@std/assert";
 import { assetUrl } from "./asset_url.ts";
 
 // Under Deno there is no import.meta.env, so assetUrl falls back to "/" —

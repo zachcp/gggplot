@@ -23,7 +23,11 @@
 // Cartesian view node's `range` via compile/coordinates.ts's numericRange) —
 // never inside scalePosition/packing. This is exactly the "any non-identity
 // must be accounted for in the DOMAIN, never in per-row packing" contract.
-import { assertEquals, assertNotStrictEquals, assertStrictEquals } from "@std/assert";
+import {
+  assertEquals,
+  assertNotStrictEquals,
+  assertStrictEquals,
+} from "@std/assert";
 import {
   aes,
   geomPoint,
@@ -48,7 +52,10 @@ function findNodes(
   ];
 }
 
-function findNode(tree: RenderNode, component: RenderNode["component"]): RenderNode {
+function findNode(
+  tree: RenderNode,
+  component: RenderNode["component"],
+): RenderNode {
   const hits = findNodes(tree, component);
   if (hits.length === 0) throw new Error(`no ${component} node found`);
   return hits[0];

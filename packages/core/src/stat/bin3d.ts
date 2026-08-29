@@ -75,7 +75,12 @@ export const statBin3d: StatFn = (data, mapping, params) => {
   }
 
   const empty = () => ({
-    data: dataFrameFromColumns({ [xCol]: [], [yCol]: [], [zCol]: [], count: [] }),
+    data: dataFrameFromColumns({
+      [xCol]: [],
+      [yCol]: [],
+      [zCol]: [],
+      count: [],
+    }),
     mapping: {
       ...mapping,
       ...(mapping.fill || params.fill !== undefined ? {} : { fill: "count" }),

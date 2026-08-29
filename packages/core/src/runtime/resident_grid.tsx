@@ -130,7 +130,10 @@ export function createResidentGrid<K extends ResidentGridKernel, O, S>(
 ): ResidentGrid<O, S> {
   const leaf: LiveComponent = config.leaf ??
     (ResidentHistogramBars as unknown as LiveComponent);
-  const productFrom = (resident: K, version: number): ResidentGridProduct<S> => {
+  const productFrom = (
+    resident: K,
+    version: number,
+  ): ResidentGridProduct<S> => {
     const bins = config.binsOf(resident);
     const cells = bins * resident.groupsCount;
     return {
@@ -233,7 +236,9 @@ export function createResidentGrid<K extends ResidentGridKernel, O, S>(
     // per-group; a palette change re-keys useResource via config.optionKeys.
     const palette = useMemo(
       () =>
-        paletteColors ? paletteToRgbaF32(paletteColors, opacity ?? 1) : undefined,
+        paletteColors
+          ? paletteToRgbaF32(paletteColors, opacity ?? 1)
+          : undefined,
       [paletteColors?.join(","), opacity],
     );
     const resolvedOptions = useMemo(

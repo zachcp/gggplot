@@ -10,8 +10,8 @@ import type {
   ValueRef,
 } from "./types.ts";
 import {
-  ONNXRUNTIME_WEBGPU_CAPABILITIES,
   type ModelRuntimeAdapter,
+  ONNXRUNTIME_WEBGPU_CAPABILITIES,
 } from "./runtime.ts";
 
 /** The metadata shape exposed by ONNX Runtime Web sessions. */
@@ -104,7 +104,9 @@ export function dimensionFromOnnx(value: OnnxDimensionLike): Dimension {
   return { unknown: true };
 }
 
-function metadataShape(metadata: OnnxTensorMetadataLike | undefined): Dimension[] {
+function metadataShape(
+  metadata: OnnxTensorMetadataLike | undefined,
+): Dimension[] {
   return metadata?.shape === undefined
     ? [{ unknown: true }]
     : metadata.shape.map(dimensionFromOnnx);
@@ -275,6 +277,7 @@ export function onnxRuntimeWebAdapter(
   return {
     name: "onnxruntime-web",
     capabilities: ONNXRUNTIME_WEBGPU_CAPABILITIES,
+    // deno-lint-ignore require-await -- adapter contract is async.
     inspect: async () => document,
   };
 }

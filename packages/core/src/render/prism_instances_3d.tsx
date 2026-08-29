@@ -1,7 +1,7 @@
 /** @jsxRuntime classic */
 /** @jsx createElement */
 
-import { createElement } from "@use-gpu/live";
+import { createElement, type LiveElement } from "@use-gpu/live";
 import { Mesh } from "@use-gpu/scene";
 import { GeometryData } from "@use-gpu/workbench";
 import type { GeometryDataProps } from "@use-gpu/workbench/mjs/data/geometry-data.mjs";
@@ -39,7 +39,22 @@ function colorChannels(color: string): [number, number, number, number] {
  * avoids relying on renderer-specific instance aggregation while retaining a
  * generic input representation for future instanced backends.
  */
-function prismGeometry(instances: readonly PrismInstance3D[]) {
+/** Flat vertex arrays for one packed prism batch, as GeometryData consumes them. */
+interface PrismGeometry {
+  count: number;
+  attributes: {
+    positions: Float32Array;
+    normals: Float32Array;
+    colors: Float32Array;
+  };
+  formats: {
+    positions: string;
+    normals: string;
+    colors: string;
+  };
+}
+
+function prismGeometry(instances: readonly PrismInstance3D[]): PrismGeometry {
   const count = instances.length * UNIT_BOX.count;
   const positions = new Float32Array(count * 4);
   const normals = new Float32Array(count * 4);
@@ -79,7 +94,7 @@ function prismGeometry(instances: readonly PrismInstance3D[]) {
 /** Render filled mini-prisms under the active 3D Cartesian transform. */
 export const PrismInstances3D = (
   { instances }: { instances: readonly PrismInstance3D[] },
-) =>
+): LiveElement =>
   createElement(GeometryData, {
     ...prismGeometry(instances),
     render: (mesh: PrismMesh) =>

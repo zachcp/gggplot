@@ -1,7 +1,4 @@
-import type {
-  ExtensionDefinition,
-  FieldSpec,
-} from "@gggplot/core/plan";
+import type { ExtensionDefinition, FieldSpec } from "@gggplot/core/plan";
 import type { ModelDocument } from "./types.ts";
 import type { TensorSource } from "./residency.ts";
 import {

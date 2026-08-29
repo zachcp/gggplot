@@ -71,8 +71,8 @@ becoming a distinct 3D reduction.
 
 No `groupedHistogram3d`, volumetric density, or isosurface reducer is added yet.
 Those products need an explicit voxel/volume grammar, occlusion and scale
-semantics, and a renderer capable of consuming the result without compulsory
-CPU readback. Once that contract exists, its canonical CPU reference and
+semantics, and a renderer capable of consuming the result without compulsory CPU
+readback. Once that contract exists, its canonical CPU reference and
 GPU-resident implementation belong in this package under the same parity rules
 as the current reducers.
 

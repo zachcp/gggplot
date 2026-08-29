@@ -204,6 +204,7 @@ Deno.test("large content summaries use only a bounded number of source reads", a
     id: "payload",
     version: "v1",
     byteLength: 64 * 1024 * 1024,
+    // deno-lint-ignore require-await -- stubs the async TensorSource.
     readRange: async (request) => {
       reads++;
       return new ArrayBuffer(request.byteLength);
@@ -227,6 +228,7 @@ Deno.test("forced exact and downsample modes still respect content budgets", asy
     id: "payload",
     version: "v1",
     byteLength: 64,
+    // deno-lint-ignore require-await -- stubs the async TensorSource.
     readRange: async (request) => new ArrayBuffer(request.byteLength),
   };
   const exact = await buildTensorContentProduct(model([4, 4]), source, {

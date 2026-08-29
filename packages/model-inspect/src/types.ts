@@ -19,7 +19,7 @@ export type ModelDType =
   | "u64"
   | "bool"
   | "string"
-  | (string & {});
+  | (string & Record<never, never>);
 
 export type Dimension =
   | number

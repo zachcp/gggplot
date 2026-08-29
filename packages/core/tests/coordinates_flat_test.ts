@@ -186,10 +186,22 @@ Deno.test("companion (2-color) repetition stays aligned through loop munching", 
   const square: [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 1]];
   const colors: FlatTensor = {
     array: Float32Array.from([
-      1, 0, 0, 1, // v0 red
-      1, 0, 0, 1, // v1 red
-      0, 0, 1, 1, // v2 blue
-      0, 0, 1, 1, // v3 blue
+      1,
+      0,
+      0,
+      1, // v0 red
+      1,
+      0,
+      0,
+      1, // v1 red
+      0,
+      0,
+      1,
+      1, // v2 blue
+      0,
+      0,
+      1,
+      1, // v3 blue
     ]),
     format: "vec4<f32>",
     dims: 4,

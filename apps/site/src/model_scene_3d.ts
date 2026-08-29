@@ -1,10 +1,4 @@
-import {
-  aes,
-  geomPath,
-  type GGSpec,
-  ggplot,
-  theme,
-} from "@gggplot/core/dsl";
+import { aes, geomPath, ggplot, type GGSpec, theme } from "@gggplot/core/dsl";
 // Type-only, so the renderer is erased at runtime and this module stays
 // headless while still describing the prisms the host will draw.
 import type { PrismInstance3D } from "@gggplot/core";
