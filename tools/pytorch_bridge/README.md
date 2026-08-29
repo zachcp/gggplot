@@ -102,6 +102,29 @@ by the caller, so every other entry point stays importable without it.
 cd tools/pytorch_bridge && python3 -m unittest discover -s tests
 ```
 
+## Verified against real PyTorch
+
+The `--demo` path synthesizes tensors in Python and never imports torch, so for
+a long time the torch-reading half (`tensors_from_state_dict`, and the
+`torch.load` in `cli._load_state_dict`) had never actually run.
+
+It has now been exercised end to end against torch 2.13.0: an `nn.Module`
+state_dict saved with `torch.save`, converted by this CLI, and read back through
+the TypeScript package. All 11 tensors matched torch exactly on dtype, shape,
+and value — including a deliberately non-contiguous transposed view, which
+confirms the `.contiguous()` call carries its weight.
+
+`packages/model-inspect/tests/torch_real_test.ts` re-checks that agreement on
+every CI run from committed fixtures, so torch stays out of the toolchain.
+Regenerate them with `regenerate_torch_fixture.py` if the dtype mapping or
+document shape changes.
+
+**One gap was found and fixed** on the TypeScript side, not in this bridge:
+`numericWidth` in `packages/model-inspect/src/products.ts` omitted `i64`/`u64`,
+so every 64-bit integer tensor silently came back as a metadata-only product
+with no values — the dtype ONNX uses for shapes, indices, and token ids. They
+now decode through `BigInt`, exact to 2^53 and rounding above it.
+
 The fixture in `packages/model-inspect/tests/fixtures/` is produced by `--demo`
 and read back by `bridge_fixture_test.ts`, so the Python writer and the
 TypeScript reader are tested against each other. Regenerate it with:
