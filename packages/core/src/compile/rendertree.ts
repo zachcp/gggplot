@@ -75,7 +75,14 @@ export type ComponentName =
    * sub-rectangle as the LayoutContext for one Embedded child, giving
    * facet_wrap/facet_grid their multi-panel layout.
    */
-  | "FacetGrid";
+  | "FacetGrid"
+  /**
+   * @use-gpu/plot's ScissorBox: a shader-side clip against a data range, used
+   * to keep coord_cartesian's retained-but-out-of-view marks inside the panel
+   * (gggplot-b06). It reads the ambient range context by default; the explicit
+   * `range` prop pins it to the zoomed view.
+   */
+  | "ScissorBox";
 
 /**
  * One layer's worth of rows dropped before the stat ran (gggplot-9v6).

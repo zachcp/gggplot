@@ -1,4 +1,11 @@
-import { aes, geomPath, ggplot, type GGSpec, theme } from "@gggplot/core/dsl";
+import {
+  aes,
+  camera3dFit,
+  geomPath,
+  ggplot,
+  type GGSpec,
+  theme,
+} from "@gggplot/core/dsl";
 // Type-only, so the renderer is erased at runtime and this module stays
 // headless while still describing the prisms the host will draw.
 import type { PrismInstance3D } from "@gggplot/core";
@@ -156,5 +163,12 @@ export function modelScene3dSpec(source: ModelDocument | ModelScene3D): GGSpec {
       alpha: 0.9,
     }),
     theme({ grid: false }),
+    // The default camera targets the origin at radius 3.6, which frames the
+    // normalized plot cube. This scene is laid out in real units, spans tens of
+    // them, and is nowhere near the origin, so without a fit it renders
+    // off-centre and cropped (gggplot-o2x). Aspect is left at the default: the
+    // canvas is fluid-width with a fixed height, so it is not known here, and
+    // the conservative fit is never tighter than the viewport allows.
+    camera3dFit(scene.bounds),
   ).build();
 }
