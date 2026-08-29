@@ -14,7 +14,7 @@
 // writes the function into a ref the host owns. A ref rather than a callback
 // deliberately: React holds the identity, there is no subscription to tear
 // down, and a stale picker cannot outlive the scene that produced it.
-import { useOne } from "@use-gpu/live";
+import { type LiveElement, useOne } from "@use-gpu/live";
 import { useViewContext } from "@use-gpu/workbench";
 
 /** A world-space ray: a point and a direction, both unnormalized. */
@@ -49,7 +49,9 @@ export type ScenePickPublish = (pick: ScenePickFn | null) => void;
  * inside the panel's Cartesian node and therefore inside the 3D camera's
  * ViewContext — the flat overlay would resolve to the wrong camera.
  */
-export const ScenePicker = ({ publish }: { publish: ScenePickPublish }) => {
+export const ScenePicker = (
+  { publish }: { publish: ScenePickPublish },
+): LiveElement => {
   const view = useViewContext();
   const pick = view?.pick;
   useOne(() => {

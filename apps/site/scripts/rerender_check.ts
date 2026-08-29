@@ -13,7 +13,7 @@
  *
  * Usage: deno task test:rerender   (add --route=model-inspection to narrow)
  */
-import { chromium } from "npm:playwright@^1.61.1";
+import { chromium } from "playwright";
 import { browserArgs } from "./browser_args.ts";
 
 // Routes with a control that re-renders a chart subtree. model-inspection is

@@ -3,7 +3,7 @@ import {
   assertEquals,
   assertNotStrictEquals,
   assertThrows,
-} from "jsr:@std/assert@1";
+} from "@std/assert";
 import { camera3d, camera3dFromLookAt, ggplot } from "../src/dsl/mod.ts";
 import { DEFAULT_CAMERA_3D, resolveCamera3D } from "../src/ir/types.ts";
 

@@ -16,6 +16,7 @@ import {
 } from "./resident.ts";
 import {
   createResidentGrid,
+  type ResidentGrid,
   type ResidentGridMarkProps,
   type ResidentGridProduct,
   type ResidentGridProviderProps,
@@ -41,7 +42,10 @@ export type ResidentHistogramMarkProps = ResidentGridMarkProps<
   ResidentHistogramMarkOptions
 >;
 
-const grid = createResidentGrid<
+const grid: ResidentGrid<
+  ResidentHistogramMarkOptions,
+  ResidentHistogramSummary
+> = createResidentGrid<
   ResidentHistogram1D,
   ResidentHistogramMarkOptions,
   ResidentHistogramSummary

@@ -6,7 +6,7 @@
  * are written below .artifacts/visual-smoke/ (which is gitignored) so a CI
  * failure has a route screenshot and machine-readable diagnostic beside it.
  */
-import { chromium } from "npm:playwright@^1.61.1";
+import { chromium } from "playwright";
 import { browserArgs } from "./browser_args.ts";
 
 const host = "127.0.0.1";
@@ -152,7 +152,7 @@ try {
 }
 
 /** Exact-pixel export must leave every interactive canvas and temp host intact. */
-async function verifyPngExport(browser: import("npm:playwright").Browser) {
+async function verifyPngExport(browser: import("playwright").Browser) {
   // Exercise the extension first, before the route-health pass has submitted
   // dozens of canvases to the shared browser GPU process.
   for (const mode of ["3d", "1"]) {
@@ -200,7 +200,7 @@ async function verifyPngExport(browser: import("npm:playwright").Browser) {
 }
 
 /** A deliberately thrown chart error must not remove the surrounding docs UI. */
-async function verifyForcedFailure(browser: import("npm:playwright").Browser) {
+async function verifyForcedFailure(browser: import("playwright").Browser) {
   const page = await browser.newPage({ viewport });
   try {
     await page.goto(`${baseUrl}/?forceChartFailure#start`, {
@@ -222,10 +222,10 @@ async function verifyForcedFailure(browser: import("npm:playwright").Browser) {
 }
 
 /** Route changes must release old canvases instead of accumulating Live hosts. */
-async function verifyRouteLifecycle(browser: import("npm:playwright").Browser) {
+async function verifyRouteLifecycle(browser: import("playwright").Browser) {
   const page = await browser.newPage({ viewport });
   const console: string[] = [];
-  const onConsole = (message: import("npm:playwright").ConsoleMessage) => {
+  const onConsole = (message: import("playwright").ConsoleMessage) => {
     if (message.type() === "error" || message.type() === "warning") {
       console.push(message.text());
     }
@@ -272,7 +272,7 @@ async function waitForServer() {
 }
 
 async function discoverRoutes(
-  page: import("npm:playwright").Page,
+  page: import("playwright").Page,
 ): Promise<string[]> {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   // Hash slugs are declared by the app and represent every docs route. Read
@@ -291,12 +291,12 @@ async function discoverRoutes(
 }
 
 async function inspectRoute(
-  browser: import("npm:playwright").Browser,
+  browser: import("playwright").Browser,
   route: string,
 ): Promise<RouteResult> {
   const page = await browser.newPage({ viewport });
   const console: string[] = [];
-  const onConsole = (message: import("npm:playwright").ConsoleMessage) => {
+  const onConsole = (message: import("playwright").ConsoleMessage) => {
     if (message.type() === "error" || message.type() === "warning") {
       console.push(message.text());
     }

@@ -40,7 +40,7 @@ import { guideNodes3d } from "./guides_3d.ts";
 import { resolveCamera3D } from "../ir/camera.ts";
 import { buildFacetPanels } from "./facets.ts";
 import {
-  PackCache,
+  type PackCache,
   stageAKey,
   stageBTransformedMark,
   UNCACHEABLE_GEOMS,

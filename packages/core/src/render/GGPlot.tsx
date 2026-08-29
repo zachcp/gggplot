@@ -10,6 +10,7 @@
 import {
   createElement,
   Fragment,
+  type LiveElement,
   makeContext,
   provide,
   useAwait,
@@ -102,7 +103,9 @@ export interface PanelViewportProps {
  * transform, but must submit all marks to the one reconciler owned by the
  * outer chart Embedded.
  */
-export const FacetPanel = ({ layout, children }: FacetPanelProps) => {
+export const FacetPanel = (
+  { layout, children }: FacetPanelProps,
+): LiveElement => {
   const [range, matrix] = useMemo(() => {
     const [left, top, right, bottom] = layout;
     const width = right - left;
@@ -238,7 +241,7 @@ export const RadialViewport = (
  * PanelViewport matrix so its marks participate in the same virtual-layer
  * submission while rendering into a distinct rectangle.
  */
-export const FacetGrid = (props: FacetGridProps) => {
+export const FacetGrid = (props: FacetGridProps): LiveElement => {
   const {
     nrow,
     ncol,
@@ -683,7 +686,6 @@ const GlyphMeasuredPlot = (
       }),
     [spec, width, height, measureText],
   );
-  // deno-lint-ignore no-explicit-any
   const interactiveTree = tree.component === "Scene3D"
     ? { ...tree, props: { ...tree.props, interactive } }
     : tree;
@@ -691,7 +693,7 @@ const GlyphMeasuredPlot = (
     sceneExtras != null && interactiveTree.component === "Scene3D"
       ? appendSceneExtras(interactiveTree, sceneExtras)
       : interactiveTree;
-  return renderTree(renderedTree) as any;
+  return renderTree(renderedTree) as LiveElement;
 };
 
 /**
@@ -704,9 +706,21 @@ const GlyphMeasuredPlot = (
  * SDFFontProvider, which throws if no FontContext ancestor exists. Text
  * renders visibly when the host supplies real font sources.
  */
+/**
+ * What GGPlot actually returns is a `LiveElement`, but it cannot say so.
+ * Hosts consume it from .tsx files running use.gpu's classic-runtime JSX
+ * (`@jsx createElement`) while TypeScript still resolves the JSX namespace to
+ * React, so a `LiveElement` return makes `<GGPlot />` fail to compile as "not
+ * a valid JSX element type". Naming the escape hatch once keeps it explicit —
+ * which also keeps the published API fast-typed for JSR — instead of leaving
+ * the return inferred.
+ */
+// deno-lint-ignore no-explicit-any
+type LiveJsxElement = any;
+
 export const GGPlot = (
   { spec, interactive, fonts, fontResources, sceneExtras }: GGPlotProps,
-) => {
+): LiveJsxElement => {
   const resources = useMemo(
     () => fontResources ?? (fonts?.length ? createFontResources(fonts) : null),
     [fontResources, fonts],
@@ -723,10 +737,13 @@ export const GGPlot = (
   );
   if (error) throw error;
   if (resources && !ready) return null;
-  // deno-lint-ignore no-explicit-any
   return createElement(
     FontLoader,
     { fonts: resources?.faces ?? fonts },
-    createElement(GlyphMeasuredPlot, { spec, interactive, sceneExtras }) as any,
+    createElement(GlyphMeasuredPlot, {
+      spec,
+      interactive,
+      sceneExtras,
+    }) as LiveElement,
   );
 };

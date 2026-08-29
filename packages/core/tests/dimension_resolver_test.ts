@@ -1,11 +1,8 @@
-import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 import {
   camera3d,
   facetWrap,
-  geomBar,
   geomBlank,
-  geomBoxplot,
-  geomCol,
   geomPoint,
   geomTile,
   ggplot,

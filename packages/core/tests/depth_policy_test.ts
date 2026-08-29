@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals } from "@std/assert";
 import { geomLine, geomPoint, ggplot } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
 import { emitSource } from "../src/emit/mod.ts";

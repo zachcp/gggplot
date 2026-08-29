@@ -25,7 +25,7 @@
  *
  * Usage: deno task test:pixels
  */
-import { chromium } from "npm:playwright@^1.61.1";
+import { chromium } from "playwright";
 import { browserArgs } from "./browser_args.ts";
 
 // WebGPU globals exist in the page, not in Deno: every page.evaluate callback

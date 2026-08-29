@@ -18,6 +18,7 @@ import type { LiveComponent } from "./usegpu_compat.ts";
 import { ResidentHistogramTiles } from "./resident_tile.tsx";
 import {
   createResidentGrid,
+  type ResidentGrid,
   type ResidentGridMarkProps,
   type ResidentGridProviderProps,
 } from "./resident_grid.tsx";
@@ -31,7 +32,10 @@ export type ResidentTileMarkProps = ResidentGridMarkProps<
   ResidentHistogramMarkOptions
 >;
 
-const grid = createResidentGrid<
+const grid: ResidentGrid<
+  ResidentHistogramMarkOptions,
+  ResidentHistogramSummary
+> = createResidentGrid<
   ResidentHistogram1D,
   ResidentHistogramMarkOptions,
   ResidentHistogramSummary

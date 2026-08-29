@@ -13,6 +13,8 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+      - name: Format and lint
+        run: deno task lint
       - name: Check
         run: deno task check
       - name: Test

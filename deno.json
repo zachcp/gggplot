@@ -31,6 +31,7 @@
     "build": "deno task --cwd apps/site build",
     "preview": "deno task --cwd apps/site preview",
     "check": "deno check packages/core/src/mod.ts && deno check packages/model-inspect/src/mod.ts && deno task --cwd apps/site check",
+    "lint": "deno fmt --check && deno lint",
     "test": "deno test -A packages/core/tests/ packages/model-inspect/tests/ packages/reductions/tests/ apps/site/src/docs/model_examples_test.ts apps/site/src/docs/model_asset_test.ts apps/site/src/docs/model_views_test.ts apps/site/src/docs/model_extensions_test.ts",
     "check:core": "deno check packages/core/src/mod.ts",
     "check:site": "deno task --cwd apps/site check",

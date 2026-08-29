@@ -36,6 +36,9 @@ interface LoadedArtifact {
   model: ArrayBuffer;
 }
 
+// async is the stable seam: a runtime adapter path would await here, while
+// static inspection simply does not yet.
+// deno-lint-ignore require-await
 async function inspectOnnxBytes(
   source: ArtifactSource,
   model: ArrayBuffer,

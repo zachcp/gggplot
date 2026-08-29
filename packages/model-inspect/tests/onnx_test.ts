@@ -49,6 +49,7 @@ Deno.test("loads through an injected session factory", async () => {
     source: { id: "url:model.onnx", format: "onnx", kind: "url" },
     model: "https://example.test/model.onnx",
     sessionFactory: {
+      // deno-lint-ignore require-await -- stubs an async session factory.
       create: async (model, options) => {
         receivedModel = typeof model === "string" ? model : undefined;
         receivedProviders = options?.executionProviders;

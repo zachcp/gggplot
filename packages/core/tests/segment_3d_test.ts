@@ -3,7 +3,7 @@ import {
   assertEquals,
   assertStringIncludes,
   assertThrows,
-} from "jsr:@std/assert@1";
+} from "@std/assert";
 import { geomContour, geomHline, geomSegment, ggplot } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
 import { emitSource } from "../src/emit/mod.ts";

@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 import { validateExtension } from "@gggplot/core/plan";
 import {
   MODEL_EXTENSIONS,

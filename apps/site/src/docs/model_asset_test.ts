@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { inspectOnnx } from "@gggplot/model-inspect";
 import {
   DEFAULT_MODEL_FIXTURE,

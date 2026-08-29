@@ -170,6 +170,7 @@ Deno.test("histogramBarChunks creates fixed topology without count rows", () => 
       summary: {} as never,
       bins: 3,
       groupsCount: 2,
+      // deno-lint-ignore require-await -- stubs an async reader.
       readSummary: async () => ({
         groupTotals: new Uint32Array(),
         stackedMaximum: 0,

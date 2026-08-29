@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals } from "@std/assert";
 import * as geomDsl from "../../../../packages/core/src/dsl/geoms.ts";
 import { GEOM_REGISTRY } from "../../../../packages/core/src/geom/mod.ts";
 import type { GeomKind } from "../../../../packages/core/src/ir/types.ts";

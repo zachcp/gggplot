@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals } from "@std/assert";
 import { validateModelDocument } from "@gggplot/model-inspect";
 import { tinyMlpInspection } from "./model_examples.ts";
 

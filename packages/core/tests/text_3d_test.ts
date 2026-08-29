@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 import { geomLabel, geomText, ggplot } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
 import { emitSource } from "../src/emit/mod.ts";

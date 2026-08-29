@@ -277,6 +277,7 @@ export function onnxRuntimeWebAdapter(
   return {
     name: "onnxruntime-web",
     capabilities: ONNXRUNTIME_WEBGPU_CAPABILITIES,
+    // deno-lint-ignore require-await -- adapter contract is async.
     inspect: async () => document,
   };
 }
