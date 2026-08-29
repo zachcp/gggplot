@@ -343,7 +343,7 @@ export const voxels3dSpec = ggplot(
 const voxels3d = showcase(
   "Voxels3D",
   "Sparse 3D binning",
-  "stat_bin_3d counts observations into lattice cells and geom_voxel draws the occupied ones. The product is sparse: empty cells are dropped, so absence means no observations landed there rather than a count of zero. padding shrinks each cell toward its center so individual bins stay legible in a dense lattice.",
+  "stat_bin_3d counts observations into lattice cells and geom_voxel draws the occupied ones. The product is sparse: empty cells are dropped, so absence means no observations landed there rather than a count of zero. padding shrinks each cell toward its center so individual bins stay legible in a dense lattice. Setting alpha below 1 is an accepted trade-off rather than a free option: cells inside one draw call blend in packing order, not back-to-front, which shifts the composited intensity of overlapping cells by up to ~64 of 255 levels. Since fill encodes count, that intensity is itself a data channel, so read exact counts from the legend rather than from how dark a cell looks. Opaque voxels are ordered correctly by the depth buffer and are unaffected.",
   `ggplot(data, aes({ x: "x", y: "y", z: "z" }))
   .add(geomVoxel({ bins: 7, padding: 0.15 }));
 // fill defaults to the computed count. density divides by cell VOLUME.`,
