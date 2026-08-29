@@ -128,7 +128,7 @@ Two real limits remain, and both matter for the same geom:
   excluded from the sorted set entirely until it takes the layer's resolved
   depth props. That change belongs to `gggplot-lcy.6`.
 
-### Ordering inside one draw call is unsolved, and deliberately so
+### Ordering inside one draw call is an ACCEPTED limitation
 
 `gggplot-lcy.12` established that use.gpu sorts translucent _renderables_
 back-to-front every frame. It does not order the primitives inside one of them,
@@ -156,9 +156,48 @@ afterwards is harder to reason about than no ordering at all.
 
 A correct fix reorders per frame with the live camera — either inside
 `ChunkedFace`, which would have to repack its buffers as the camera moves, or
-through an order-independent transparency scheme. Both are renderer work, and
-both need a real browser to evaluate, which is why `gggplot-lcy.13` stays open
-rather than being closed on analysis alone.
+through an order-independent transparency scheme. Both are renderer work.
+
+**Measured, then accepted (2026-08-29, `gggplot-lcy.13`).** The artifact was
+quantified in a rendering browser: the voxel showcase at `alpha` 0.45, orbited
+through 7 camera angles, each diffed against the same angle with the box packing
+order reversed. Since blend order inside one draw call _is_ packing order, any
+difference between those two images is the artifact in isolation. The same build
+captured twice is bit-exact at all 7 angles, so the numbers are not jitter.
+
+|                                 |               |
+| ------------------------------- | ------------- |
+| mean \|delta\|                  | ~8–11 / 255   |
+| max                             | 116–163       |
+| pixels differing by > 32 levels | 10.8 %–15.4 % |
+
+The error lands in the **interior intensity** of overlapping cells, not in
+occlusion: no wrong silhouette, no cube visibly punching through another. That
+still matters for `geom_voxel` specifically, where fill encodes count, so
+composited intensity is itself a data channel and `stat_bin_3d`'s packing order
+is arbitrary with respect to it.
+
+`alphaToCoverage` was evaluated as the cheap fix and rejected. `workbench`'s raw
+layers accept it, but `usePipelineOptions` gates it on
+`alphaToCoverage &&
+samples > 1` while `AutoCanvas` defaults to `samples = 1`,
+so setting it alone is a bit-exact no-op. Raising the 3D canvas to `samples = 4`
+reduces but does not remove the artifact — max 163 → 94, and > 32-level pixels
+12.5 % → 9.3 % — because four samples give only five coverage levels, so
+overlapping translucent layers still blend order-dependently once coverage
+saturates. A ~30 % reduction is mitigation, not correctness, and it costs 4×
+MSAA on every 3D canvas.
+
+**The decision was to accept the artifact and not fund the per-frame reorder.**
+It is opt-in (nothing without `alpha < 1` is affected) and bounded to interior
+intensity. If it ever needs removing, the path is known: `useViewContext()`
+exposes the live camera inside a live component, so a per-frame reorder inside
+`ChunkedFace` is reachable — the earlier "the camera is not available" objection
+applied to compile-time lowering via `LayerContext`, not to render time. For an
+axis-aligned lattice the correct back-to-front order is also cheaper than a full
+sort: it is one of only 8 lexicographic orderings, selected by the signs of the
+view direction, so 8 precomputed index permutations would do. That is
+unevaluated for performance.
 
 ## The matrix
 
