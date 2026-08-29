@@ -14,6 +14,7 @@ import {
   type ScenePickPublish,
 } from "@gggplot/core";
 import { withSiteChartTheme3d } from "./chart_theme.ts";
+import { assetUrl } from "./asset_url.ts";
 
 interface Props {
   canvas: HTMLCanvasElement;
@@ -28,17 +29,19 @@ const fontResources = createFontResources([
     family: "Basic",
     weight: 400,
     style: "normal",
-    src: "/fonts/Basic-Regular.ttf",
+    src: assetUrl("/fonts/Basic-Regular.ttf"),
   },
   {
     family: "Lato",
     weight: 400,
     style: "normal",
-    src: "/fonts/Lato-Regular.ttf",
+    src: assetUrl("/fonts/Lato-Regular.ttf"),
   },
 ]);
 
-export const Scene3D = ({ canvas, spec, prismInstances, publishPick }: Props) => {
+export const Scene3D = (
+  { canvas, spec, prismInstances, publishPick }: Props,
+) => {
   // Both extras must sit inside the panel's Cartesian node: the prisms to share
   // its transform, the picker to read the 3D camera's ViewContext rather than
   // the flat overlay's.
@@ -46,7 +49,9 @@ export const Scene3D = ({ canvas, spec, prismInstances, publishPick }: Props) =>
     ...(prismInstances?.length
       ? [createElement(PrismInstances3D, { instances: prismInstances })]
       : []),
-    ...(publishPick ? [createElement(ScenePicker, { publish: publishPick })] : []),
+    ...(publishPick
+      ? [createElement(ScenePicker, { publish: publishPick })]
+      : []),
   ];
   return (
     <WebGPU fallback={null}>

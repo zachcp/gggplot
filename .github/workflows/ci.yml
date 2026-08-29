@@ -30,6 +30,10 @@ jobs:
   # report warnings rather than failing the job. Setup and artifact failures
   # remain blocking.
   #
+  # The deploy-base step is the exception and DOES block: it asserts on
+  # network status codes rather than pixels, so it is unaffected by
+  # SwiftShader (gggplot-1jn).
+  #
   # It is still worth running: the logs and uploaded report say WHY it failed,
   # so the day this starts passing (a GPU runner, or SwiftShader closing the
   # gap) it converts into a real gate by removing the step-level
@@ -43,6 +47,16 @@ jobs:
           deno-version: v2.x
       - name: Install Chromium
         run: deno run -A npm:playwright@^1.61.1 install --with-deps chromium
+      # Blocking, unlike the two gates below. This one asserts on network
+      # status codes and error boundaries, not on rendered pixels, so
+      # SwiftShader's inability to draw WebGPU does not affect its result
+      # (verified: it passes clean under the same SwiftShader args). A
+      # root-absolute asset URL 404s under a subpath deploy whether or not
+      # anything renders, which is exactly the defect it exists to catch.
+      - name: Deploy-base assets
+        env:
+          GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
+        run: deno task --cwd apps/site test:base-path
       - name: Route health
         # SwiftShader is expected to fail today, but the independent re-render
         # gate below must still execute and report its own result.

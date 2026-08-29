@@ -22,6 +22,7 @@ import {
   geomQq,
   geomQqLine,
   geomRaster,
+  geomRect,
   geomRibbon,
   geomRug,
   geomSpoke,
@@ -38,6 +39,7 @@ import {
   intervalData,
   pointCloud2dData,
   polygonData,
+  rectData,
   scatterData,
 } from "./data/demo.ts";
 
@@ -80,6 +82,30 @@ export const areaAndRibbon: DocExample = {
       opacity: 0.35,
     }),
   ).build(),
+};
+
+export const rectBounds: DocExample = {
+  id: "RectBounds",
+  title: "Rectangles from explicit bounds",
+  description:
+    "geomRect draws one rectangle per row from xmin/xmax/ymin/ymax rather than centring a fixed-size mark on x/y.",
+  visualSummary:
+    "Four overlapping translucent rectangles of differing size, one per phase.",
+  whatChanged:
+    "All four corner aesthetics are required, so the mark carries its own extent instead of borrowing a width from a discrete scale the way geomTile does.",
+  dataPreview: rectData,
+  dslSource: `ggplot(data, {
+  xmin: "xmin", xmax: "xmax", ymin: "ymin", ymax: "ymax", fill: "phase",
+})
+  .add(geomRect({ opacity: 0.55 }))
+  .build();`,
+  spec: ggplot(rectData, {
+    xmin: "xmin",
+    xmax: "xmax",
+    ymin: "ymin",
+    ymax: "ymax",
+    fill: "phase",
+  }).add(geomRect({ opacity: 0.55 })).build(),
 };
 
 export const polygonShapes: DocExample = {

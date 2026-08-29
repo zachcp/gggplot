@@ -1,5 +1,6 @@
 import type { TypedDataFrame } from "../../../../../packages/core/src/data/mod.ts";
 import { typedCsv } from "./csv.ts";
+import { assetUrl } from "../../asset_url.ts";
 
 export interface StaticDataset {
   readonly id: "mpg" | "mtcars" | "iris";
@@ -47,7 +48,7 @@ export async function loadStaticDataset(
   const cached = cache.get(id);
   if (cached) return cached;
   const dataset = staticDatasets[id];
-  const pending = request(dataset.url).then(async (response) => {
+  const pending = request(assetUrl(dataset.url)).then(async (response) => {
     if (!response.ok) {
       throw new Error(`Unable to load ${id}: ${response.status}`);
     }

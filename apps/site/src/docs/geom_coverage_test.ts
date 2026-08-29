@@ -73,7 +73,41 @@ Deno.test("every public geom constructor has a live documentation example", asyn
     )
   );
   assertEquals(new Set(ids).size, ids.length, "DocExample ids must be unique");
-  const known = new Set(ids);
+  // The 3D page renders ThreeDShowcase entries, not DocExamples, so those ids
+  // are declared in example_3d.ts rather than in a .tsx source. geomSurface
+  // and geomVoxel have no 2D form and are documented only this way.
+  //
+  // Read as source, not imported: example_3d.ts calls compile(), which pulls
+  // in @use-gpu/plot, a browser-only module that fails to load under Deno.
+  // The DocExample scan above already works this way.
+  const showcaseSource = await Deno.readTextFile(
+    new URL("./example_3d.ts", import.meta.url),
+  );
+  const showcaseVars = new Map<string, string>();
+  for (
+    const match of showcaseSource.matchAll(
+      /const\s+(\w+)\s*=\s*showcase\(\s*"([A-Z][A-Za-z0-9]*)"/g,
+    )
+  ) {
+    showcaseVars.set(match[2], match[1]);
+  }
+  // Declaring a showcase is not enough; it must also be in the exported array
+  // the 3D page renders.
+  const listed = new Set(
+    (showcaseSource.match(
+      /export const threeDShowcases[^=]*=\s*\[([\s\S]*?)\]/,
+    )?.[1] ?? "").match(/\b\w+\b/g) ?? [],
+  );
+  const showcaseIds = new Set(
+    [...showcaseVars].filter(([, variable]) => listed.has(variable))
+      .map(([id]) => id),
+  );
+  assertEquals(
+    showcaseIds.size > 0,
+    true,
+    "no ThreeDShowcase ids found in example_3d.ts",
+  );
+  const known = new Set([...ids, ...showcaseIds]);
   for (const reference of geomReferenceEntries) {
     for (const id of reference.exampleIds) {
       if (!known.has(id)) {
@@ -107,6 +141,14 @@ Deno.test("every public geom constructor has a live documentation example", asyn
     for (const id of coverage.exampleIds) {
       if (!known.has(id)) {
         throw new Error(`${constructor} references missing example ${id}`);
+      }
+      if (coverage.mode === "threeD") {
+        if (!showcaseIds.has(id)) {
+          throw new Error(
+            `${constructor} references missing 3D showcase ${id}`,
+          );
+        }
+        continue;
       }
       const declaration = declarations.get(id);
       if (!declaration || !pageExamples.has(declaration)) {
