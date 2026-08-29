@@ -102,8 +102,9 @@ Deno.test("limits censor every column on their axis, not just the primary one", 
   // Row 1 is retained by y (1 is in range) and by ymin (0 is), and excluded
   // only by ymax = 99 — so this fails if the family is not swept.
   const censored = censorToScaleLimits(spec, mapping, ingest(frame));
-  assertEquals(censored.x.values, [0]);
-  assertEquals(censored.ymax.values, [2]);
+  assertEquals(censored.data.x.values, [0]);
+  assertEquals(censored.data.ymax.values, [2]);
+  assertEquals(censored.removed, 1);
 
   // And it reaches the rendered mark: one stem instead of two.
   const stems = coords(compile(spec) as RenderNode, "Line");
@@ -144,7 +145,8 @@ Deno.test("missing values are left to gggplot-bab, not censored here", () => {
     { x: "x", y: "y" },
     ingest(frame as never),
   );
-  assertEquals(censored.x.values.length, 3, "the null row is retained");
+  assertEquals(censored.data.x.values.length, 3, "the null row is retained");
+  assertEquals(censored.removed, 0, "and is not counted as a limits removal");
 });
 
 Deno.test("no declared domain returns the same frame, allocating nothing", () => {
@@ -152,7 +154,7 @@ Deno.test("no declared domain returns the same frame, allocating nothing", () =>
   const spec = ggplot({ x: [0, 1, 10], y: [0, 1, 2] }, { x: "x", y: "y" })
     .add(geomPoint()).build();
   assertEquals(
-    censorToScaleLimits(spec, { x: "x", y: "y" }, data) === data,
+    censorToScaleLimits(spec, { x: "x", y: "y" }, data).data === data,
     true,
   );
 });

@@ -102,6 +102,53 @@ Status values:
    `coordPolar({ theta: "y" })` both reduce to the same `"yx"` swizzle accepted
    by `Cartesian` and `Polar` in `@use-gpu/plot`.
 
+## Dropped rows
+
+ggplot2 removes rows in two situations and reports each one distinctly:
+
+```
+Removed 3 rows containing missing values
+Removed 2 rows containing non-finite values
+```
+
+gggplot removes rows in exactly the same two situations, in `scale/censor.ts`:
+
+| function                 | ggplot2 equivalent  | reason                                      |
+| ------------------------ | ------------------- | ------------------------------------------- |
+| `removeMissingPositions` | "missing values"    | the row never had a position (null/NaN/Inf) |
+| `censorToScaleLimits`    | "non-finite values" | the user excluded it via a scale `domain`   |
+
+Both run **before** the stat, so neither is counted by `stat_bin` and then
+hidden at draw time.
+
+### The channel
+
+gggplot compiles to a serializable `RenderNode` tree rather than running in a
+REPL, so a console warning alone would be unobservable to a test or a tool.
+Removals are therefore reported **twice**, on purpose:
+
+1. **`diagnostics` on the root node's props** — an array of `RowRemoval`
+   (exported from `@gggplot/core`). Serializable, so it survives
+   `JSON.stringify` and reaches anything downstream of `compile`. This is the
+   channel to read programmatically.
+2. **`console.warn`** — matching the existing palette-fold precedent in
+   `scale/palette.ts`. A user whose plot silently lost rows should hear about it
+   the same way a user whose colour levels silently folded does.
+
+A plot that drops nothing sets no prop and prints nothing.
+
+### Granularity, and why a row is never double-counted
+
+Counts are **per layer, summed across facet panels**, which is what ggplot2
+reports at: a faceted plot dropping rows in three panels of one layer produces
+one removal, not three.
+
+A row can only ever be attributed to one reason. The two filters run in sequence
+in `compile()` — missing positions first, then scale limits — so a row with no
+position is already gone before the limits filter sees it. There is no double
+counting to reconcile, and that is a property of the ordering rather than a rule
+applied afterwards.
+
 ## Open Design Questions
 
 - Should gggplot use American `color` only, or provide `colour` aliases to match

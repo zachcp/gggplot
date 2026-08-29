@@ -1,6 +1,6 @@
 // Pipeline orchestration. Lowering, coordinate, guide, and facet details live in focused modules.
 import type { Aes, AesName, DataFrame, GGSpec, Layer } from "../ir/types.ts";
-import { node, type RenderNode } from "./rendertree.ts";
+import { node, type RenderNode, type RowRemoval } from "./rendertree.ts";
 import { applyStat } from "../stat/mod.ts";
 import {
   censorToScaleLimits,
@@ -184,6 +184,38 @@ function compileThreeDimensionalPlot(
   ]);
 }
 
+/**
+ * Root props carrying any row removals, plus ggplot2's console warning.
+ *
+ * Two channels on purpose. The serializable `diagnostics` prop is the one
+ * tests and tools read: gggplot compiles to a tree rather than running in a
+ * REPL, so a warning alone would be unobservable. The console.warn matches the
+ * existing palette-fold precedent in scale/palette.ts, because a user whose
+ * plot silently lost rows should hear about it the same way a user whose
+ * levels silently folded does.
+ *
+ * A plot that drops nothing sets no prop and prints nothing.
+ */
+function removalProps(
+  removals: Map<string, RowRemoval>,
+): Record<string, unknown> {
+  if (removals.size === 0) return {};
+  const diagnostics = [...removals.values()].sort((a, b) =>
+    a.layer - b.layer || a.reason.localeCompare(b.reason)
+  );
+  for (const removal of diagnostics) {
+    const kind = removal.reason === "missing-position"
+      ? "missing values"
+      : "non-finite values";
+    console.warn(
+      `[gggplot] Removed ${removal.rows} row${
+        removal.rows === 1 ? "" : "s"
+      } containing ${kind} (${removal.geom})`,
+    );
+  }
+  return { diagnostics };
+}
+
 export function compile(
   spec: GGSpec,
   options: CompileOptions = {},
@@ -202,6 +234,21 @@ export function compile(
   );
   const faceted = spec.facet.kind !== "none";
 
+  // Row removals, keyed layer:reason and summed across panels (gggplot-9v6).
+  const removalTotals = new Map<string, RowRemoval>();
+  const recordRemoval = (
+    layer: number,
+    geom: string,
+    reason: RowRemoval["reason"],
+    rows: number,
+  ) => {
+    if (rows <= 0) return;
+    const key = `${layer}:${reason}`;
+    const existing = removalTotals.get(key);
+    if (existing) existing.rows += rows;
+    else removalTotals.set(key, { layer, geom, reason, rows });
+  };
+
   // ① stat transform per layer, per panel (resolving each layer's effective mapping/data)
   const panelLayers = panels.map((panel) =>
     spec.layers.map((layer) => {
@@ -215,19 +262,30 @@ export function compile(
       // positions go first (a row that was never plottable), then scale limits
       // (a row the user chose to exclude) — both before the stat, so neither
       // is counted by stat_bin and then hidden at draw time.
-      const source = geom.dropsMissingPositions
+      const layerIndex = spec.layers.indexOf(layer);
+      const missing = geom.dropsMissingPositions
         ? removeMissingPositions(
           mapping,
           layer.data ?? panel.data,
           geom.nonPositionalAes,
         )
-        : layer.data ?? panel.data;
-      const data = censorToScaleLimits(
+        : { data: layer.data ?? panel.data, removed: 0 };
+      const censored = censorToScaleLimits(
         spec,
         mapping,
-        source,
+        missing.data,
         geom.nonPositionalAes,
       );
+      // Accumulated per layer across panels: ggplot2 reports one removal per
+      // layer, not one per facet cell.
+      recordRemoval(
+        layerIndex,
+        layer.geom,
+        "missing-position",
+        missing.removed,
+      );
+      recordRemoval(layerIndex, layer.geom, "outside-limits", censored.removed);
+      const data = censored.data;
       const resident = options.resident
         ? geom.residentPlan?.(
           spec,
@@ -597,7 +655,10 @@ export function compile(
       ? panelLayers[0][0].resident
       : undefined;
     if (standaloneResident?.standaloneView) {
-      return node("Embedded", { normalize: true }, [
+      return node("Embedded", {
+        normalize: true,
+        ...removalProps(removalTotals),
+      }, [
         node("PanelViewport", { bounds: panelBounds }, [
           node("ResidentProduct", {
             product: standaloneResident.product,
@@ -631,7 +692,10 @@ export function compile(
         ),
       ]);
     }
-    return node("Embedded", { normalize: true }, [
+    return node("Embedded", {
+      normalize: true,
+      ...removalProps(removalTotals),
+    }, [
       ...(view === "Polar"
         ? [node("RadialViewport", {}, [buildPanel(panelLayers[0])])]
         : [node("PanelViewport", { bounds: panelBounds }, [
@@ -682,7 +746,10 @@ export function compile(
     facetStripHeight,
     options.layout,
   );
-  return node("Embedded", { normalize: true }, [
+  return node("Embedded", {
+    normalize: true,
+    ...removalProps(removalTotals),
+  }, [
     node("FacetGrid", {
       nrow,
       ncol,

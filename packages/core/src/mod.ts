@@ -24,6 +24,7 @@ export {
   type ComponentName,
   node,
   type RenderNode,
+  type RowRemoval,
 } from "./compile/rendertree.ts";
 export {
   groupColumnsOf,

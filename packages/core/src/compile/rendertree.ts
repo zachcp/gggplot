@@ -77,6 +77,31 @@ export type ComponentName =
    */
   | "FacetGrid";
 
+/**
+ * One layer's worth of rows dropped before the stat ran (gggplot-9v6).
+ *
+ * ggplot2 surfaces these as "Removed N rows containing missing values" and
+ * "Removed N rows containing non-finite values". gggplot compiles to a
+ * serializable tree rather than running in a REPL, so the counts ride on the
+ * tree itself: inspectable, testable, and still present after emit.
+ *
+ * A row can only ever be attributed to ONE reason. The two filters run in
+ * sequence in compile() -- missing positions first, then scale limits -- so a
+ * row without a position is gone before the limits filter ever sees it. There
+ * is no double counting to reconcile.
+ *
+ * Counts are per LAYER, summed across facet panels, which is the granularity
+ * ggplot2 reports at. A faceted plot that drops rows in three panels of one
+ * layer is one removal, not three.
+ */
+export interface RowRemoval {
+  /** Layer index within the spec, so a caller can name the offending layer. */
+  layer: number;
+  geom: string;
+  reason: "missing-position" | "outside-limits";
+  rows: number;
+}
+
 export interface RenderNode {
   component: ComponentName;
   props: Record<string, unknown>;
