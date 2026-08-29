@@ -481,7 +481,9 @@ const SceneExtras = ({ content }: { content?: unknown }) =>
  */
 const PointNode = (props: Record<string, unknown>) => {
   const positions = props.positions as FlatTensor | undefined;
-  const markSource = (tensor: FlatTensor): Record<string, unknown> => ({ ...tensor });
+  const markSource = (tensor: FlatTensor): Record<string, unknown> => ({
+    ...tensor,
+  });
   return createElement(Point, {
     ...props,
     ...(positions?.dims === 4

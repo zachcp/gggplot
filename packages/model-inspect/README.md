@@ -5,20 +5,20 @@ without executing model code or eagerly copying tensor payloads. Both return a
 serializable `ModelDocument` and a `TensorSource`; callers must request a
 validated byte range before any selected payload is copied.
 
-The ONNX loader reads the main `ModelProto` graph, node I/O, initializers,
-typed value metadata, opsets, and payload ranges. ONNX Runtime Web is not
-required for this inspection path. `raw_data` initializers and supported packed
-numeric repeated fields can be read lazily from the returned source;
-`external_data` requires a host-provided source mapping.
+The ONNX loader reads the main `ModelProto` graph, node I/O, initializers, typed
+value metadata, opsets, and payload ranges. ONNX Runtime Web is not required for
+this inspection path. `raw_data` initializers and supported packed numeric
+repeated fields can be read lazily from the returned source; `external_data`
+requires a host-provided source mapping.
 
 The first direct ONNX slice reports, but does not expand, subgraphs embedded in
 control-flow attributes (`If`, `Loop`, `Scan`, and custom operators). Static
 graph metadata must not be presented as a runtime execution trace. Runtime
-activations and dynamically selected graph branches belong to a separate
-runtime adapter and retain their own provenance.
+activations and dynamically selected graph branches belong to a separate runtime
+adapter and retain their own provenance.
 
-Inputs are bounded before protobuf/JSON decoding. Hosts should set lower
-limits than the defaults when accepting untrusted uploads, and should provide
+Inputs are bounded before protobuf/JSON decoding. Hosts should set lower limits
+than the defaults when accepting untrusted uploads, and should provide
 range-capable sources for external or remote payloads rather than loading a
 whole artifact merely to inspect one tensor.
 
@@ -36,10 +36,10 @@ artifact. Its explicit policy returns exact values, a bounded tile, a bounded
 downsampled grid, an evenly sampled summary, or metadata only. The default
 limits are 16 MiB resident / 4 MiB exact-or-tile / 512² overview cells; callers
 can narrow them per request but cannot force an allocation that exceeds them.
-High-rank matrix views require the trailing displayed axes and fixed indices
-for every hidden axis. The product records source/version/range/layout/cache
-identity, so the residency adapter can keep a selected tile GPU-resident
-across camera and selection changes without any implicit GPU readback.
+High-rank matrix views require the trailing displayed axes and fixed indices for
+every hidden axis. The product records source/version/range/layout/cache
+identity, so the residency adapter can keep a selected tile GPU-resident across
+camera and selection changes without any implicit GPU readback.
 
 ## 3D model scenes
 

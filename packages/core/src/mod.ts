@@ -65,9 +65,9 @@ export {
 } from "./render/prism_instances_3d.tsx";
 export {
   pointerToUV,
+  ScenePicker,
   type ScenePickFn,
   type ScenePickPoint,
-  ScenePicker,
   type ScenePickPublish,
   type SceneRay,
 } from "./render/scene_picker.tsx";

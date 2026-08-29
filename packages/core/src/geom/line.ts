@@ -14,6 +14,7 @@ import {
   concatFlatTensors,
   concatPacked,
   dashOf,
+  depthProps,
   linewidthsOf,
   type PackedGeometry,
   packMarkRows,
@@ -21,7 +22,6 @@ import {
   sortByX,
   stepPositions,
   valuesOf,
-  depthProps,
 } from "./shared.ts";
 import { packPoints3d, packScalar } from "./packing.ts";
 

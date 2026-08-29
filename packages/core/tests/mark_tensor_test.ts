@@ -8,8 +8,8 @@ import {
   colorWithAlpha,
   concatPacked,
   expandByOwners,
-  type PackedGeometry,
   packColorsRGBA,
+  type PackedGeometry,
   packMarkRows,
   packScalar,
 } from "../src/geom/shared.ts";

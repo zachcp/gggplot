@@ -8,15 +8,15 @@ Date: 2026-08-24
 `FlatTensor` (`packages/core/src/compile/rendertree.ts`) and use.GPU's
 `TensorArray` (`@use-gpu/core`) carry the same six fields:
 
-| Field | `FlatTensor` | `TensorArray` |
-| --- | --- | --- |
-| `array` | `Float32Array` | `TypedArray` |
-| `format` | `"f32" \| "vec2" \| "vec4"` | `UniformType` — WGSL spellings |
-| `dims` | `1 \| 2 \| 4` | `number` |
-| `length` | `number` | `number` |
-| `size` | `number[]` | `VectorLike` |
-| `version` | `number` | `number?` |
-| `ragged` | — | `Ragged?` |
+| Field     | `FlatTensor`                | `TensorArray`                  |
+| --------- | --------------------------- | ------------------------------ |
+| `array`   | `Float32Array`              | `TypedArray`                   |
+| `format`  | `"f32" \| "vec2" \| "vec4"` | `UniformType` — WGSL spellings |
+| `dims`    | `1 \| 2 \| 4`               | `number`                       |
+| `length`  | `number`                    | `number`                       |
+| `size`    | `number[]`                  | `VectorLike`                   |
+| `version` | `number`                    | `number?`                      |
+| `ragged`  | —                           | `Ragged?`                      |
 
 This is not a port. It is one type that drifted into two spellings, and the
 divergence is **two string values**: `"vec2"` and `"vec4"` instead of
@@ -39,29 +39,29 @@ exactly why it was missed when this list was written — searching for
 - `render/GGPlot.tsx` — `PointNode`'s `markSource`, an unnamed inline
   `format === "vec4" ? ... : format === "vec2" ? ... : "f32"`
 
-That miscount is itself the argument for the change: the duplication was
-already hard to enumerate correctly while reading for it deliberately.
+That miscount is itself the argument for the change: the duplication was already
+hard to enumerate correctly while reading for it deliberately.
 
 Four copies means there is no chokepoint that guarantees translation. A new
 component that consumes a tensor is correct only if its author remembers, and
 nothing in the type system says so — `FlatTensor` is structurally acceptable to
-anything expecting a `TensorArray`, so a missing translation type-checks
-cleanly and fails only at render.
+anything expecting a `TensorArray`, so a missing translation type-checks cleanly
+and fails only at render.
 
 The emitted-source copy is the worst of the three: it ships a hand-written
 translator into every generated module, so the duplication escapes the
 repository entirely.
 
-## What this does *not* claim
+## What this does _not_ claim
 
 **It is not established that this caused the blank 3D segment and text.** Two
 theories were tried and both are falsified by evidence in this repository:
 
-1. *"Plot primitives read our `format` and cannot parse it."* They do not read
+1. _"Plot primitives read our `format` and cannot parse it."_ They do not read
    it at all. `Point` and `Label` derive dims from their own schema via
    `getUniformDims(schema.positions.format)`, adjusted only by an explicit
    `formats` prop.
-2. *"The schema expects fewer dims than we supply."* Both `POINT_SCHEMA` and
+2. _"The schema expects fewer dims than we supply."_ Both `POINT_SCHEMA` and
    `LABEL_SCHEMA` default `positions` to `vec4<f32>`, which is exactly what we
    pass.
 
@@ -77,7 +77,7 @@ geoms needs a working WebGPU browser and is tracked separately.
 
 ```ts
 import type { TensorArray } from "@use-gpu/core";
-export type FlatTensor = TensorArray;   // or drop the alias entirely
+export type FlatTensor = TensorArray; // or drop the alias entirely
 ```
 
 with `format` holding `"f32" | "u32" | "vec2<f32>" | "vec4<f32>"`. Every
@@ -101,14 +101,14 @@ that prop is the supported mechanism and should be used rather than inferred.
 
 Ordered so each step is independently verifiable.
 
-| # | Step | Notes |
-| --- | --- | --- |
-| 1 | Widen `FlatTensor["format"]` to accept both spellings | Additive; nothing breaks |
-| 2 | Change the 16 construction sites to emit WGSL spellings | `geom/packing.ts` holds most; `compile/rendertree.ts`, `render/chunked_line.tsx`, `emit/mod.ts`, `runtime/*` hold the rest |
-| 3 | Update the ~15 assertions that compare `format` | Tests and site code assert `"vec4"` today |
-| 4 | Delete all three `toWgslFormat` copies | Including `TENSOR_SOURCE_SOURCE`'s embedded string |
-| 5 | Narrow `format` to `UniformType`, alias `FlatTensor` to `TensorArray` | The step that makes a missed translation unrepresentable |
-| 6 | Widen `array` to `TypedArray` | Optional; enables integer tensors |
+| # | Step                                                                  | Notes                                                                                                                      |
+| - | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 1 | Widen `FlatTensor["format"]` to accept both spellings                 | Additive; nothing breaks                                                                                                   |
+| 2 | Change the 16 construction sites to emit WGSL spellings               | `geom/packing.ts` holds most; `compile/rendertree.ts`, `render/chunked_line.tsx`, `emit/mod.ts`, `runtime/*` hold the rest |
+| 3 | Update the ~15 assertions that compare `format`                       | Tests and site code assert `"vec4"` today                                                                                  |
+| 4 | Delete all three `toWgslFormat` copies                                | Including `TENSOR_SOURCE_SOURCE`'s embedded string                                                                         |
+| 5 | Narrow `format` to `UniformType`, alias `FlatTensor` to `TensorArray` | The step that makes a missed translation unrepresentable                                                                   |
+| 6 | Widen `array` to `TypedArray`                                         | Optional; enables integer tensors                                                                                          |
 
 Steps 1–4 are mechanical. Step 5 is the one with value: after it, there is no
 internal spelling left to forget to translate.
@@ -124,12 +124,12 @@ internal spelling left to forget to translate.
   populating it; do not let it silently become `undefined`.
 - **`size` typing loosens** from `number[]` to `VectorLike`. Confirm the
   `[chunkLen, chunkCount]` form that `sizeToChunkCounts` reads still narrows.
-- **No behavioural change is expected.** If rendering changes after step 2,
-  that is evidence the format field *was* being read somewhere, which would
+- **No behavioural change is expected.** If rendering changes after step 2, that
+  is evidence the format field _was_ being read somewhere, which would
   contradict the analysis above and is worth stopping to understand.
 
 ## Out of scope
 
 Integer topology arrays (`MarkTopology`'s `Uint32Array` chunks) stay separate.
-Folding them into tensors is a larger question about whether topology is data
-or metadata, and nothing here depends on the answer.
+Folding them into tensors is a larger question about whether topology is data or
+metadata, and nothing here depends on the answer.

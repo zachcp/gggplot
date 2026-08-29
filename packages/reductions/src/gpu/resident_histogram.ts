@@ -161,9 +161,7 @@ export function createResidentHistogram1DFromSources(
   // dispatch count below stay identical to the pre-palette path.
   const barColorsByteLength = packed.countsLength * 4 *
     4 * Float32Array.BYTES_PER_ELEMENT;
-  const palette = input.palette
-    ? storage(device, input.palette)
-    : undefined;
+  const palette = input.palette ? storage(device, input.palette) : undefined;
   const barColors = palette
     ? device.createBuffer({
       size: Math.max(16, barColorsByteLength),

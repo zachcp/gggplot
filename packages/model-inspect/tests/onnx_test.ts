@@ -2,8 +2,8 @@ import { assertEquals } from "@std/assert";
 import {
   dimensionFromOnnx,
   loadOnnxRuntimeWebModel,
-  modelDTypeFromOnnxType,
   modelDocumentFromOnnxSession,
+  modelDTypeFromOnnxType,
 } from "../src/onnx.ts";
 import { validateModelDocument } from "../src/validate.ts";
 

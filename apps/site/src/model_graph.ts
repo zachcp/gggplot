@@ -3,8 +3,8 @@
 import {
   aes,
   geomLine,
-  type GGSpec,
   ggplot,
+  type GGSpec,
   themeMinimal,
 } from "@gggplot/core/dsl";
 import {

@@ -236,9 +236,7 @@ export function lowerArea(
     .map(({ mapping: m, data: d }) => {
       const positions = bandPositions(m, d, xScale, yScale);
       const colors = colorsOf(m, d, colorScale, fillScale, "fillOrColor");
-      return positions.length
-        ? { positions, fill: colors?.[0] ?? fill }
-        : null;
+      return positions.length ? { positions, fill: colors?.[0] ?? fill } : null;
     })
     .filter((l): l is FaceLoop => l !== null);
   return faceNodesFor(loops);

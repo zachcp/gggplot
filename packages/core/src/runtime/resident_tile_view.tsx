@@ -98,7 +98,11 @@ const AwaitTileDomainView = (
           colors: product.barColors,
         }),
       ].filter(Boolean);
-      return createElement(Cartesian, { range: [xRange, yRange], axes }, ...guides);
+      return createElement(
+        Cartesian,
+        { range: [xRange, yRange], axes },
+        ...guides,
+      );
     },
   });
 };

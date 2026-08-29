@@ -192,7 +192,6 @@ export function OnnxRuntimeCanvas() {
   );
 }
 
-
 /**
  * The 3D scene plus its picking wiring.
  *

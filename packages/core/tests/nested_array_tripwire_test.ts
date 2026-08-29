@@ -26,7 +26,10 @@ import { assertEquals } from "@std/assert";
 import { compile } from "../src/compile/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
-import { cases, residentCases } from "../../../scripts/capture_geom_fixtures.ts";
+import {
+  cases,
+  residentCases,
+} from "../../../scripts/capture_geom_fixtures.ts";
 
 const PANEL_COMPONENTS: ReadonlySet<RenderNode["component"]> = new Set([
   "Cartesian",
@@ -87,7 +90,11 @@ function isNestedArrayPositions(value: unknown): boolean {
   return Array.isArray(first);
 }
 
-const layout = { width: 640, height: 480, measureText: approximateTextMeasurer };
+const layout = {
+  width: 640,
+  height: 480,
+  measureText: approximateTextMeasurer,
+};
 
 Deno.test("nested-array tripwire: every fixture-set spec's mark nodes carry FlatTensor positions", () => {
   for (const { name, build } of [...cases, ...residentCases]) {

@@ -35,7 +35,12 @@ import {
   residentBinRequest,
   residentColorGroups,
 } from "./resident_shared.ts";
-import { type FaceLoop, packFaceLoops, resolutionOf, valuesOf } from "./shared.ts";
+import {
+  type FaceLoop,
+  packFaceLoops,
+  resolutionOf,
+  valuesOf,
+} from "./shared.ts";
 
 /** Lower a geom_bar/geom_col layer to a single ChunkedFace node of bar-rectangle loops (gggplot-tzc.4), stacked/dodged/filled per layer.position. */
 export function lowerBar(

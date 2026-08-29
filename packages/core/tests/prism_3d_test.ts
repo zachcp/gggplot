@@ -100,7 +100,10 @@ Deno.test("stacking does accumulate when the footprint cell matches", () => {
 
 Deno.test("geom_bar has no 3D mode because its count has no (x, z) meaning", () => {
   assertThrows(
-    () => compile(ggplot({ x: [0], y: [1], z: [0] }, mapping).add(geomBar()).build()),
+    () =>
+      compile(
+        ggplot({ x: [0], y: [1], z: [0] }, mapping).add(geomBar()).build(),
+      ),
     Error,
     "geom_bar has no 3D mode; z is not supported",
   );

@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { LiveCanvas } from "@use-gpu/react";
-import { aes, geomLine, geomPoint, ggplot, ingest, scaleXContinuous } from "@gggplot/core";
+import {
+  aes,
+  geomLine,
+  geomPoint,
+  ggplot,
+  ingest,
+  scaleXContinuous,
+} from "@gggplot/core";
 import { Scene } from "./scene.tsx";
 
 /**

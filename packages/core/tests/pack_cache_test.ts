@@ -256,7 +256,11 @@ Deno.test("pack cache: a theme.textColor-only change leaves mark tensors === whi
     theme: { ...spec1.theme, textColor: "#ff00ff" },
   };
   const cache = createPackCache();
-  const layout = { width: 400, height: 300, measureText: approximateTextMeasurer };
+  const layout = {
+    width: 400,
+    height: 300,
+    measureText: approximateTextMeasurer,
+  };
 
   const tree1 = compile(spec1, { packCache: cache, layout });
   const tree2 = compile(spec2, { packCache: cache, layout });
@@ -334,7 +338,8 @@ Deno.test("pack cache: an uncached compile (no packCache) still produces byte-id
     .build();
 
   const uncached = findNodes(compile(spec), "Point")[0];
-  const cached = findNodes(compile(spec, { packCache: createPackCache() }), "Point")[0];
+  const cached =
+    findNodes(compile(spec, { packCache: createPackCache() }), "Point")[0];
   assertEquals(
     Array.from(positionsOf(uncached).array),
     Array.from(positionsOf(cached).array),

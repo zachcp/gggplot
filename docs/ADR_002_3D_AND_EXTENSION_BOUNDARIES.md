@@ -10,11 +10,11 @@ positional `z` selects a geom's 3D mode; the same `geomPoint()`, `geomLine()`,
 `geomPath()`, `compile()`, renderer, and `emitSource()` APIs serve 2D and 3D.
 `camera3d()` is the one optional singleton camera component. It resolves a
 complete canonical default and supports partial named overrides, so plots need
-no camera declaration for the common case and serialize exactly one camera
-when customized.
+no camera declaration for the common case and serialize exactly one camera when
+customized.
 
-The extension registry remains available for specialized geoms whose topology
-or policy does not belong in core, but 3D itself is not an extension boundary.
+The extension registry remains available for specialized geoms whose topology or
+policy does not belong in core, but 3D itself is not an extension boundary.
 There is no runtime package discovery and serialized plots never contain
 JavaScript functions, shader closures, GPU handles, or package URLs. Extension
 registration continues to reject duplicate identifiers, incompatible versions,
@@ -43,10 +43,10 @@ means z does not add a stable visual/statistical contract.
 | raster                                          | N/A by default                           | texture placement belongs to a surface primitive                                  |
 
 Position scales share one x/y/z trainer and scale DSL. Coordinates share the
-same `coordCartesian()` component, including validated axis swizzles. Faceted
-3D remains unsupported until its layout/interaction contract is explicit.
-Camera projection, clipping, and interaction are resolved by the singleton
-camera component and runtime scene rather than a parallel coordinate grammar.
+same `coordCartesian()` component, including validated axis swizzles. Faceted 3D
+remains unsupported until its layout/interaction contract is explicit. Camera
+projection, clipping, and interaction are resolved by the singleton camera
+component and runtime scene rather than a parallel coordinate grammar.
 
 ## Point-cloud vertical slice
 

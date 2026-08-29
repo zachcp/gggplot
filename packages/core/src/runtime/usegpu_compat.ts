@@ -15,7 +15,9 @@ import type { LiveElement } from "@use-gpu/live";
 import type { GPUStorageSource } from "./types.ts";
 
 /** A UseGPU Live component: props in, LiveElement out. */
-export type LiveComponent<P = Record<string, unknown>> = (props: P) => LiveElement;
+export type LiveComponent<P = Record<string, unknown>> = (
+  props: P,
+) => LiveElement;
 
 /** Variadic Live element constructor (the `@jsx` factory). */
 export type CreateElement = (
@@ -30,7 +32,10 @@ export type Provide = (
   calls: LiveElement,
 ) => LiveElement;
 
-export type UseMemo = <T>(create: () => T, dependencies: readonly unknown[]) => T;
+export type UseMemo = <T>(
+  create: () => T,
+  dependencies: readonly unknown[],
+) => T;
 export type UseOne = <T>(create: () => T, dependency?: unknown) => T;
 export type UseResource = <T>(
   create: (dispose: (cleanup: () => void) => void) => T,
@@ -137,7 +142,8 @@ export const useDeviceContext = workbench.useDeviceContext;
 export const useSource = workbench.useSource;
 export const useFaceSegmentsSource = workbench.useFaceSegmentsSource;
 export const useNoFaceSegmentsSource = workbench.useNoFaceSegmentsSource;
-export const useFaceSegmentsConcaveSource = workbench.useFaceSegmentsConcaveSource;
+export const useFaceSegmentsConcaveSource =
+  workbench.useFaceSegmentsConcaveSource;
 export const useNoFaceSegmentsConcaveSource =
   workbench.useNoFaceSegmentsConcaveSource;
 export const LineLayer = workbench.LineLayer;

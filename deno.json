@@ -6,6 +6,26 @@
     "apps/site"
   ],
   "nodeModulesDir": "auto",
+  "fmt": {
+    "exclude": [
+      ".beads/",
+      ".claude/",
+      ".agents/",
+      "apps/site/.artifacts/",
+      "packages/core/tests/fixtures/",
+      "docs/GRIBOUILLE_PARITY_MATRIX.md"
+    ]
+  },
+  "lint": {
+    "exclude": [
+      ".beads/",
+      ".claude/",
+      ".agents/",
+      "apps/site/.artifacts/",
+      "packages/core/tests/fixtures/",
+      "docs/GRIBOUILLE_PARITY_MATRIX.md"
+    ]
+  },
   "tasks": {
     "dev": "deno task --cwd apps/site dev",
     "build": "deno task --cwd apps/site build",

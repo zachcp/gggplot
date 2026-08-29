@@ -6,11 +6,11 @@ live in the browser or emitted as standalone `@use-gpu/plot` source.
 
 ## What's here
 
-| Path | Description |
-|---|---|
-| `packages/core/` | `@gggplot/core` — the library: DSL, IR, compiler, and both backends. |
-| `apps/site/` | Vite doc page demonstrating the transpiler (DSL → emitted source → live WebGPU render). |
-| `docs/ARCHITECTURE.md` | The design: API, UseGPU mapping, and transpilation pipeline. |
+| Path                   | Description                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| `packages/core/`       | `@gggplot/core` — the library: DSL, IR, compiler, and both backends.                    |
+| `apps/site/`           | Vite doc page demonstrating the transpiler (DSL → emitted source → live WebGPU render). |
+| `docs/ARCHITECTURE.md` | The design: API, UseGPU mapping, and transpilation pipeline.                            |
 
 ## Requirements
 

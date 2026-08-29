@@ -1,9 +1,5 @@
 import { dataFrameFromColumns, numericColumnValues } from "../data/mod.ts";
-import {
-  groupColumnsOf,
-  groupKeyAt,
-  groupValuesAt,
-} from "../group/mod.ts";
+import { groupColumnsOf, groupKeyAt, groupValuesAt } from "../group/mod.ts";
 import type { StatFn } from "./shared.ts";
 import { quantile } from "./distributions.ts";
 

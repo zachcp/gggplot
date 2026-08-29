@@ -14,8 +14,8 @@ belongs on your machine, deliberately, never against a file a user supplied.
 
 The bridge defends that boundary in three ways:
 
-- `torch.load(..., weights_only=True)` is the default, which refuses to
-  unpickle arbitrary objects and reads tensors only.
+- `torch.load(..., weights_only=True)` is the default, which refuses to unpickle
+  arbitrary objects and reads tensors only.
 - Full unpickling requires `--allow-unsafe-pickle` and prints a warning to
   stderr before it proceeds.
 - The browser side never sees a `.pt` at all — only SafeTensors and JSON.
@@ -26,24 +26,24 @@ The bridge defends that boundary in three ways:
 document.** It does not define a new interchange format, because the inspector
 already parses two portable ones.
 
-| Input | Accepted | Notes |
-| --- | --- | --- |
-| `.pt` / `.pth` / `.bin` / `.ckpt` holding a `state_dict` | yes | Read with `weights_only=True` |
-| A full pickled `nn.Module` or TorchScript archive | only with `--allow-unsafe-pickle` | Weights are converted; the graph is not |
-| PT2 `ExportedProgram` | no | Use `torch.onnx.export` instead |
-| `.safetensors` | not needed | Already portable; inspect it directly |
+| Input                                                    | Accepted                          | Notes                                   |
+| -------------------------------------------------------- | --------------------------------- | --------------------------------------- |
+| `.pt` / `.pth` / `.bin` / `.ckpt` holding a `state_dict` | yes                               | Read with `weights_only=True`           |
+| A full pickled `nn.Module` or TorchScript archive        | only with `--allow-unsafe-pickle` | Weights are converted; the graph is not |
+| PT2 `ExportedProgram`                                    | no                                | Use `torch.onnx.export` instead         |
+| `.safetensors`                                           | not needed                        | Already portable; inspect it directly   |
 
-| Output | Contents |
-| --- | --- |
-| `<name>.safetensors` | Weights, row-major, offsets relative to the payload |
-| `<name>.model.json` | A `gggplot.model@1` document: descriptors and byte ranges, never payloads |
+| Output               | Contents                                                                  |
+| -------------------- | ------------------------------------------------------------------------- |
+| `<name>.safetensors` | Weights, row-major, offsets relative to the payload                       |
+| `<name>.model.json`  | A `gggplot.model@1` document: descriptors and byte ranges, never payloads |
 
 ### A state_dict has no graph
 
-This is the honest limitation of the whole approach. A `state_dict` is a
-mapping of names to weights; it records nothing about how those weights were
-wired together. The emitted document therefore contains **no nodes and no
-edges**, and says so explicitly:
+This is the honest limitation of the whole approach. A `state_dict` is a mapping
+of names to weights; it records nothing about how those weights were wired
+together. The emitted document therefore contains **no nodes and no edges**, and
+says so explicitly:
 
 ```json
 "metadata": {
@@ -73,16 +73,16 @@ Convert a real state_dict:
 python3 -m gggplot_bridge.cli --input weights.pt --name my-model --out-dir ./out
 ```
 
-| Flag | Meaning |
-| --- | --- |
-| `--input PATH` | A `.pt`/`.pth` state_dict to convert |
-| `--demo` | Emit the deterministic tiny-MLP fixture instead |
-| `--name ID` | Model id for the outputs; defaults to the input stem |
-| `--out-dir DIR` | Destination directory |
-| `--allow-unsafe-pickle` | Permit full unpickling, which **executes code** |
+| Flag                    | Meaning                                              |
+| ----------------------- | ---------------------------------------------------- |
+| `--input PATH`          | A `.pt`/`.pth` state_dict to convert                 |
+| `--demo`                | Emit the deterministic tiny-MLP fixture instead      |
+| `--name ID`             | Model id for the outputs; defaults to the input stem |
+| `--out-dir DIR`         | Destination directory                                |
+| `--allow-unsafe-pickle` | Permit full unpickling, which **executes code**      |
 
-Exit code `2` means a refusal or a malformed input, reported as a message
-rather than a traceback.
+Exit code `2` means a refusal or a malformed input, reported as a message rather
+than a traceback.
 
 ## API
 

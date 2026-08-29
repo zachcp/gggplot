@@ -16,21 +16,20 @@ artifact adapters
 ```
 
 The package should be an inspection and visualization system, not a general
-model runtime. Its first job is to answer: “What is in this model, how does
-data flow through it, and what tensors or runtime observations are attached to
-each part?” Running inference can be added later through an explicit host
-adapter.
+model runtime. Its first job is to answer: “What is in this model, how does data
+flow through it, and what tensors or runtime observations are attached to each
+part?” Running inference can be added later through an explicit host adapter.
 
 ## Similar solutions and what to borrow
 
-| Existing solution | Strong idea | Boundary for this package |
-| --- | --- | --- |
-| Netron | Graph-first exploration across many model formats | Borrow the graph/node/value vocabulary; add linked tensor and runtime views rather than reproducing a full format zoo initially. |
-| ONNX IR | Portable graph, node, value, initializer, and symbolic-shape model | Borrow stable IDs, typed values, symbolic dimensions, and opset/provenance metadata. Do not make ONNX the only internal representation. |
-| SafeTensors | Safe, inspectable tensor payload with metadata and slices | Use as a preferred browser payload; keep payload access lazy and bounded. |
-| `torch.export` / FX | Extracts a PyTorch computation graph plus state and call metadata | Use in a Python conversion bridge; do not load its serialized archive directly in an untrusted browser context. |
-| TensorBoard graphs and projector | Separates graph structure from runtime summaries and embeddings | Borrow the idea of runtime artifacts linked by stable node/tensor IDs. |
-| Model summaries / parameter tables | Compact layer inventory and parameter accounting | Make this a first-class product, not merely text generated beside the graph. |
+| Existing solution                  | Strong idea                                                        | Boundary for this package                                                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Netron                             | Graph-first exploration across many model formats                  | Borrow the graph/node/value vocabulary; add linked tensor and runtime views rather than reproducing a full format zoo initially.        |
+| ONNX IR                            | Portable graph, node, value, initializer, and symbolic-shape model | Borrow stable IDs, typed values, symbolic dimensions, and opset/provenance metadata. Do not make ONNX the only internal representation. |
+| SafeTensors                        | Safe, inspectable tensor payload with metadata and slices          | Use as a preferred browser payload; keep payload access lazy and bounded.                                                               |
+| `torch.export` / FX                | Extracts a PyTorch computation graph plus state and call metadata  | Use in a Python conversion bridge; do not load its serialized archive directly in an untrusted browser context.                         |
+| TensorBoard graphs and projector   | Separates graph structure from runtime summaries and embeddings    | Borrow the idea of runtime artifacts linked by stable node/tensor IDs.                                                                  |
+| Model summaries / parameter tables | Compact layer inventory and parameter accounting                   | Make this a first-class product, not merely text generated beside the graph.                                                            |
 
 The key design choice is to represent the model once, then derive several
 coordinated visual products. A graph, a tensor matrix, and an embedding plot
@@ -116,26 +115,27 @@ interface TensorDescriptor {
   summary?: TensorSummary;
 }
 
-type Dimension = number | { symbol: string; value?: number } | { unknown: true };
+type Dimension = number | { symbol: string; value?: number } | {
+  unknown: true;
+};
 ```
 
 `ValueRef` should point to a tensor descriptor or an intermediate graph value.
-The distinction matters: graph values can have symbolic or unknown shapes,
-while a parameter payload may have a concrete storage descriptor. Shapes should
-retain rank and symbolic names rather than collapsing everything to a flat
-product.
+The distinction matters: graph values can have symbolic or unknown shapes, while
+a parameter payload may have a concrete storage descriptor. Shapes should retain
+rank and symbolic names rather than collapsing everything to a flat product.
 
 ## GPU-resident representation
 
 GPU residency is part of the package contract, not an optimization left to the
-view implementation. The model document is the control plane; source-backed
-GPU buffers are the data plane.
+view implementation. The model document is the control plane; source-backed GPU
+buffers are the data plane.
 
 ### Two planes
 
 **Control plane (CPU/serializable):** model metadata, graph topology, tensor
-descriptors, logical dtype, symbolic shape, source URI or file identity,
-summary values, residency policy, cache keys, and current selection state.
+descriptors, logical dtype, symbolic shape, source URI or file identity, summary
+values, residency policy, cache keys, and current selection state.
 
 **Data plane (GPU-resident when eligible):** positions, edges, tensor values,
 summary grids, embeddings, activation samples, attention tiles, and compact
@@ -155,8 +155,18 @@ interface TensorStorage {
   sourceId: string;
   byteOffset: number;
   byteLength: number;
-  dtype: "f16" | "f32" | "f64" | "i8" | "i16" | "i32" | "i64" |
-    "u8" | "u16" | "u32" | "bool";
+  dtype:
+    | "f16"
+    | "f32"
+    | "f64"
+    | "i8"
+    | "i16"
+    | "i32"
+    | "i64"
+    | "u8"
+    | "u16"
+    | "u32"
+    | "bool";
   shape: number[];
   strides?: number[];
   order: "row-major" | "column-major" | "strided";
@@ -176,23 +186,23 @@ interface ResidencySpec {
 }
 ```
 
-The logical dtype and shape stay authoritative even when a view converts data
-to a renderer-friendly physical layout. For example, a tensor matrix may use
-an `rgba32float` texture for four scalar cells per texel, while a graph's node
+The logical dtype and shape stay authoritative even when a view converts data to
+a renderer-friendly physical layout. For example, a tensor matrix may use an
+`rgba32float` texture for four scalar cells per texel, while a graph's node
 positions use an interleaved `vec2` buffer and its edges use a `u32` index
 buffer. The conversion must be declared, bounded, and keyed in the cache.
 
 ### Product residency matrix
 
-| Product | Default residency | GPU representation | CPU responsibility |
-| --- | --- | --- | --- |
-| Layer graph | Resident after layout | node positions, style/selection IDs, edge index/segment buffers | graph extraction and layout invalidation |
-| Shape flow | Resident after product build | compact edge geometry plus small shape-label metadata | symbolic shape formatting |
-| Tensor inventory | Metadata/summary | optional bar/treemap geometry and numeric metrics | descriptor indexing and filtering |
-| Parameter treemap | Resident geometry; values as small buffers | rect positions, tensor IDs, parameter sizes/colors | hierarchy and layout |
-| Tensor matrix | On-demand range, then resident | storage buffer or texture with declared slice/axis mapping | slice selection and axis labels |
-| Activation/embedding | Resident only for bounded samples | point positions, IDs, optional colors/labels | sampling/reduction policy |
-| Attention | On-demand tiles, optionally resident | tiled scalar texture/buffer plus head/query/key indices | semantic-axis selection and tile requests |
+| Product              | Default residency                          | GPU representation                                              | CPU responsibility                        |
+| -------------------- | ------------------------------------------ | --------------------------------------------------------------- | ----------------------------------------- |
+| Layer graph          | Resident after layout                      | node positions, style/selection IDs, edge index/segment buffers | graph extraction and layout invalidation  |
+| Shape flow           | Resident after product build               | compact edge geometry plus small shape-label metadata           | symbolic shape formatting                 |
+| Tensor inventory     | Metadata/summary                           | optional bar/treemap geometry and numeric metrics               | descriptor indexing and filtering         |
+| Parameter treemap    | Resident geometry; values as small buffers | rect positions, tensor IDs, parameter sizes/colors              | hierarchy and layout                      |
+| Tensor matrix        | On-demand range, then resident             | storage buffer or texture with declared slice/axis mapping      | slice selection and axis labels           |
+| Activation/embedding | Resident only for bounded samples          | point positions, IDs, optional colors/labels                    | sampling/reduction policy                 |
+| Attention            | On-demand tiles, optionally resident       | tiled scalar texture/buffer plus head/query/key indices         | semantic-axis selection and tile requests |
 
 Large parameter payloads should remain in the source provider until a view asks
 for a bounded range. A parameter inventory should not upload the parameter
@@ -232,8 +242,8 @@ must describe the source and cache identity independently of that choice.
 ### Buffer layout rules
 
 1. Store positions and other frequently transformed geometry interleaved when
-   the renderer consumes vector attributes; store scalar fields separately
-   when views update or select them independently.
+   the renderer consumes vector attributes; store scalar fields separately when
+   views update or select them independently.
 2. Keep integer IDs separate from float display attributes so picking and
    cross-view linkage do not depend on color encoding.
 3. Preserve tensor strides and axis labels. A view may create a contiguous
@@ -292,32 +302,32 @@ buffer usages, alignment rules, or shader layouts.
 
 The adapter must make ownership explicit:
 
-| Mode | When to use | Data movement |
-| --- | --- | --- |
-| `visualizer-owned` | Inspecting a bounded tensor, graph product, embedding, or activation sample | Loader/runtime produces a typed range or summary; the residency adapter uploads once into a useGPU-owned source/buffer and reuses it. |
-| `runtime-shared` | Inference output is already on the same WebGPU device and the buffer layout/usage is compatible | The view consumes a validated runtime-owned tensor or shared buffer through an adapter; no CPU round-trip. |
-| `runtime-copy-on-demand` | Runtime device or buffer contract is opaque/incompatible | Copy only the requested range/output into a useGPU-owned buffer; preserve the source/version/cache key. |
+| Mode                     | When to use                                                                                     | Data movement                                                                                                                         |
+| ------------------------ | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `visualizer-owned`       | Inspecting a bounded tensor, graph product, embedding, or activation sample                     | Loader/runtime produces a typed range or summary; the residency adapter uploads once into a useGPU-owned source/buffer and reuses it. |
+| `runtime-shared`         | Inference output is already on the same WebGPU device and the buffer layout/usage is compatible | The view consumes a validated runtime-owned tensor or shared buffer through an adapter; no CPU round-trip.                            |
+| `runtime-copy-on-demand` | Runtime device or buffer contract is opaque/incompatible                                        | Copy only the requested range/output into a useGPU-owned buffer; preserve the source/version/cache key.                               |
 
 `runtime-shared` is an optimization, not the semantic contract. The canonical
 document and products must work in `visualizer-owned` mode so the package does
 not become coupled to a specific inference runtime. A shared path must validate
-device identity, buffer usage, dtype, shape, strides, byte range, synchronization
-and lifetime. If any check fails, it falls back to a bounded copy rather than
-silently reading back through the CPU.
+device identity, buffer usage, dtype, shape, strides, byte range,
+synchronization and lifetime. If any check fails, it falls back to a bounded
+copy rather than silently reading back through the CPU.
 
 ### Measured: ORT WebGPU does not share a device (2026-08-25)
 
 `runtime-shared` was an unvalidated optimization until this was run against a
-real ONNX Runtime Web session with a real WebGPU device. The outcome is that
-the shared path is **not currently reachable with onnxruntime-web 1.27.0**, and
-the reason is worth recording precisely because it fails silently.
+real ONNX Runtime Web session with a real WebGPU device. The outcome is that the
+shared path is **not currently reachable with onnxruntime-web 1.27.0**, and the
+reason is worth recording precisely because it fails silently.
 
-WebGPU buffers cannot cross devices, so a zero-copy path requires ORT and
-useGPU to share one. The direction is forced: useGPU's `WebGPU` component
-always creates its own device (`mountGPUDevice`, no injection prop) and
-publishes it on `DeviceContext`, so ORT is the side that must adopt. ORT
-appears to support exactly that — `env.webgpu.device` is documented as
-settable before the first session, and the backend is then meant to use it.
+WebGPU buffers cannot cross devices, so a zero-copy path requires ORT and useGPU
+to share one. The direction is forced: useGPU's `WebGPU` component always
+creates its own device (`mountGPUDevice`, no injection prop) and publishes it on
+`DeviceContext`, so ORT is the side that must adopt. ORT appears to support
+exactly that — `env.webgpu.device` is documented as settable before the first
+session, and the backend is then meant to use it.
 
 It does not. Measured end to end (`apps/site/scripts/ort_device_probe.ts`):
 
@@ -337,8 +347,8 @@ Three things matter here.
 
 1. **The setter registers and is then discarded.** Reading `env.webgpu.device`
    back before session creation returns our device, so the assignment took.
-   After the session exists, the backend reports a different device. ORT
-   created its own during initialization and ignored the injected one.
+   After the session exists, the backend reports a different device. ORT created
+   its own during initialization and ignored the injected one.
 2. **Nothing throws.** No error, no warning, at any point. The session runs and
    returns a `gpu-buffer` tensor that looks entirely usable. The only thing that
    objects is WebGPU itself, at the moment another device touches the buffer.
@@ -346,16 +356,16 @@ Three things matter here.
    GPU, and its usage flags (`STORAGE | COPY_SRC`) are what a shared consumer
    would want. Device identity is the sole blocker.
 
-This validates the existing design rather than changing it. `sharedTensorCompatibility`
-checks `deviceToken` first, and that check is the only thing standing between a
-caller and a buffer that silently belongs to someone else. `visualizer-owned`
-remains the semantic contract and `runtime-copy-on-demand` the correct fallback
-for ORT.
+This validates the existing design rather than changing it.
+`sharedTensorCompatibility` checks `deviceToken` first, and that check is the
+only thing standing between a caller and a buffer that silently belongs to
+someone else. `visualizer-owned` remains the semantic contract and
+`runtime-copy-on-demand` the correct fallback for ORT.
 
 Scope of the result: onnxruntime-web 1.27.0, the asyncify/JSEP wasm build, the
-`webgpu` execution provider, headless Chromium with a hardware adapter. A
-future ORT release honouring the documented contract would flip this, which is
-what the probe script is for — re-run it on upgrade rather than re-deriving it.
+`webgpu` execution provider, headless Chromium with a hardware adapter. A future
+ORT release honouring the documented contract would flip this, which is what the
+probe script is for — re-run it on upgrade rather than re-deriving it.
 
 ### Post-loading storage policy
 
@@ -371,9 +381,9 @@ Loading and visualization should be separate phases:
 6. Keep selection, camera, axis slicing, color scales, and hover state out of
    the tensor payload so those updates do not trigger re-upload.
 
-This lets Transformers.js own model acquisition and inference while useGPU
-owns the visualization lifetime. It also supports a no-inference inspection
-mode using ONNX/SafeTensors metadata only.
+This lets Transformers.js own model acquisition and inference while useGPU owns
+the visualization lifetime. It also supports a no-inference inspection mode
+using ONNX/SafeTensors metadata only.
 
 ### Runtime capability contract
 
@@ -403,29 +413,30 @@ runtime. The capability report and upload instrumentation belong in
 
 Recorded 2026-08-18 for `gggplot-i5m.10`.
 
-**Static ONNX parsing is the first supported path, and no inference runtime is
-a dependency of inspection.** `inspectOnnx` reads the portable artifact
-directly and yields the full operator graph, initializer ranges, and provenance
-without executing the model. That is strictly better than obtaining structure
-from a runtime session: it is faster, it needs no GPU, it runs in Deno and Node
-as readily as a browser, and it never executes untrusted model code. It is also
+**Static ONNX parsing is the first supported path, and no inference runtime is a
+dependency of inspection.** `inspectOnnx` reads the portable artifact directly
+and yields the full operator graph, initializer ranges, and provenance without
+executing the model. That is strictly better than obtaining structure from a
+runtime session: it is faster, it needs no GPU, it runs in Deno and Node as
+readily as a browser, and it never executes untrusted model code. It is also
 what the docs route ships today.
 
-| Path | Graph structure | Activations | Cost to inspect | Verdict |
-| --- | --- | --- | --- | --- |
-| Direct ONNX parse (`inspectOnnx`) | Full operator graph | None — static only | Zero runtime deps | **Default.** Structure authority |
-| ONNX Runtime Web | Full, but only via a session | Selected outputs; shared GPU tensors possible | 14–24 MB WASM, WebGPU device | Opt-in, for activation capture |
-| Transformers.js | Partial; hides internal modules | Task outputs, embeddings | ORT underneath, plus hub loading | Not adopted |
-| `fixtureRuntimeAdapter` | Whatever the fixture declares | Pre-recorded | None | Contract tests and reference |
+| Path                              | Graph structure                 | Activations                                   | Cost to inspect                  | Verdict                          |
+| --------------------------------- | ------------------------------- | --------------------------------------------- | -------------------------------- | -------------------------------- |
+| Direct ONNX parse (`inspectOnnx`) | Full operator graph             | None — static only                            | Zero runtime deps                | **Default.** Structure authority |
+| ONNX Runtime Web                  | Full, but only via a session    | Selected outputs; shared GPU tensors possible | 14–24 MB WASM, WebGPU device     | Opt-in, for activation capture   |
+| Transformers.js                   | Partial; hides internal modules | Task outputs, embeddings                      | ORT underneath, plus hub loading | Not adopted                      |
+| `fixtureRuntimeAdapter`           | Whatever the fixture declares   | Pre-recorded                                  | None                             | Contract tests and reference     |
 
 Transformers.js is **not adopted**. It sits on top of ONNX Runtime Web, so it
-adds its cost without adding graph fidelity — it reports `graphMetadata:
-"partial"` precisely because its pipeline abstraction hides the internal
-modules an inspector exists to show. Where its task-level outputs are wanted
-later, it can arrive as another `ModelRuntimeAdapter` behind the same contract;
-nothing in the package needs to change to accommodate it. Its capability
-profile is retained in `TRANSFORMERS_JS_WEBGPU_CAPABILITIES` so the comparison
-stays executable rather than living only in this document.
+adds its cost without adding graph fidelity — it reports
+`graphMetadata:
+"partial"` precisely because its pipeline abstraction hides the
+internal modules an inspector exists to show. Where its task-level outputs are
+wanted later, it can arrive as another `ModelRuntimeAdapter` behind the same
+contract; nothing in the package needs to change to accommodate it. Its
+capability profile is retained in `TRANSFORMERS_JS_WEBGPU_CAPABILITIES` so the
+comparison stays executable rather than living only in this document.
 
 A runtime is therefore needed for exactly one thing: **capturing activations**,
 which static parsing cannot provide. ONNX Runtime Web is the choice there, kept
@@ -444,9 +455,11 @@ enforce are asserted on every test run:
   partial data is never presented as a whole tensor.
 - A capture may not answer for a different `nodeId` or `tensorId` than the one
   requested, which would corrupt the stable-ID linkage products rely on.
-- `runtime-shared` is granted only when the runtime reports `gpuTensorInterop:
-  "shared"` *and* the binding passes `sharedTensorCompatibility`; anything else
-  degrades to `runtime-copy-on-demand` rather than silently sharing.
+- `runtime-shared` is granted only when the runtime reports
+  `gpuTensorInterop:
+  "shared"` _and_ the binding passes
+  `sharedTensorCompatibility`; anything else degrades to
+  `runtime-copy-on-demand` rather than silently sharing.
 - The granted ownership is reported on the output, so a consumer never has to
   infer the mode from whether a GPU binding happens to be populated.
 
@@ -463,9 +476,9 @@ are bounded, serializable summaries suitable for a RenderTree or a host UI.
 
 Input: `ModelGraph`.
 
-Output: positioned node/edge arrays with hierarchy, layer type, parameter
-count, and status flags. This is the Netron-like view, but layout is a product
-so the host can replace the layout algorithm without changing the model IR.
+Output: positioned node/edge arrays with hierarchy, layer type, parameter count,
+and status flags. This is the Netron-like view, but layout is a product so the
+host can replace the layout algorithm without changing the model IR.
 
 ### 2. Shape-flow diagram
 
@@ -487,17 +500,17 @@ contents.
 
 Input: a selected 1D/2D tensor or a bounded projection of a higher-rank tensor.
 
-Output: a resident numeric grid plus scale metadata. Higher-rank tensors need
-an explicit slice/reshape policy; never silently flatten them without showing
-the selected axes.
+Output: a resident numeric grid plus scale metadata. Higher-rank tensors need an
+explicit slice/reshape policy; never silently flatten them without showing the
+selected axes.
 
 ### 5. Activation and embedding views
 
 Input: runtime artifacts linked to node/tensor IDs.
 
 Output: point-cloud or density products with provenance, sample count, and
-reduction metadata. These are optional because they require a host inference
-or tracing pipeline; the package should still render a model with no runtime
+reduction metadata. These are optional because they require a host inference or
+tracing pipeline; the package should still render a model with no runtime
 artifacts.
 
 ### 6. Attention view
@@ -512,17 +525,17 @@ inferred merely from tensor rank; the artifact must declare semantic axes.
 Recorded 2026-08-18 for `gggplot-i5m.6`. Definitions live in
 `packages/model-inspect/src/extensions.ts`.
 
-| Extension | Class | Why |
-| --- | --- | --- |
-| `model_tensor_inventory` | ordinary | One row per tensor. A bar chart over a table needs no special renderer. |
-| `model_graph` | specialized | Topology, not rows — nodes, ports, and routed edges have no tabular equivalent. |
-| `model_tensor_matrix` | specialized | A bounded grid whose content policy picks the representation before anything is drawn. |
-| `model_scene_3d` | specialized | Slabs, modules, and connectors positioned in space. |
+| Extension                | Class       | Why                                                                                    |
+| ------------------------ | ----------- | -------------------------------------------------------------------------------------- |
+| `model_tensor_inventory` | ordinary    | One row per tensor. A bar chart over a table needs no special renderer.                |
+| `model_graph`            | specialized | Topology, not rows — nodes, ports, and routed edges have no tabular equivalent.        |
+| `model_tensor_matrix`    | specialized | A bounded grid whose content policy picks the representation before anything is drawn. |
+| `model_scene_3d`         | specialized | Slabs, modules, and connectors positioned in space.                                    |
 
 The split is legible in the definitions themselves rather than only here: the
 ordinary extension emits `shape: "row"` fields, while the specialized ones emit
-`topology` or `grid`. A test asserts that correspondence, so the taxonomy
-cannot drift from the data it describes.
+`topology` or `grid`. A test asserts that correspondence, so the taxonomy cannot
+drift from the data it describes.
 
 `model_embedding`, `model_activation`, and `model_attention` appear in the
 design but are deliberately **not registered**. An embedding is an ordinary
@@ -538,18 +551,17 @@ definitions with `live` and `emit` adapters added — `renderableDefinition()`
 republishes rather than mutating, so the package's exported definition is never
 altered by having been rendered somewhere.
 
-This is what keeps framework-specific loaders out of core. Core's registry
-holds a serializable definition plus opaque adapters; it never imports the
-inspection package, and the `emit` adapter names a static import rather than a
-serialized closure, so emitted source resolves the builder on its own.
+This is what keeps framework-specific loaders out of core. Core's registry holds
+a serializable definition plus opaque adapters; it never imports the inspection
+package, and the `emit` adapter names a static import rather than a serialized
+closure, so emitted source resolves the builder on its own.
 
 The registry enforces the boundary rather than trusting it. Declared
 capabilities must match supplied adapters exactly, and that check caught a real
 inconsistency while this landed: `model_tensor_matrix` declared `cpu` but
 supplied no adapter, because unlike the others it needs a `TensorSource` and a
-view request to read a bounded range. The fix was to supply the adapter and
-have it say plainly what it requires, rather than to quietly drop the
-declaration.
+view request to read a bounded range. The fix was to supply the adapter and have
+it say plainly what it requires, rather than to quietly drop the declaration.
 
 ## Rendering and integration boundary
 
@@ -568,11 +580,11 @@ package should follow that pattern:
 - `@gggplot/model-inspect/gggplot`: optional extension definitions such as
   `geom_model_graph`, `geom_tensor`, and `geom_embedding`.
 
-The ordinary gggplot grammar is a good fit for derived tabular products such
-as parameter inventories, layer metrics, and embeddings. Specialized graph,
-matrix, and attention views should remain package-owned components exposed
-through explicit Live/emitted adapters. They should not be forced into
-`GeomKind` or the core 2D/3D dimension resolver.
+The ordinary gggplot grammar is a good fit for derived tabular products such as
+parameter inventories, layer metrics, and embeddings. Specialized graph, matrix,
+and attention views should remain package-owned components exposed through
+explicit Live/emitted adapters. They should not be forced into `GeomKind` or the
+core 2D/3D dimension resolver.
 
 ## PyTorch bridge format decision
 
@@ -580,9 +592,9 @@ Recorded 2026-08-18 for `gggplot-i5m.4`. Implementation in
 `tools/pytorch_bridge/`.
 
 **The bridge accepts a `state_dict` and emits SafeTensors plus a
-`gggplot.model@1` document.** It deliberately does not define a new
-interchange format: the inspector already parses two portable ones, and a third
-would be a format to maintain rather than a capability to gain.
+`gggplot.model@1` document.** It deliberately does not define a new interchange
+format: the inspector already parses two portable ones, and a third would be a
+format to maintain rather than a capability to gain.
 
 It runs host-side only. Reading a PyTorch artifact means unpickling, unpickling
 executes code from the file, and that belongs on a trusted machine — never in a
@@ -608,9 +620,9 @@ when structure matters.
 The Python writer is deterministic, so `--demo` produces a byte-reproducible
 fixture that is committed under `packages/model-inspect/tests/fixtures/` and
 read back by `bridge_fixture_test.ts`. That test asserts the two sides agree on
-names, dtypes, shapes, and byte ranges, and that the values Python wrote are
-the values TypeScript reads. A contract break on either side fails there rather
-than in a browser.
+names, dtypes, shapes, and byte ranges, and that the values Python wrote are the
+values TypeScript reads. A contract break on either side fails there rather than
+in a browser.
 
 Verifying the bridge against a real `.pt` requires PyTorch, which is not
 installed in this repository's toolchain; the torch-reading path is therefore
@@ -618,37 +630,37 @@ covered by its refusal behaviour and by review, not by an executed test.
 
 ## Artifact and trust policy
 
-| Input | First-class status | Reason |
-| --- | --- | --- |
-| SafeTensors | Yes, browser-safe metadata and lazy slices | Safe payload format with useful tensor metadata. |
-| ONNX | Yes, metadata and graph inspection | Portable graph and shape vocabulary; payload loading can be staged. |
-| Transformers.js | Yes, as a JS runtime/source adapter | High-level loading and inference path; use its outputs and capability reports, but do not require it to expose the complete internal graph. |
-| ONNX Runtime Web | Yes, as a lower-level JS/WebGPU adapter | Session execution and GPU tensor ownership experiments; shared buffers require explicit validation. |
-| PyTorch `state_dict` | Via Python/CLI bridge | Convert names, shapes, dtypes, and optional safe payloads. |
-| `torch.export` / PT2 archive | Via trusted Python bridge only | Useful graph extraction, but current loading uses pickle and carries an explicit untrusted-input warning. |
-| TorchScript / arbitrary `.pt` | No direct browser loader initially | Format/runtime variation and code-execution risk. |
-| GGUF and other formats | Future adapter issue | Add only when a concrete visualization use case justifies it. |
+| Input                         | First-class status                         | Reason                                                                                                                                      |
+| ----------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| SafeTensors                   | Yes, browser-safe metadata and lazy slices | Safe payload format with useful tensor metadata.                                                                                            |
+| ONNX                          | Yes, metadata and graph inspection         | Portable graph and shape vocabulary; payload loading can be staged.                                                                         |
+| Transformers.js               | Yes, as a JS runtime/source adapter        | High-level loading and inference path; use its outputs and capability reports, but do not require it to expose the complete internal graph. |
+| ONNX Runtime Web              | Yes, as a lower-level JS/WebGPU adapter    | Session execution and GPU tensor ownership experiments; shared buffers require explicit validation.                                         |
+| PyTorch `state_dict`          | Via Python/CLI bridge                      | Convert names, shapes, dtypes, and optional safe payloads.                                                                                  |
+| `torch.export` / PT2 archive  | Via trusted Python bridge only             | Useful graph extraction, but current loading uses pickle and carries an explicit untrusted-input warning.                                   |
+| TorchScript / arbitrary `.pt` | No direct browser loader initially         | Format/runtime variation and code-execution risk.                                                                                           |
+| GGUF and other formats        | Future adapter issue                       | Add only when a concrete visualization use case justifies it.                                                                               |
 
 The browser API should accept a `ModelSource` abstraction rather than a file
 extension switch. A source can provide a document, metadata bytes, or bounded
-tensor ranges. That lets a server-side converter, local file, or remote
-sharded artifact use the same view layer.
+tensor ranges. That lets a server-side converter, local file, or remote sharded
+artifact use the same view layer.
 
 ## Runtime bundle and WASM budget
 
 Measured on the docs site (`deno task build`, 2026-08-18):
 
-| Build | `dist` total | Notes |
-| --- | --- | --- |
-| ORT assets copied unconditionally | 26 MB | `dist/ort/` alone was 23 MB |
-| ORT assets gated on use | 2.4 MB | 1.6 MB `assets`, 720 KB fonts, 116 KB fixtures |
+| Build                             | `dist` total | Notes                                          |
+| --------------------------------- | ------------ | ---------------------------------------------- |
+| ORT assets copied unconditionally | 26 MB        | `dist/ort/` alone was 23 MB                    |
+| ORT assets gated on use           | 2.4 MB       | 1.6 MB `assets`, 720 KB fonts, 116 KB fixtures |
 
 The docs model-inspection route never imports `onnxruntime-web`. It inspects
 ONNX statically through `inspectOnnx`, which parses the portable artifact
 directly and executes nothing. The runtime adapter remains a contract in
-`runtime.ts` with ORT as one named implementation, but no code path loads it,
-so the JS bundle cost of ORT today is zero and the route is responsive before
-a user chooses a file.
+`runtime.ts` with ORT as one named implementation, but no code path loads it, so
+the JS bundle cost of ORT today is zero and the route is responsive before a
+user chooses a file.
 
 The remaining cost was therefore not the bundle but the asset copy: the Vite
 plugin staged ORT's WASM into `dist/ort/` on every build for a runtime nothing
@@ -661,20 +673,19 @@ missing the day the adapter is wired in. Dev always serves the route.
 If the runtime path is enabled, the variant matters more than anything else in
 the budget:
 
-| Variant | Size | When it applies |
-| --- | --- | --- |
-| `ort-wasm-simd-threaded.jsep.wasm` | 25.6 MB | Older WebGPU path |
-| `ort-wasm-simd-threaded.asyncify.wasm` | 23.1 MB | Currently pinned; broadest WebGPU support |
-| `ort-wasm-simd-threaded.jspi.wasm` | 14.3 MB | WebGPU via JS Promise Integration; needs recent browsers |
-| `ort-wasm-simd-threaded.wasm` | 12.9 MB | CPU only, no WebGPU |
+| Variant                                | Size    | When it applies                                          |
+| -------------------------------------- | ------- | -------------------------------------------------------- |
+| `ort-wasm-simd-threaded.jsep.wasm`     | 25.6 MB | Older WebGPU path                                        |
+| `ort-wasm-simd-threaded.asyncify.wasm` | 23.1 MB | Currently pinned; broadest WebGPU support                |
+| `ort-wasm-simd-threaded.jspi.wasm`     | 14.3 MB | WebGPU via JS Promise Integration; needs recent browsers |
+| `ort-wasm-simd-threaded.wasm`          | 12.9 MB | CPU only, no WebGPU                                      |
 
 Prefer `jspi` where the browser supports it — roughly 40% smaller than the
 asyncify build for the same WebGPU capability — and fall back to asyncify
-otherwise. The plain SIMD-threaded build is the no-WebGPU fallback and should
-be paired with a visible notice that inspection is running on CPU, since
-threaded WASM additionally requires cross-origin isolation. Any of these
-belongs behind a dynamic `import()` triggered by an explicit user action, never
-on route load.
+otherwise. The plain SIMD-threaded build is the no-WebGPU fallback and should be
+paired with a visible notice that inspection is running on CPU, since threaded
+WASM additionally requires cross-origin isolation. Any of these belongs behind a
+dynamic `import()` triggered by an explicit user action, never on route load.
 
 ## Delivery sequence
 
@@ -689,6 +700,6 @@ on route load.
 9. `.7`: gallery, limits, and performance gate.
 
 The first vertical slice should be: one tiny exported model, graph + shape
-flow + parameter inventory, no inference required, and a selected tensor
-matrix. Activations, embeddings, and attention can then attach to the same
-stable IDs without changing the document contract.
+flow + parameter inventory, no inference required, and a selected tensor matrix.
+Activations, embeddings, and attention can then attach to the same stable IDs
+without changing the document contract.

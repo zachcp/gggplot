@@ -441,8 +441,14 @@ Deno.test("resident histogram expands a per-group palette into per-vertex bar co
   if (!device) return;
   // 2 groups x 2 bins, one distinct RGBA per group.
   const palette = new Float32Array([
-    1, 0, 0, 1, // group 0 → red
-    0, 0, 1, 0.5, // group 1 → half-alpha blue
+    1,
+    0,
+    0,
+    1, // group 0 → red
+    0,
+    0,
+    1,
+    0.5, // group 1 → half-alpha blue
   ]);
   const withPalette = createResidentHistogram1DFromSources(device, {
     values: storageF32(device, new Float32Array([0, 1, 2, 3, 0, 3])),

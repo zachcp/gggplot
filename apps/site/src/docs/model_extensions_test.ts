@@ -75,9 +75,12 @@ Deno.test("republishing for render does not mutate the package definition", () =
 
 Deno.test("the specialized/ordinary split is what the taxonomy claims", () => {
   // Ordinary: a table of tensors, one row each.
-  assertEquals(MODEL_TENSOR_INVENTORY_EXTENSION.outputFields?.every((field) =>
-    field.shape === "row"
-  ), true);
+  assertEquals(
+    MODEL_TENSOR_INVENTORY_EXTENSION.outputFields?.every((field) =>
+      field.shape === "row"
+    ),
+    true,
+  );
   // Specialized: topology and grids have no tabular equivalent.
   assert(
     MODEL_GRAPH_EXTENSION.outputFields?.some((field) =>

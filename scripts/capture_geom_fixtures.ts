@@ -256,7 +256,10 @@ export const residentCases: Array<{ name: string; build: () => Spec }> = [
       )
         // A user-declared fill scale gates the resident color path: this spec
         // must fall back to CPU ChunkedFace bars.
-        .add(geomHistogram({ binwidth: 2 }), scaleFill({ range: ["#111111", "#222222"] }))
+        .add(
+          geomHistogram({ binwidth: 2 }),
+          scaleFill({ range: ["#111111", "#222222"] }),
+        )
         .build(),
   },
 ];

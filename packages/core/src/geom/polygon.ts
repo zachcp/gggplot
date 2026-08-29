@@ -8,7 +8,12 @@ import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
 import { splitByEffectiveGroup } from "../group/mod.ts";
 import type { LayerContext } from "./types.ts";
-import { colorsOf, type FaceLoop, packFaceLoops, positionsOf } from "./shared.ts";
+import {
+  colorsOf,
+  type FaceLoop,
+  packFaceLoops,
+  positionsOf,
+} from "./shared.ts";
 
 export function lowerPolygon(
   layer: Layer,

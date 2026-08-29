@@ -80,11 +80,19 @@ Deno.test("a ring with a missing vertex is dropped, not closed across the gap", 
 
 Deno.test("3D rect lies flat in the plane at its row's z", () => {
   const data = {
-    xmin: [0], xmax: [1], ymin: [0], ymax: [2], z: [5],
+    xmin: [0],
+    xmax: [1],
+    ymin: [0],
+    ymax: [2],
+    z: [5],
   };
   const node = surfaces(
     ggplot(data, {
-      xmin: "xmin", xmax: "xmax", ymin: "ymin", ymax: "ymax", z: "z",
+      xmin: "xmin",
+      xmax: "xmax",
+      ymin: "ymin",
+      ymax: "ymax",
+      z: "z",
     }).add(geomRect()).build(),
   )[0];
   const array = (node.props.positions as { array: Float32Array }).array;
@@ -140,7 +148,9 @@ Deno.test("surfaces carry depth props and survive emitSource", () => {
   assertEquals(faded.props.mode, "transparent");
 
   const source = emitSource(
-    compile(ggplot(ring, { x: "x", y: "y", z: "z" }).add(geomPolygon()).build()),
+    compile(
+      ggplot(ring, { x: "x", y: "y", z: "z" }).add(geomPolygon()).build(),
+    ),
     "Surface3D",
   );
   assert(source.includes("vec4<f32>"));
@@ -163,7 +173,9 @@ Deno.test("geom_tile keeps z as a value channel and gains no 3D mode", () => {
     findNodes(
       compile(
         ggplot({ x: [0, 1], y: [0, 1], z: [1, 2] }, {
-          x: "x", y: "y", z: "z",
+          x: "x",
+          y: "y",
+          z: "z",
         }).add(statSummary2d({ bins: 2 })).build(),
       ),
       "Scene3D",

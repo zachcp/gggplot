@@ -453,7 +453,14 @@ export const bands3dSpec = ggplot(
     z: bandZ,
     series: bandSeries,
   },
-  { x: "x", ymin: "ymin", ymax: "ymax", z: "z", group: "series", fill: "series" },
+  {
+    x: "x",
+    ymin: "ymin",
+    ymax: "ymax",
+    z: "z",
+    group: "series",
+    fill: "series",
+  },
 ).add(
   geomRibbon({ alpha: 0.6 }),
   labels({ title: "Bands at depth", x: "t", y: "value", fill: "series" }),

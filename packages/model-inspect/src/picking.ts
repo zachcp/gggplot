@@ -57,7 +57,9 @@ function intersectBox(
   // A zero direction is not a ray. Left unguarded the slab method below turns
   // every component into +/-Infinity and reports a "hit" at infinite distance,
   // which then wins comparisons against real hits.
-  if (direction[0] === 0 && direction[1] === 0 && direction[2] === 0) return null;
+  if (direction[0] === 0 && direction[1] === 0 && direction[2] === 0) {
+    return null;
+  }
 
   let near = -Infinity;
   let far = Infinity;
@@ -119,7 +121,12 @@ export function pickSceneEntity(
     };
   }
   for (const module of scene.modules) {
-    const distance = intersectBox(origin, direction, module.center, module.size);
+    const distance = intersectBox(
+      origin,
+      direction,
+      module.center,
+      module.size,
+    );
     if (distance == null) continue;
     if (nearestModule && nearestModule.distance <= distance) continue;
     nearestModule = {
