@@ -26,15 +26,16 @@ jobs:
   # WebGPU device. Measured 2026-08-25 (gggplot-5xq), a GPU-less runner falling
   # back to SwiftShader fails 17 of 17 routes with invalid-texture and lost-
   # instance errors -- infrastructure failures, not code failures. Standard
-  # GitHub runners have no GPU, so this job is expected to fail today and must
-  # never gate a merge.
+  # GitHub runners have no GPU, so the GPU-dependent steps are non-blocking and
+  # report warnings rather than failing the job. Setup and artifact failures
+  # remain blocking.
   #
   # It is still worth running: the logs and uploaded report say WHY it failed,
   # so the day this starts passing (a GPU runner, or SwiftShader closing the
-  # gap) it converts into a real gate by flipping continue-on-error.
+  # gap) it converts into a real gate by removing the step-level
+  # continue-on-error settings.
   browser-gates:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: denoland/setup-deno@v2
@@ -50,6 +51,7 @@ jobs:
           GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
         run: deno task --cwd apps/site test:visual
       - name: Re-render safety
+        continue-on-error: true
         env:
           GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
         run: deno task --cwd apps/site test:rerender
