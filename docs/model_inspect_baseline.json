@@ -1,0 +1,598 @@
+{
+  "fixtures": {
+    "dense-chain.onnx": {
+      "bytes": 1544,
+      "nodes": 9,
+      "ports": 16,
+      "edges": 8,
+      "labels": 9,
+      "tensors": 8,
+      "graphs": 1,
+      "content": {
+        "classifier.bias": [
+          "exact",
+          24
+        ],
+        "classifier.weight": [
+          "exact",
+          288
+        ],
+        "encoder.bias": [
+          "exact",
+          48
+        ],
+        "encoder.weight": [
+          "exact",
+          768
+        ],
+        "activated": [
+          "metadata",
+          0
+        ],
+        "encoded": [
+          "metadata",
+          0
+        ],
+        "features": [
+          "metadata",
+          0
+        ],
+        "logits": [
+          "metadata",
+          0
+        ]
+      },
+      "cacheableReads": 4,
+      "policies": {
+        "exact": [
+          "exact",
+          288
+        ],
+        "tile": [
+          "tile",
+          288
+        ],
+        "downsample": [
+          "downsample",
+          288
+        ],
+        "summary": [
+          "summary",
+          288
+        ],
+        "metadata": [
+          "metadata",
+          0
+        ]
+      }
+    },
+    "residual-merge.onnx": {
+      "bytes": 3323,
+      "nodes": 13,
+      "ports": 25,
+      "edges": 13,
+      "labels": 13,
+      "tensors": 12,
+      "graphs": 1,
+      "content": {
+        "head.bias": [
+          "exact",
+          32
+        ],
+        "head.weight": [
+          "exact",
+          512
+        ],
+        "main.bias": [
+          "exact",
+          64
+        ],
+        "main.weight": [
+          "exact",
+          1024
+        ],
+        "skip.bias": [
+          "exact",
+          64
+        ],
+        "skip.weight": [
+          "exact",
+          1024
+        ],
+        "activated": [
+          "metadata",
+          0
+        ],
+        "main.path": [
+          "metadata",
+          0
+        ],
+        "merged": [
+          "metadata",
+          0
+        ],
+        "scores": [
+          "metadata",
+          0
+        ],
+        "skip.path": [
+          "metadata",
+          0
+        ],
+        "tokens": [
+          "metadata",
+          0
+        ]
+      },
+      "cacheableReads": 6,
+      "policies": {
+        "exact": [
+          "exact",
+          512
+        ],
+        "tile": [
+          "tile",
+          512
+        ],
+        "downsample": [
+          "downsample",
+          512
+        ],
+        "summary": [
+          "summary",
+          512
+        ],
+        "metadata": [
+          "metadata",
+          0
+        ]
+      }
+    },
+    "multi-head.onnx": {
+      "bytes": 3261,
+      "nodes": 17,
+      "ports": 34,
+      "edges": 18,
+      "labels": 17,
+      "tensors": 16,
+      "graphs": 1,
+      "content": {
+        "alpha.bias": [
+          "exact",
+          16
+        ],
+        "alpha.weight": [
+          "exact",
+          256
+        ],
+        "beta.bias": [
+          "exact",
+          16
+        ],
+        "beta.weight": [
+          "exact",
+          256
+        ],
+        "gamma.bias": [
+          "exact",
+          16
+        ],
+        "gamma.weight": [
+          "exact",
+          256
+        ],
+        "stem.bias": [
+          "exact",
+          64
+        ],
+        "stem.weight": [
+          "exact",
+          1536
+        ],
+        "activated": [
+          "metadata",
+          0
+        ],
+        "distribution": [
+          "metadata",
+          0
+        ],
+        "embedding": [
+          "metadata",
+          0
+        ],
+        "head.alpha": [
+          "metadata",
+          0
+        ],
+        "head.beta": [
+          "metadata",
+          0
+        ],
+        "head.gamma": [
+          "metadata",
+          0
+        ],
+        "joined": [
+          "metadata",
+          0
+        ],
+        "stem": [
+          "metadata",
+          0
+        ]
+      },
+      "cacheableReads": 8,
+      "policies": {
+        "exact": [
+          "exact",
+          256
+        ],
+        "tile": [
+          "tile",
+          256
+        ],
+        "downsample": [
+          "downsample",
+          256
+        ],
+        "summary": [
+          "summary",
+          256
+        ],
+        "metadata": [
+          "metadata",
+          0
+        ]
+      }
+    },
+    "mnist-12.onnx": {
+      "bytes": 26143,
+      "nodes": 22,
+      "ports": 42,
+      "edges": 21,
+      "labels": 22,
+      "tensors": 21,
+      "graphs": 1,
+      "content": {
+        "Parameter193": [
+          "metadata",
+          0
+        ],
+        "Parameter193_reshape1_shape": [
+          "metadata",
+          0
+        ],
+        "Parameter194": [
+          "exact",
+          40
+        ],
+        "Parameter5": [
+          "metadata",
+          0
+        ],
+        "Parameter6": [
+          "metadata",
+          0
+        ],
+        "Parameter87": [
+          "metadata",
+          0
+        ],
+        "Parameter88": [
+          "metadata",
+          0
+        ],
+        "Pooling160_Output_0_reshape0_shape": [
+          "metadata",
+          0
+        ],
+        "Convolution110_Output_0": [
+          "metadata",
+          0
+        ],
+        "Convolution28_Output_0": [
+          "metadata",
+          0
+        ],
+        "Input3": [
+          "metadata",
+          0
+        ],
+        "Parameter193_reshape1": [
+          "metadata",
+          0
+        ],
+        "Plus112_Output_0": [
+          "metadata",
+          0
+        ],
+        "Plus214_Output_0": [
+          "metadata",
+          0
+        ],
+        "Plus30_Output_0": [
+          "metadata",
+          0
+        ],
+        "Pooling160_Output_0": [
+          "metadata",
+          0
+        ],
+        "Pooling160_Output_0_reshape0": [
+          "metadata",
+          0
+        ],
+        "Pooling66_Output_0": [
+          "metadata",
+          0
+        ],
+        "ReLU114_Output_0": [
+          "metadata",
+          0
+        ],
+        "ReLU32_Output_0": [
+          "metadata",
+          0
+        ],
+        "Times212_Output_0": [
+          "metadata",
+          0
+        ]
+      },
+      "cacheableReads": 1,
+      "policies": {
+        "exact": [
+          "exact",
+          40
+        ],
+        "tile": [
+          "tile",
+          40
+        ],
+        "downsample": [
+          "downsample",
+          40
+        ],
+        "summary": [
+          "summary",
+          40
+        ],
+        "metadata": [
+          "metadata",
+          0
+        ]
+      }
+    },
+    "tiny-encoder-stack.onnx": {
+      "bytes": 71866,
+      "nodes": 50,
+      "ports": 106,
+      "edges": 57,
+      "labels": 50,
+      "tensors": 49,
+      "graphs": 1,
+      "content": {
+        "block1.attention projection.bias": [
+          "exact",
+          128
+        ],
+        "block1.attention projection.weight": [
+          "exact",
+          4096
+        ],
+        "block1.feed-forward contract.bias": [
+          "exact",
+          128
+        ],
+        "block1.feed-forward contract.weight": [
+          "exact",
+          8192
+        ],
+        "block1.feed-forward expand.bias": [
+          "exact",
+          256
+        ],
+        "block1.feed-forward expand.weight": [
+          "exact",
+          8192
+        ],
+        "block1.key projection.bias": [
+          "exact",
+          128
+        ],
+        "block1.key projection.weight": [
+          "exact",
+          4096
+        ],
+        "block1.query projection.bias": [
+          "exact",
+          128
+        ],
+        "block1.query projection.weight": [
+          "exact",
+          4096
+        ],
+        "block1.value projection.bias": [
+          "exact",
+          128
+        ],
+        "block1.value projection.weight": [
+          "exact",
+          4096
+        ],
+        "block2.attention projection.bias": [
+          "exact",
+          128
+        ],
+        "block2.attention projection.weight": [
+          "exact",
+          4096
+        ],
+        "block2.feed-forward contract.bias": [
+          "exact",
+          128
+        ],
+        "block2.feed-forward contract.weight": [
+          "exact",
+          8192
+        ],
+        "block2.feed-forward expand.bias": [
+          "exact",
+          256
+        ],
+        "block2.feed-forward expand.weight": [
+          "exact",
+          8192
+        ],
+        "block2.key projection.bias": [
+          "exact",
+          128
+        ],
+        "block2.key projection.weight": [
+          "exact",
+          4096
+        ],
+        "block2.query projection.bias": [
+          "exact",
+          128
+        ],
+        "block2.query projection.weight": [
+          "exact",
+          4096
+        ],
+        "block2.value projection.bias": [
+          "exact",
+          128
+        ],
+        "block2.value projection.weight": [
+          "exact",
+          4096
+        ],
+        "block1.activated": [
+          "metadata",
+          0
+        ],
+        "block1.attended": [
+          "metadata",
+          0
+        ],
+        "block1.attention_residual": [
+          "metadata",
+          0
+        ],
+        "block1.contracted": [
+          "metadata",
+          0
+        ],
+        "block1.expanded": [
+          "metadata",
+          0
+        ],
+        "block1.key": [
+          "metadata",
+          0
+        ],
+        "block1.normalized": [
+          "metadata",
+          0
+        ],
+        "block1.output": [
+          "metadata",
+          0
+        ],
+        "block1.projected": [
+          "metadata",
+          0
+        ],
+        "block1.query": [
+          "metadata",
+          0
+        ],
+        "block1.scores": [
+          "metadata",
+          0
+        ],
+        "block1.value": [
+          "metadata",
+          0
+        ],
+        "block2.activated": [
+          "metadata",
+          0
+        ],
+        "block2.attended": [
+          "metadata",
+          0
+        ],
+        "block2.attention_residual": [
+          "metadata",
+          0
+        ],
+        "block2.contracted": [
+          "metadata",
+          0
+        ],
+        "block2.expanded": [
+          "metadata",
+          0
+        ],
+        "block2.key": [
+          "metadata",
+          0
+        ],
+        "block2.normalized": [
+          "metadata",
+          0
+        ],
+        "block2.output": [
+          "metadata",
+          0
+        ],
+        "block2.projected": [
+          "metadata",
+          0
+        ],
+        "block2.query": [
+          "metadata",
+          0
+        ],
+        "block2.scores": [
+          "metadata",
+          0
+        ],
+        "block2.value": [
+          "metadata",
+          0
+        ],
+        "embedding": [
+          "metadata",
+          0
+        ]
+      },
+      "cacheableReads": 24,
+      "policies": {
+        "exact": [
+          "exact",
+          4096
+        ],
+        "tile": [
+          "tile",
+          4096
+        ],
+        "downsample": [
+          "downsample",
+          4096
+        ],
+        "summary": [
+          "summary",
+          4096
+        ],
+        "metadata": [
+          "metadata",
+          0
+        ]
+      }
+    }
+  }
+}

@@ -206,3 +206,69 @@ effect for `gggplot-1a6`).
 - No WebGPU device-loss / context-recreation scenario was exercised (out of this
   bead's scope — `runtime_test.ts` already covers device-loss rehydration for
   the GPU-resident path).
+
+## 3. Model inspection
+
+**Gate:** `deno task model:perf:check` (measure with `deno task model:perf`,
+re-baseline with `--write`). Baseline lives in
+`docs/model_inspect_baseline.json` and runs in CI after the site build. Added by
+`gggplot-i5m.7`.
+
+### What is and is not measurable here
+
+The docs route inspects ONNX **statically** through `inspectOnnx` and never
+imports `onnxruntime-web`. `gggplot-i5m.14` verified that and gated the WASM
+asset copy on it, which is what keeps `dist` at ~2.4MB instead of ~26MB. There
+is no inference on the shipping path, so model load, inference, output capture,
+readback bytes, and device compatibility are **not measurable** and are not
+gated. Runtime-shared GPU tensors belong to `gggplot-i5m.22`. Interaction
+responsiveness needs a real GPU and a human (`gggplot-i5m.24`) and is
+deliberately out of scope for a headless gate.
+
+Transformers.js is not a measurement target: `gggplot-i5m.10` did not adopt it.
+
+### Measured (from the five bundled fixtures)
+
+| fixture                   |  bytes | nodes | ports | edges | tensors | read B | parse |
+| ------------------------- | -----: | ----: | ----: | ----: | ------: | -----: | ----: |
+| `dense-chain.onnx`        |  1,544 |     9 |    16 |     8 |       8 |  1,128 | ~6 ms |
+| `residual-merge.onnx`     |  3,323 |    13 |    25 |    13 |      12 |  2,720 | <1 ms |
+| `multi-head.onnx`         |  3,261 |    17 |    34 |    18 |      16 |  2,416 | <1 ms |
+| `mnist-12.onnx`           | 26,143 |    22 |    42 |    21 |      21 |     40 | <1 ms |
+| `tiny-encoder-stack.onnx` | 71,866 |    50 |   106 |    57 |      49 | 67,328 | <1 ms |
+
+Parse time is machine-dependent, so it is **not** pinned to the baseline — only
+bounded at 250 ms per fixture. A gate that fails on a noisy runner gets ignored.
+Counts and byte totals are deterministic and are compared exactly.
+
+`mnist-12.onnx` reads only 40 bytes across 21 tensors because its convolution
+initializers are rank > 2, above `maxExactRank`, so they resolve to
+metadata-only products. That is the bounding behaviour working, not a defect.
+
+### Documented limits
+
+| limit                    |                      value | source                          |
+| ------------------------ | -------------------------: | ------------------------------- |
+| `maxResidentBytes`       |                      16 MB | `DEFAULT_CONTENT_BUDGET`        |
+| `maxExactBytes`          |                       4 MB | "                               |
+| `maxTileBytes`           |                       4 MB | "                               |
+| `maxDownsampleReadBytes` |                       8 MB | "                               |
+| `maxOverviewCells`       |                    512x512 | "                               |
+| `maxSummarySamples`      |                      2,048 | "                               |
+| `maxExactRank`           |                          2 | "                               |
+| `maxSliceRank`           |                          4 | "                               |
+| parse ceiling            |             250 ms/fixture | `scripts/model_inspect_perf.ts` |
+| `dist` ceiling           | 4,096 KB (currently 2,454) | "                               |
+
+**Graceful degradation** is the content-policy ladder: a tensor too large for
+`exact` falls to `tile`, then `downsample`, then `summary`, then `metadata`,
+which reads zero bytes. The gate probes all five explicitly on a rank-2 tensor
+per fixture, because an `auto` request on fixtures this small only ever selects
+`exact` or `metadata` and would leave the bounding paths ungated. On these
+fixtures the first four converge (every probe is under every budget); the
+bounding behaviour itself is covered by `products_test.ts` with synthetic
+tensors above the thresholds.
+
+**Residency cache reuse** is asserted directly: re-selecting every tensor a
+second time must touch no new byte range. The gate fails if the range set for a
+given selection is not stable.

@@ -23,6 +23,11 @@ jobs:
         run: python3 -m unittest discover -s tools/pytorch_bridge/tests
       - name: Build site
         run: deno task build
+      # After the build, so the dist-size ceiling has something to measure.
+      # Counts and per-policy byte totals are deterministic and compared
+      # exactly; parse time is only bounded by a generous ceiling.
+      - name: Model inspection gate
+        run: deno task model:perf:check
 
   # Non-blocking by design, and the reason matters: these gates need a real
   # WebGPU device. Measured 2026-08-25 (gggplot-5xq), a GPU-less runner falling

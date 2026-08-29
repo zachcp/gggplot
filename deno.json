@@ -14,7 +14,8 @@
       "apps/site/.artifacts/",
       "packages/core/tests/fixtures/",
       "packages/model-inspect/tests/fixtures/",
-      "docs/GRIBOUILLE_PARITY_MATRIX.md"
+      "docs/GRIBOUILLE_PARITY_MATRIX.md",
+      "docs/model_inspect_baseline.json"
     ]
   },
   "lint": {
@@ -25,7 +26,8 @@
       "apps/site/.artifacts/",
       "packages/core/tests/fixtures/",
       "packages/model-inspect/tests/fixtures/",
-      "docs/GRIBOUILLE_PARITY_MATRIX.md"
+      "docs/GRIBOUILLE_PARITY_MATRIX.md",
+      "docs/model_inspect_baseline.json"
     ]
   },
   "tasks": {
@@ -42,6 +44,8 @@
     "parity:matrix": "deno run -A scripts/generate_gribouille_parity_matrix.ts",
     "parity:check": "deno run -A scripts/generate_gribouille_parity_matrix.ts --check",
     "fixtures:capture": "deno run -A scripts/capture_geom_fixtures.ts",
-    "fixtures:check": "deno run -A scripts/capture_geom_fixtures.ts --check"
+    "fixtures:check": "deno run -A scripts/capture_geom_fixtures.ts --check",
+    "model:perf": "deno run -A scripts/model_inspect_perf.ts",
+    "model:perf:check": "deno run -A scripts/model_inspect_perf.ts --check"
   }
 }
