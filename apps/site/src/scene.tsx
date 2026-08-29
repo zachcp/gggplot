@@ -11,6 +11,7 @@ import { FlatCamera, Pass } from "@use-gpu/workbench";
 import { createFontResources, GGPlot } from "@gggplot/core";
 import type { GGSpec } from "@gggplot/core";
 import { withSiteChartTheme } from "./chart_theme.ts";
+import { assetUrl } from "./asset_url.ts";
 
 interface Props {
   canvas: HTMLCanvasElement;
@@ -22,13 +23,13 @@ const fontResources = createFontResources([
     family: "Basic",
     weight: 400,
     style: "normal",
-    src: "/fonts/Basic-Regular.ttf",
+    src: assetUrl("/fonts/Basic-Regular.ttf"),
   },
   {
     family: "Lato",
     weight: 400,
     style: "normal",
-    src: "/fonts/Lato-Regular.ttf",
+    src: assetUrl("/fonts/Lato-Regular.ttf"),
   },
 ]);
 

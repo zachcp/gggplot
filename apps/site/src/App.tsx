@@ -183,8 +183,12 @@ export function App() {
               )}
               <div style={styles.referenceLinks}>
                 Examples: {reference.exampleIds.map((id) => {
+                  // 3D-only geoms are documented as ThreeDShowcase entries on
+                  // the 3D page, which are not in `examples`; without this the
+                  // link falls back to "start" and points at the wrong page.
                   const page = docPages.find((candidate) =>
-                    candidate.examples.some((example) => example.id === id)
+                    candidate.examples.some((example) => example.id === id) ||
+                    (candidate.threeD ?? []).some((show) => show.id === id)
                   );
                   return (
                     <a

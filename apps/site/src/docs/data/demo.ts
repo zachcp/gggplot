@@ -170,6 +170,16 @@ export const polygonData = {
   ],
 };
 
+/** Explicit corner bounds: geomRect reads four position aesthetics and does
+ * not derive a width from a categorical scale the way geomTile does. */
+export const rectData = {
+  xmin: [0, 2.5, 1, 4],
+  xmax: [2, 4, 3.5, 6],
+  ymin: [0, 1, 2.5, 0.5],
+  ymax: [1.5, 2.2, 4, 3],
+  phase: ["load", "compile", "emit", "render"],
+};
+
 export const intervalData = {
   group: ["A", "A", "A", "A", "A", "B", "B", "B", "B", "B"],
   value: [2, 3, 4, 5, 9, 5, 6, 7, 8, 10],

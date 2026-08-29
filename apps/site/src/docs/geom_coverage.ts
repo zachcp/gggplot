@@ -1,6 +1,12 @@
 export interface GeomExampleCoverage {
   exampleIds: readonly string[];
-  mode: "dedicated" | "comparison";
+  /**
+   * Where the example lives. "dedicated" and "comparison" ids are DocExamples
+   * placed on a docs page; "threeD" ids are ThreeDShowcase entries on the 3D
+   * page, which uses its own showcase mechanism rather than DocExample.
+   * geomSurface and geomVoxel exist only in 3D and have no DocExample form.
+   */
+  mode: "dedicated" | "comparison" | "threeD";
 }
 
 /** Public constructor aliases resolved to the core geom definition they lower through. */
@@ -51,6 +57,10 @@ export const geomConstructorKinds = {
   geomHline: "hline",
   geomVline: "vline",
   geomAbline: "abline",
+  geomRect: "rect",
+  geomSegment: "segment",
+  geomSurface: "surface",
+  geomVoxel: "voxel",
 } as const;
 
 export const geomConstructorDefaults: Readonly<
@@ -78,6 +88,10 @@ export const geomConstructorDefaults: Readonly<
 export const geomExampleCoverage: Readonly<
   Record<string, GeomExampleCoverage>
 > = {
+  geomRect: { exampleIds: ["RectBounds"], mode: "dedicated" },
+  geomSegment: { exampleIds: ["Segments3D"], mode: "threeD" },
+  geomSurface: { exampleIds: ["Surface3D"], mode: "threeD" },
+  geomVoxel: { exampleIds: ["Voxels3D"], mode: "threeD" },
   geomPoint: { exampleIds: ["ScatterLine"], mode: "comparison" },
   geomLine: { exampleIds: ["ScatterLine"], mode: "comparison" },
   geomPath: { exampleIds: ["PathOrder"], mode: "dedicated" },

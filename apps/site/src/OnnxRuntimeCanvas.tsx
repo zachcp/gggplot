@@ -21,6 +21,7 @@ import type { ScenePickPhase } from "./ChartCanvas3D.tsx";
 import { ModelTensorInspector } from "./ModelTensorInspector.tsx";
 import { Panel } from "./ExampleSection.tsx";
 import { styles } from "./styles.ts";
+import { assetUrl } from "./asset_url.ts";
 
 type LoadState =
   | { kind: "loading"; name: string }
@@ -87,7 +88,7 @@ export function OnnxRuntimeCanvas() {
 
   React.useEffect(() => {
     void loadArtifact(selectedFixture.label, async () => {
-      const response = await fetch(selectedFixture.path);
+      const response = await fetch(assetUrl(selectedFixture.path));
       if (!response.ok) {
         throw new Error(
           "Bundled ONNX model request failed: " + response.status,

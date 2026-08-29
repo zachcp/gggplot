@@ -25,6 +25,7 @@ import {
   quantileRegression,
   rasterGrid,
   rectangularAndHexBins,
+  rectBounds,
   stackedArea,
   streamgraph,
   summaryHexCells,
@@ -84,6 +85,7 @@ export const docPages: DocPage[] = [
       pathOrder,
       areaAndRibbon,
       polygonShapes,
+      rectBounds,
       tileHeatmap,
       rasterGrid,
       labelsAndIntervals,
@@ -281,7 +283,7 @@ export const docPages: DocPage[] = [
       {
         heading: "Adding a geom or stat",
         body:
-          "Define the semantic IR and product shape first, implement the CPU reference behavior, then add a resident executor only when it has explicit source handles, bounded metadata, and a direct mark consumer. Every public geom constructor must also be entered in geomExampleCoverage with a discoverable DocExample; the coverage test rejects missing or stale entries.",
+          "Define the semantic IR and product shape first, implement the CPU reference behavior, then add a resident executor only when it has explicit source handles, bounded metadata, and a direct mark consumer. Every public geom constructor must also be entered in geomExampleCoverage: mode 'dedicated' or 'comparison' for a DocExample placed on a page, or mode 'threeD' for a ThreeDShowcase on the 3D page when the geom has no 2D form. The coverage test rejects missing or stale entries either way.",
       },
     ],
     examples: [
