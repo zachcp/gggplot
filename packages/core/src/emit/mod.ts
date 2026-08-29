@@ -17,6 +17,7 @@ const PLOT_IMPORTS: ComponentName[] = [
   "Face",
   "Polygon",
   "Label",
+  "ScissorBox",
 ];
 
 const SCENE_3D_SOURCE = `

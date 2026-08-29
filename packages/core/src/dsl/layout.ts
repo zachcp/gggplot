@@ -1,10 +1,51 @@
 import type { Facet } from "../ir/types.ts";
 import type { SpecPart } from "./base.ts";
 
+/** A coord limit: two finite numbers, low first. */
+function coordLimit(
+  value: unknown,
+  name: string,
+): [number, number] | undefined {
+  if (value == null) return undefined;
+  if (
+    !Array.isArray(value) || value.length !== 2 ||
+    !value.every((n) => typeof n === "number" && Number.isFinite(n))
+  ) {
+    throw new TypeError(
+      `[gggplot] coordCartesian ${name} must be [min, max] of two finite numbers`,
+    );
+  }
+  const [lo, hi] = value as [number, number];
+  if (!(lo < hi)) {
+    throw new RangeError(
+      `[gggplot] coordCartesian ${name} must have min < max, received [${lo}, ${hi}]`,
+    );
+  }
+  return [lo, hi];
+}
+
+/**
+ * Cartesian coordinates, optionally zoomed.
+ *
+ * `xlim`/`ylim`/`zlim` are ggplot2's coord_cartesian limits: they narrow the
+ * VIEW without removing rows, so stats keep seeing every observation. That is
+ * the whole distinction from a scale `domain`, which censors before the stat
+ * runs -- the canonical example being a boxplot where zooming must not silently
+ * recompute the summary from the surviving rows (gggplot-b06).
+ *
+ * Marks outside the zoomed view are clipped to the panel rather than dropped.
+ */
 export const coordCartesian = (
   options: Record<string, unknown> = {},
 ): SpecPart => {
-  const { axes, ...params } = options;
+  const { axes, xlim, ylim, zlim, ...rest } = options;
+  const params: Record<string, unknown> = { ...rest };
+  const limits = {
+    ...(coordLimit(xlim, "xlim") ? { x: coordLimit(xlim, "xlim") } : {}),
+    ...(coordLimit(ylim, "ylim") ? { y: coordLimit(ylim, "ylim") } : {}),
+    ...(coordLimit(zlim, "zlim") ? { z: coordLimit(zlim, "zlim") } : {}),
+  };
+  if (Object.keys(limits).length) params.limits = limits;
   return {
     tag: "coord",
     value: {

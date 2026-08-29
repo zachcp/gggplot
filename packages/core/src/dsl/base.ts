@@ -18,6 +18,9 @@ import type {
 } from "../ir/types.ts";
 import {
   camera3DFromLookAt,
+  type CameraBounds3D,
+  type CameraFit3DOptions,
+  fitCamera3D,
   type LookAtCamera3D,
   resolveCamera3D,
 } from "../ir/camera.ts";
@@ -41,6 +44,15 @@ export type SpecPart =
 export const camera3d = (options: Camera3DOptions = {}): SpecPart => ({
   tag: "camera",
   value: resolveCamera3D(options),
+});
+
+/** A camera framed to fit a scene's own bounds, rather than the unit cube. */
+export const camera3dFit = (
+  bounds: CameraBounds3D,
+  options: CameraFit3DOptions = {},
+): SpecPart => ({
+  tag: "camera",
+  value: fitCamera3D(bounds, options),
 });
 
 /** Explicit migration sugar from look-at input to the canonical orbit camera. */

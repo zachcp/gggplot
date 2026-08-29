@@ -29,6 +29,7 @@ import {
   Point,
   Polar,
   Polygon,
+  ScissorBox,
   Tick,
 } from "@use-gpu/plot";
 import {
@@ -508,6 +509,7 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
   Plot,
   Embedded,
   Cartesian,
+  ScissorBox,
   Polar,
   Axis,
   Tick,

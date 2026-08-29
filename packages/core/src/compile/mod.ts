@@ -1,5 +1,12 @@
 // Pipeline orchestration. Lowering, coordinate, guide, and facet details live in focused modules.
-import type { Aes, AesName, DataFrame, GGSpec, Layer } from "../ir/types.ts";
+import type {
+  Aes,
+  AesName,
+  DataFrame,
+  GGSpec,
+  Layer,
+  PositionAxis,
+} from "../ir/types.ts";
 import { node, type RenderNode, type RowRemoval } from "./rendertree.ts";
 import { applyStat } from "../stat/mod.ts";
 import {
@@ -216,6 +223,30 @@ function removalProps(
   return { diagnostics };
 }
 
+/**
+ * ggplot2's coord_cartesian(xlim=, ylim=) limits, if declared (gggplot-b06).
+ *
+ * These narrow the view only. Unlike a scale `domain`, which censors rows
+ * before the stat runs (scale/censor.ts), a coord limit never touches the data,
+ * so stat output is identical zoomed or not.
+ */
+function coordLimits(
+  spec: GGSpec,
+): Partial<Record<PositionAxis, [number, number]>> {
+  const declared = spec.coord.kind === "cartesian"
+    ? spec.coord.params?.limits
+    : undefined;
+  return (declared ?? {}) as Partial<Record<PositionAxis, [number, number]>>;
+}
+
+/** Apply a coord limit to a trained domain, leaving it alone when absent. */
+function zoomed(
+  domain: [number, number],
+  limit: [number, number] | undefined,
+): [number, number] {
+  return limit ?? domain;
+}
+
 export function compile(
   spec: GGSpec,
   options: CompileOptions = {},
@@ -403,6 +434,14 @@ export function compile(
       panelXDomain,
       panelYDomain,
     );
+    // coord_cartesian zoom, applied AFTER training and widening and BEFORE
+    // lowering: the marks are positioned against the narrowed view, which is
+    // the zoom, while the data behind them is untouched. Row filtering lives
+    // in scale/censor.ts and is driven by scale domains only, so nothing here
+    // can change what a stat saw (gggplot-b06).
+    const limits = coordLimits(spec);
+    panelXDomain = zoomed(panelXDomain, limits.x);
+    panelYDomain = zoomed(panelYDomain, limits.y);
     // ⑤ geoms → marks. One LayerContext per panel replaces the former
     // 19-positional-parameter lowerLayer signature: the x/y scales are the
     // panel's (possibly free-scaled) scales, the other aesthetic scales are the
@@ -633,14 +672,26 @@ export function compile(
       );
     }
 
+    // `limits` is a compiler input, not a renderer prop: it has already been
+    // folded into viewXDomain/viewYDomain above. Passing it through would put
+    // an unknown trait on the plot's view node.
+    const { limits: _zoomLimits, ...viewParams } = coordParams;
+    // Zoomed marks are clipped to the panel rather than dropped. Without this
+    // the retained out-of-view marks simply draw over the axes and margins,
+    // which is what the old "narrow the view range" behaviour did. Guides stay
+    // outside the box: axes and their labels live at the panel edge and must
+    // not be clipped by it.
+    const clipped = _zoomLimits
+      ? [node("ScissorBox", { range: [viewXDomain, viewYDomain] }, polarMarks)]
+      : polarMarks;
     return node(
       view,
       {
         range: [viewXDomain, viewYDomain],
         axes,
-        ...coordParams,
+        ...viewParams,
       },
-      [...guides, ...polarMarks],
+      [...guides, ...clipped],
     );
   }
 

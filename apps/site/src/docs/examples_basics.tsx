@@ -1,4 +1,5 @@
 import {
+  coordCartesian,
   coordFixed,
   coordFlip,
   coordPolar,
@@ -216,6 +217,24 @@ export const flippedBars: DocExample = {
   .build();`,
   spec: ggplot(rankedData, { x: "tier", y: "score" })
     .add(geomCol({ color: "#eb6834" }), coordFlip())
+    .build(),
+};
+
+export const zoomedPanel: DocExample = {
+  id: "ZoomedPanel",
+  title: "Zoom without dropping rows",
+  description:
+    "coord_cartesian narrows the view only. A scale domain would remove the excluded rows before the stat ran; this keeps every observation and clips the drawing to the panel.",
+  visualSummary:
+    "The same bars as above, viewed through a narrowed y window, with nothing spilling past the axes.",
+  whatChanged:
+    "The panel range narrows while the layer still receives every row, so any stat sees the full data. Marks outside the window are clipped by a scissor rather than culled, which is what keeps a zoomed boxplot's summary identical to the unzoomed one.",
+  dataPreview: rankedData,
+  dslSource: `ggplot(data, { x: "tier", y: "score" })
+  .add(geomCol({ color: "#38bdf8" }), coordCartesian({ ylim: [0, 60] }))
+  .build();`,
+  spec: ggplot(rankedData, { x: "tier", y: "score" })
+    .add(geomCol({ color: "#38bdf8" }), coordCartesian({ ylim: [0, 60] }))
     .build(),
 };
 

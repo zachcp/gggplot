@@ -91,6 +91,9 @@ function liveExportScene(
   });
 }
 
+/** Gap between capture retries; a few attempts, not a per-frame storm. */
+const RETRY_INTERVAL_MS = 1_500;
+
 function ExportCanvas(props: {
   renderPlot: () => Live.LiveElement;
   options: GgSaveOptions;
@@ -100,14 +103,46 @@ function ExportCanvas(props: {
   ownsPasses: boolean;
 }) {
   const [capture, setCapture] = React.useState(false);
+  const settled = React.useRef(false);
+  const onBlob = props.onBlob;
+  const handleBlob = React.useCallback((blob: Blob) => {
+    settled.current = true;
+    onBlob(blob);
+  }, [onBlob]);
+
   React.useEffect(() => {
+    // Two frames before the first capture, so the Live tree has drawn
+    // something rather than being read back blank.
     let second = 0;
     const first = requestAnimationFrame(() => {
       second = requestAnimationFrame(() => setCapture(true));
     });
+
+    // Then retry by REMOUNTING the Screenshot (gggplot-kdg).
+    //
+    // @use-gpu/workbench's Readback sets its internal `read` flag BEFORE
+    // awaiting asyncRead, and returns early without calling `then` when that
+    // read yields null. With once:true the following `if (once && read) return
+    // null` disarms it permanently, so one failed readback means onBlob never
+    // fires and the export hangs to its 30s timeout.
+    //
+    // once:false was tried and REJECTED: dispatching a full-canvas copy every
+    // frame made the flake markedly worse (5 of 7 runs, versus roughly 1 in 4),
+    // adding click and evaluation timeouts of its own -- a readback storm
+    // pressures the device rather than rescuing it. Unmounting and remounting
+    // gives a fresh Readback, so each retry costs one dispatch.
+    const retry = setInterval(() => {
+      if (settled.current) return;
+      setCapture(false);
+      requestAnimationFrame(() => {
+        if (!settled.current) setCapture(true);
+      });
+    }, RETRY_INTERVAL_MS);
+
     return () => {
       cancelAnimationFrame(first);
       cancelAnimationFrame(second);
+      clearInterval(retry);
     };
   }, []);
   return React.createElement(LiveCanvas, {
@@ -121,7 +156,7 @@ function ExportCanvas(props: {
         canvas,
         props.renderPlot,
         props.options,
-        props.onBlob,
+        handleBlob,
         props.onError,
         capture,
         props.size,
