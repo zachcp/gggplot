@@ -15,6 +15,7 @@
  */
 import { chromium } from "playwright";
 import { browserArgs } from "./browser_args.ts";
+import { buildGate, previewArgs } from "./gate_output.ts";
 
 const host = "127.0.0.1";
 const port = 20_000 + Math.floor(Math.random() * 20_000);
@@ -22,18 +23,12 @@ const baseUrl = `http://${host}:${port}`;
 const output = new URL("../.artifacts/visual-smoke/", import.meta.url);
 
 await Deno.mkdir(output, { recursive: true });
+// Build this gate's OWN copy of the site. Gates used to share
+// apps/site/dist, so two running at once clobbered each other
+// mid-run (gggplot-8au).
+await buildGate("gpu-instrument");
 const server = new Deno.Command(Deno.execPath(), {
-  args: [
-    "run",
-    "-A",
-    "npm:vite",
-    "preview",
-    "--host",
-    host,
-    "--port",
-    String(port),
-    "--strictPort",
-  ],
+  args: previewArgs("gpu-instrument", host, port),
   cwd: new URL("../", import.meta.url).pathname,
   stdout: "inherit",
   stderr: "inherit",

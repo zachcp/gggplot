@@ -27,6 +27,7 @@
  */
 import { chromium } from "playwright";
 import { browserArgs } from "./browser_args.ts";
+import { buildGate, previewArgs } from "./gate_output.ts";
 
 // WebGPU globals exist in the page, not in Deno: every page.evaluate callback
 // below is serialized and run by the browser. Declaring them keeps `deno check`
@@ -237,18 +238,12 @@ const INSTRUMENT = `
 })();
 `;
 
+// Build this gate's OWN copy of the site. Gates used to share
+// apps/site/dist, so two running at once clobbered each other
+// mid-run (gggplot-8au).
+await buildGate("pixels");
 const server = new Deno.Command(Deno.execPath(), {
-  args: [
-    "run",
-    "-A",
-    "npm:vite",
-    "preview",
-    "--host",
-    host,
-    "--port",
-    String(port),
-    "--strictPort",
-  ],
+  args: previewArgs("pixels", host, port),
   cwd: new URL("../", import.meta.url).pathname,
   stdout: "null",
   stderr: "inherit",

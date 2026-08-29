@@ -15,6 +15,7 @@
  */
 import { chromium } from "playwright";
 import { browserArgs } from "./browser_args.ts";
+import { buildGate, previewArgs } from "./gate_output.ts";
 
 // Routes whose charts must reach the GPU. Keep 2D and 3D here so neither
 // pipeline can regress into a silent blank canvas.
@@ -61,18 +62,12 @@ const INSTRUMENT = `
 })();
 `;
 
+// Build this gate's OWN copy of the site. Gates used to share
+// apps/site/dist, so two running at once clobbered each other
+// mid-run (gggplot-8au).
+await buildGate("draw-calls");
 const server = new Deno.Command(Deno.execPath(), {
-  args: [
-    "run",
-    "-A",
-    "npm:vite",
-    "preview",
-    "--host",
-    host,
-    "--port",
-    String(port),
-    "--strictPort",
-  ],
+  args: previewArgs("draw-calls", host, port),
   cwd: new URL("../", import.meta.url).pathname,
   stdout: "null",
   stderr: "inherit",

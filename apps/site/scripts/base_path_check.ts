@@ -17,6 +17,7 @@
  */
 import { chromium } from "playwright";
 import { browserArgs } from "./browser_args.ts";
+import { buildGate, previewArgs } from "./gate_output.ts";
 
 const host = "127.0.0.1";
 const port = 20_000 + Math.floor(Math.random() * 20_000);
@@ -26,27 +27,11 @@ const origin = `http://${host}:${port}`;
 const baseUrl = `${origin}${base.replace(/\/$/, "")}`;
 const viewport = { width: 1440, height: 1080 };
 
-const build = await new Deno.Command(Deno.execPath(), {
-  args: ["run", "-A", "npm:vite", "build", `--base=${base}`],
-  cwd: new URL("../", import.meta.url).pathname,
-  stdout: "inherit",
-  stderr: "inherit",
-}).output();
-if (!build.success) throw new Error("Base-path build failed.");
+// Its own directory, like every other gate (gggplot-8au).
+await buildGate("base-path", [`--base=${base}`]);
 
 const server = new Deno.Command(Deno.execPath(), {
-  args: [
-    "run",
-    "-A",
-    "npm:vite",
-    "preview",
-    `--base=${base}`,
-    "--host",
-    host,
-    "--port",
-    String(port),
-    "--strictPort",
-  ],
+  args: previewArgs("base-path", host, port, [`--base=${base}`]),
   cwd: new URL("../", import.meta.url).pathname,
   stdout: "inherit",
   stderr: "inherit",

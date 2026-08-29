@@ -8,6 +8,7 @@
  */
 import { chromium } from "playwright";
 import { browserArgs } from "./browser_args.ts";
+import { buildGate, previewArgs } from "./gate_output.ts";
 
 const host = "127.0.0.1";
 // A fresh high port prevents a user's running dev server from becoming the
@@ -30,18 +31,12 @@ interface RouteResult {
 }
 
 await Deno.mkdir(output, { recursive: true });
+// Build this gate's OWN copy of the site. Gates used to share
+// apps/site/dist, so two running at once clobbered each other
+// mid-run (gggplot-8au).
+await buildGate("visual");
 const server = new Deno.Command(Deno.execPath(), {
-  args: [
-    "run",
-    "-A",
-    "npm:vite",
-    "preview",
-    "--host",
-    host,
-    "--port",
-    String(port),
-    "--strictPort",
-  ],
+  args: previewArgs("visual", host, port),
   cwd: new URL("../", import.meta.url).pathname,
   stdout: "inherit",
   stderr: "inherit",
