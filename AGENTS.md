@@ -82,6 +82,14 @@ bd close <id>         # Complete work
 See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for
 details and anti-patterns.
 
+**Never run `bd init` in this repo — use `bd bootstrap`.** `bd init` creates a
+database with its own independent Dolt history. Pushing that to a remote another
+agent already initialised produces "no common ancestor", and neither side can
+push or merge. That happened here: two agents init'd separately, and the two
+histories had to be reconciled by hand (export issues from one, import into the
+other, force-push the superset). `bd bootstrap` clones the existing remote
+instead, so there is one shared history.
+
 ## Agent Context Profiles
 
 The managed Beads block is task-tracking guidance, not permission to override

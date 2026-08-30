@@ -22,3 +22,6 @@ apps/site/public/fonts/SFNS*.ttf
 
 # Per-gate browser build outputs (gggplot-8au); dist/ is the real artifact.
 apps/site/dist-*/
+
+# Local pre-recovery beads snapshot (RECOVERY-1.2.1); never commit.
+.beads.backup-*/
