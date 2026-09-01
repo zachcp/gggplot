@@ -83,7 +83,7 @@ export const groupedHistogram: DocExample = {
   description:
     "All 150 iris measurements show species-specific sepal-length distributions.",
   whatChanged:
-    "Species is encoded as a discrete fill group before stat_bin. The mapped-fill path remains the documented CPU reference while rendering all real observations.",
+    "Species is encoded as the factor group for stat_bin. Because it uses the default discrete fill scale, the group grid and mapped palette remain eligible for the resident path.",
   dslSource: `const data = await loadStaticDataset("iris");
 ggplot(data, { x: "Sepal.Length", fill: "Species" })
   .add(geomHistogram({ bins: 16, opacity: 0.78 }))

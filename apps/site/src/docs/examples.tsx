@@ -26,6 +26,7 @@ import {
   countStackedBar,
   facetGridStats,
   filledTiles,
+  packedTensorReuse,
   polarThetaY,
   residentCategoricalCount,
   scaledAesthetics,
@@ -35,6 +36,7 @@ import {
   summaryMean,
   themeComparison,
   tileHeatmap,
+  weightedHistogramFallback,
 } from "./examples_stats.tsx";
 
 export * from "./examples_basics.tsx";
@@ -46,6 +48,8 @@ export const allDocExamples = [
   histogramStatBin,
   groupedHistogram,
   residentCategoricalCount,
+  packedTensorReuse,
+  weightedHistogramFallback,
   colorMapped,
   flippedBars,
   polarBars,

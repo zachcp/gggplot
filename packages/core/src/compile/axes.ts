@@ -316,9 +316,11 @@ export function axisGuideOverlay(
   const verticalValues = axisTickValues(verticalScale, tickCount);
   const color = theme.textColor ?? "#0b0b0b";
   const face = themeFaceProps(theme);
-  const horizontalTicks = options.horizontalTicks ?? true;
-  const verticalTicks = options.verticalTicks ?? true;
-  const titles = options.titles ?? true;
+  const horizontalTicks = theme.axes !== false &&
+    (options.horizontalTicks ?? true);
+  const verticalTicks = theme.axes !== false && (options.verticalTicks ?? true);
+  const titles = theme.axes !== false && theme.axisTitles !== false &&
+    (options.titles ?? true);
   const tickSize = options.tickSize ?? Math.max((theme.fontSize ?? 13) - 2, 8);
   const xOffset = options.height ? 16 / options.height : (1 - top) * 0.2;
   const yOffset = options.width ? 16 / options.width : (left + 1) * 0.2;

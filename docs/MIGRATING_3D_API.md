@@ -42,7 +42,10 @@ The removed preview names map as follows:
 earlier one. Omit it for the standard three-quarter perspective view. Camera
 interaction remains runtime state and does not mutate the serialized spec.
 
-The first shared 3D modes are `geomPoint()`, `geomLine()`, and `geomPath()`.
-Their 3D realizations require identity stats and positions; unsupported
+The shared 3D modes are `geomPoint()`, `geomLine()`, `geomPath()`,
+`geomSegment()`, `geomText()`, `geomArea()`, `geomRibbon()`, `geomPolygon()`,
+`geomRect()`, `geomCol()`, `geomSurface()`, and `geomVoxel()`. Their exact
+position, stat, position-adjustment, and parameter contracts differ; see the
+[current 3D design](DESIGN_3D.md#shipped-3d-geom-modes). Unsupported
 combinations fail during dimensional resolution instead of silently falling back
 to 2D.

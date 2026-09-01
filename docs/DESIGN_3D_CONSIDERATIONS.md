@@ -1,12 +1,13 @@
-# 3D grammar considerations (planning)
+# 3D grammar decision history
 
-**Status: decisions recorded inline per section.** Companion to
-`DESIGN_3D_IN_CORE.md`, which covered the _data_ path (pack → lower → emit).
-This file covers everything 3D adds that the 2D grammar has no analog for:
-**transforms, cameras, depth/occlusion, mark sizing, axes/guides**. Transforms
-(§2), coords (§3), cameras (§4), depth/transparency (§5), sizing (§6), and
-guides (§7) are all **decided** (gggplot-4q2.8.1/.2/.3/.4/.5). The 3D grammar
-model is settled; what remains is implementation, tracked separately.
+**Status: retained decision record; implementation is complete.** See
+[DESIGN_3D.md](DESIGN_3D.md) for the verified current architecture and
+[the archived in-core spike](design-history/DESIGN_3D_IN_CORE.md) for its
+historical companion. This file records how the project settled transforms,
+coords, cameras, depth/occlusion, mark sizing, axes/guides, and the unified
+grammar. Names and source paths describing the old `geom_3d`, `Point3DSpec`,
+`Render3DNode`, and parallel live/emitted paths are historical evidence, not
+current API or implementation guidance.
 
 ## 0. Why this document exists
 

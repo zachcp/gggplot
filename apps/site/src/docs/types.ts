@@ -46,6 +46,10 @@ export interface DocExample {
   computedDataPreview?: DataFrame;
   /** DSL source shown to the reader - kept in sync with `spec` by hand. */
   dslSource: string;
+  /** Explanation shown beside the execution flow detected from the live tree. */
+  executionDetail?: string;
+  /** Optional route for an interactive or instrumented companion demonstration. */
+  action?: { href: string; label: string };
   /** Inline examples are immediately compilable. */
   spec?: GGSpec;
   /**
@@ -59,6 +63,7 @@ export interface DocExample {
 export interface DocNarrative {
   heading: string;
   body: string;
+  action?: { href: string; label: string };
 }
 
 export interface GeomReferenceEntry {

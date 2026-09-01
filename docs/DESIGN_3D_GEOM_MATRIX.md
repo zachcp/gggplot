@@ -1,11 +1,12 @@
-# 3D geom compatibility matrix and milestone order
+# 3D geom compatibility matrix
 
-Status: specification for `gggplot-lcy.1`\
-Date: 2026-08-21
+Status: implemented contracts and decision record\
+Last verified: 2026-08-30
 
 [ADR 002](ADR_002_3D_AND_EXTENSION_BOUNDARIES.md) decided _which_ families get a
 3D contract and what kind. This document specifies _what each one must declare_
-to be implementable, and the order to build them in.
+and records the implementation rationale. See [DESIGN_3D.md](DESIGN_3D.md) for
+the concise current overview.
 
 ## The contract is already executable
 
@@ -21,6 +22,7 @@ interface GeomMode {
   stats?: readonly StatKind[]; // omit to keep the 2D stat surface
   positions?: readonly PositionKind[];
   params?: Readonly<Record<string, readonly unknown[]>>;
+  depth?: "opaque" | "alphaAware" | "overlay";
 }
 ```
 
@@ -29,13 +31,12 @@ meant to be copied into `GEOM_REGISTRY`, not paraphrased into it.
 
 ### What ships today
 
-Three geoms declare a 3D mode, all identically conservative:
-
-| Geom    | requiredPosition | stats      | positions  | params                              |
-| ------- | ---------------- | ---------- | ---------- | ----------------------------------- |
-| `point` | x, y, z          | `identity` | `identity` | `sizeMode: constant \| perspective` |
-| `line`  | x, y, z          | `identity` | `identity` | —                                   |
-| `path`  | x, y, z          | `identity` | `identity` | —                                   |
+Twelve geoms declare a 3D mode: `point`, `line`, `path`, `segment`, `text`,
+`area`, `ribbon`, `polygon`, `rect`, `col`, `surface`, and `voxel`. Exact
+position requirements and special cases are recorded in the rows below and
+summarized in [DESIGN_3D.md](DESIGN_3D.md). The executable inventory assertion
+in `packages/core/tests/node_budget_3d_test.ts` keeps this list aligned with
+`GEOM_REGISTRY`.
 
 Plot-level constraints enforced by `resolvePlotDimension()`:
 
@@ -45,23 +46,15 @@ Plot-level constraints enforced by `resolvePlotDimension()`:
 - Non-cartesian coords in 3D throw.
 - A 3D plot requires trained x, y, **and** z scales.
 
-## Two gaps this specification has to close
+## Two gaps closed during implementation
 
-**1. A mapped `z` on a geom with no 3D mode is silently dropped.**
-`selectGeomMode()` selects the 3D mode only when the geom declares one _and_
-that mode requires `z`; otherwise it falls back to the 2D mode and the `z`
-mapping is discarded without a diagnostic. Verified against `geom_bar`,
-`geom_tile`, and `geom_area`: each compiles a 2D plot and no error is raised.
-
-This contradicts the epic's own rule that unsupported combinations must fail
-clearly rather than fall back silently, and it will get worse as geoms are added
-one at a time — every unimplemented geom is a silent no-op rather than a "not
-yet" message. **Fix before adding any new mode**, otherwise each milestone below
-ships a new way to be quietly ignored.
+**1. A consumed `z` on a geom with no 3D mode now fails clearly.** Earlier,
+`selectGeomMode()` could fall back to a 2D mode and silently discard the
+mapping.
 
 The rule: if `z` is mapped and _nothing_ consumes it, throw
 `geom_<name> has no 3D mode; z is not supported`. A caller who genuinely wants z
-ignored can drop it from the mapping.
+ignored can drop it from the mapping. This rule is implemented.
 
 "Nothing consumes it" turned out to be subtler than "the mode does not require
 it". `z` is a legitimate non-positional aesthetic in three other places, and the
@@ -122,11 +115,7 @@ Two real limits remain, and both matter for the same geom:
 - **The sort is per draw call, not per primitive.** Renderables are ordered
   against each other; the instances inside one of them are not. A voxel lattice
   is a single instanced draw containing thousands of mutually overlapping boxes,
-  so it gets no internal ordering. Filed as `gggplot-lcy.13`.
-- **`PrismInstances3D` never enters the transparent pass.** It hardcodes
-  `mode: "opaque"` with both depth flags on, so prism and voxel content is
-  excluded from the sorted set entirely until it takes the layer's resolved
-  depth props. That change belongs to `gggplot-lcy.6`.
+  so it gets no internal ordering. Measured and accepted in `gggplot-lcy.13`.
 
 ### Ordering inside one draw call is an ACCEPTED limitation
 
@@ -334,9 +323,9 @@ would pile up prisms that share an x but sit at different depths.
   measured extent, and a prism has two categorical axes.
 - **Missing values:** a missing extent drops the prism; a missing category drops
   the row before binning.
-- **Depth grouping:** `depthMode` names where the second footprint axis comes
-  from — a constant slab thickness, or a mapped extent. Stacking applies along
-  the measured axis only; there is no stacking in two axes at once.
+- **Depth grouping:** mapped `z` locates the second footprint axis and `zwidth`
+  controls slab thickness. Stacking applies along the measured axis only; there
+  is no stacking in two axes at once.
 - **Non-goals:** does not imply voxel semantics. A prism is a drawn box, not an
   occupancy cell, and adjacency between prisms means nothing.
 
@@ -374,7 +363,7 @@ matching every other 3D geom.
 
 ```ts
 { dimensions: 3, requiredPosition: ["x", "y", "z"],
-  stats: ["bin_3d"], positions: ["identity"], depth: "alphaAware" }
+  stats: ["bin3d", "identity"], positions: ["identity"], depth: "alphaAware" }
 ```
 
 Specified in [DESIGN_3D_BIN_PRODUCT.md](DESIGN_3D_BIN_PRODUCT.md). Two
@@ -394,12 +383,10 @@ different geom with a different meaning, not a display mode of this one.
 - **Sparse:** empty cells are dropped, so absence means "no observations", not
   zero. A dense lattice would cost memory proportional to bins rather than data
   and draw nothing visible for it.
-- **Renderer:** reuses the existing `PrismInstances3D` primitive, which already
-  draws instanced filled boxes from `{ center, size, color }`. It needs the
-  resolved depth props rather than its current hardcoded opaque mode.
-- **Blocked on:** the contract above, now written, and on `gggplot-lcy.12` — a
-  lattice is nothing but overlapping depth ranges, so voxels are the geom that
-  makes back-to-front sorting visible.
+- **Renderer:** implemented as packed axis-aligned boxes in one `ChunkedFace`,
+  sharing the surface lowerer's `boxNode` path and alpha-aware depth props.
+- **Status:** implemented. Transparent draw calls are sorted per frame; boxes
+  inside the packed face retain the accepted packing-order limitation above.
 - **Non-goals:** no volume rendering, no ray marching, no transfer functions, no
   isosurface extraction.
 
@@ -410,7 +397,7 @@ interchange, and faceted 3D. ADR 002 places the first four outside the decision;
 faceting throws today and stays that way until its layout and interaction
 contract is written.
 
-## Milestone order
+## Completed milestone order
 
 Ordered so that each step's data contract is settled before anything renders
 against it, and so that no step promises volumetric semantics it has not
@@ -420,16 +407,17 @@ defined.
 | - | -------------------------------------------- | -------------------------------------------------------------------------------------------- | ----------- |
 | 0 | Fail on unsupported `z`                      | Every later milestone otherwise ships a new silent no-op                                     | `lcy.9` ✅  |
 | 1 | `segment` + reference-line modes             | Lowest risk: existing line topology, but forces the `zend` aesthetic                         | `lcy.2` ✅  |
-| 2 | Declared depth policy                        | Required before the first translucent geom, not after                                        | `lcy.10`    |
+| 2 | Declared depth policy                        | Required before the first translucent geom, not after                                        | `lcy.10` ✅ |
 | 3 | Planar surfaces: polygon, area, ribbon, rect | First translucent content; validates milestone 2. `tile` excluded — its z is a value channel | `lcy.3` ✅  |
 | 4 | `text` billboards                            | Independent of 2 and 3; slot in wherever convenient                                          | `lcy.11` ✅ |
 | 5 | Prisms: col                                  | First distinct 3D primitive; footprint is z + a zwidth param                                 | `lcy.8` ✅  |
 | 6 | `surface`                                    | Needs the grid contract from milestone 5's footprint thinking                                | `lcy.4` ✅  |
 | 7 | `stat_bin_3d` product contract               | Decide bin semantics with nothing rendering yet                                              | `lcy.5` ✅  |
 | 8 | Voxel rendering                              | Only after 7                                                                                 | `lcy.6` ✅  |
-| 9 | 3D interaction and visual QA                 | Needs enough geoms to be worth testing                                                       | `lcy.7`     |
+| 9 | 3D interaction and visual QA                 | Needs enough geoms to be worth testing                                                       | `lcy.7` ✅  |
 
-Milestone 0 is done; the rest are beaded and dependency-ordered.
+All milestones are complete. The table is retained to explain the dependency
+order, not as a current roadmap.
 
 ### The guard against accidental volume semantics
 
@@ -438,9 +426,9 @@ voxels — and only one of them means anything volumetric:
 
 - A **ribbon** is two surfaces. The space between them is not filled, not
   measured, and not queryable.
-- A **prism** is a drawn box whose second footprint axis is a display choice
-  named by `depthMode`. Two adjacent prisms are two marks, not a partitioned
-  region.
+- A **prism** is a drawn box whose second footprint axis comes from mapped `z`;
+  `zwidth` controls its thickness. Two adjacent prisms are two marks, not a
+  partitioned region.
 - A **voxel** is the only occupancy cell, and it is gated behind a stat product
   contract precisely so that "this cell contains n observations" is a claim the
   grammar has actually defined before anything renders it.

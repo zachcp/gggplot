@@ -4,6 +4,14 @@ A **ggplot → [UseGPU](https://usegpu.live) Live** transpiler, built as a Deno
 workspace. Write a grammar-of-graphics spec; get a GPU-rendered chart — either
 live in the browser or emitted as standalone `@use-gpu/plot` source.
 
+"GPU-rendered" describes the shared rendering backend, not a claim that every
+stat and transform is already GPU-resident. Eligible bin/count products use a
+resident aggregate-to-mark path; other plots use a CPU pack-once path whose
+stable GPU sources avoid re-upload while their data identity and pack keys stay
+unchanged. See the
+[architecture](docs/ARCHITECTURE.md#4-gpu-native-execution-model) and the
+detailed [CPU/GPU residency matrix](docs/RESIDENCY_MATRIX.md).
+
 ## What's here
 
 | Path                   | Description                                                                             |
@@ -11,6 +19,7 @@ live in the browser or emitted as standalone `@use-gpu/plot` source.
 | `packages/core/`       | `@gggplot/core` — the library: DSL, IR, compiler, and both backends.                    |
 | `apps/site/`           | Vite doc page demonstrating the transpiler (DSL → emitted source → live WebGPU render). |
 | `docs/ARCHITECTURE.md` | The design: API, UseGPU mapping, and transpilation pipeline.                            |
+| `docs/DESIGN_3D.md`    | Current 3D architecture, shipped geom contracts, limits, and detailed doc index.        |
 
 ## Requirements
 

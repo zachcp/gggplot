@@ -142,6 +142,17 @@ export class GG {
   }
 }
 
+/**
+ * Start a plot from a snapshot of `data`.
+ *
+ * Raw row/column stores are ingested immediately, so each separate `ggplot()`
+ * call creates fresh Column identities and observes mutations made since the
+ * previous call. Hosts that rebuild specs over unchanged data and want the
+ * pack cache to reuse its tensors should call `ingest()` once and pass that
+ * TypedDataFrame to each `ggplot()` call. Already-ingested frames pass through
+ * by identity; hidden raw-object memoization would violate the snapshot and
+ * per-call IngestOptions contracts.
+ */
 export const ggplot = (
   data: InputData,
   mapping: Aes = {},

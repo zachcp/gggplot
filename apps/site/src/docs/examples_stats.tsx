@@ -6,6 +6,7 @@ import {
   geomAbline,
   geomBar,
   geomCol,
+  geomHistogram,
   geomHline,
   geomLine,
   geomPoint,
@@ -13,6 +14,7 @@ import {
   geomTile,
   geomVline,
   ggplot,
+  ingest,
   scaleFill,
   scaleShape,
   scaleSize,
@@ -76,11 +78,72 @@ export const residentCategoricalCount: DocExample = {
     "Twenty thousand factor ids are counted into a compact GPU grid and consumed directly by bar topology.",
   whatChanged:
     "stat_count keeps its u32 count grid resident; only bounded y-domain metadata crosses back for the standalone view.",
+  executionDetail:
+    "The live compiler emits a ResidentProduct for this eligible unweighted factor count. Default-scale factor fill or color grouping can use the same path.",
   dslSource: `ggplot(data, { x: "category" })
   .add(geomBar({ fill: "#2563eb" }))
   .build();`,
   spec: ggplot(residentCountData, { x: "category" })
     .add(geomBar({ fill: "#2563eb" }))
+    .build(),
+};
+
+const packedReuseData = ingest({
+  x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  y: [1, 3, 2, 5, 4, 6, 3, 7, 5, 8],
+});
+
+export const packedTensorReuse: DocExample = {
+  id: "PackedTensorReuse",
+  title: "Stable packed tensors: zero re-upload",
+  description:
+    "A direct point-and-line plot ingests once and reuses the same typed columns across spec rebuilds.",
+  whatChanged:
+    "This is Flow B, not a resident histogram: the CPU packs renderer-ready tensors once, and stable column/pack identities let rerenders and linear-domain changes reuse those tensors.",
+  executionDetail:
+    "The companion browser probe measures mark-buffer creations and writes around five unchanged rerenders and one domain-only rebuild; both windows must remain zero while the frame redraws.",
+  action: {
+    href: "?instrument",
+    label: "Open the browser-instrumented Flow B surface →",
+  },
+  dataPreview: {
+    x: [0, 1, 2, 3, 4],
+    y: [1, 3, 2, 5, 4],
+  },
+  dslSource: `const data = ingest(rawData); // once
+ggplot(data, { x: "x", y: "y" })
+  .add(geomPoint(), geomLine())
+  .build();`,
+  spec: ggplot(packedReuseData, { x: "x", y: "y" })
+    .add(geomPoint({ size: 4 }), geomLine())
+    .build(),
+};
+
+const weightedHistogramData = {
+  value: [0.2, 0.4, 0.7, 1.1, 1.2, 1.8, 2.1, 2.2],
+  mass: [0.25, 1.5, 0.5, 2, 0.75, 1.25, 0.5, 1.75],
+};
+
+export const weightedHistogramFallback: DocExample = {
+  id: "WeightedHistogramFallback",
+  title: "Weighted histogram: deliberate CPU fallback",
+  description:
+    "Fractional observation weights require the CPU reference reducer before the resulting bars render on WebGPU.",
+  whatChanged:
+    "The resident count grid has integer occupancy semantics, so weight selects Flow B and preserves fractional weighted-bin sums instead of silently changing their meaning.",
+  executionDetail:
+    "Weight is the blocker here. An unweighted factor group mapped to fill or color can remain in Flow A when it uses the default discrete scale; mapped fill is not inherently a CPU fallback.",
+  dataPreview: weightedHistogramData,
+  dslSource: `ggplot(data, { x: "value" })
+  .add(geomHistogram({ bins: 5, weight: "mass", fill: "#f59e0b" }))
+  .build();`,
+  computedDataPreview: previewStatRows(
+    ggplot(weightedHistogramData, { x: "value" })
+      .add(geomHistogram({ bins: 5, weight: "mass", fill: "#f59e0b" }))
+      .build(),
+  ),
+  spec: ggplot(weightedHistogramData, { x: "value" })
+    .add(geomHistogram({ bins: 5, weight: "mass", fill: "#f59e0b" }))
     .build(),
 };
 

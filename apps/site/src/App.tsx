@@ -116,6 +116,13 @@ export function App() {
             <section key={section.heading} style={styles.narrative}>
               <h3 style={styles.narrativeTitle}>{section.heading}</h3>
               <p style={styles.bodyCopy}>{section.body}</p>
+              {section.action
+                ? (
+                  <a href={section.action.href} style={styles.actionLink}>
+                    {section.action.label}
+                  </a>
+                )
+                : null}
             </section>
           ))}
 

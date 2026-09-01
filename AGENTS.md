@@ -14,6 +14,10 @@ workflow context.
 > for the one-screen overview and anti-patterns (don't treat JSONL as the source
 > of truth; don't `bd import` during normal operation; don't reach for
 > third-party Dolt hosting before trying the default).
+>
+> On a fresh clone, run `./scripts/bootstrap_beads.sh` rather than calling
+> `bd bootstrap` directly. It preserves the shared ancestry and recreates the
+> ignored local `events` table required by the supported bd 1.2.2 checkout.
 
 ## Quick Reference
 

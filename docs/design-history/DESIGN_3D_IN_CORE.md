@@ -1,9 +1,10 @@
 # Design: 3D geoms in core (`core/src/geom_3d`)
 
 > Historical design spike. The parallel `core/src/geom_3d` implementation was
-> retired by `gggplot-4q2.13`; see [MIGRATING_3D_API.md](MIGRATING_3D_API.md)
-> for the unified `GGSpec`/`compile`/`GGPlot`/`emitSource` API. The superseded
-> `packages/3d` CPU-projection extension was retired by `gggplot-4q2.5`.
+> retired by `gggplot-4q2.13`. See the [current 3D design](../DESIGN_3D.md) and
+> [migration guide](../MIGRATING_3D_API.md) for the unified
+> `GGSpec`/`compile`/`GGPlot`/`emitSource` API. The superseded `packages/3d`
+> CPU-projection extension was retired by `gggplot-4q2.5`.
 
 **Status: design spike (`gggplot-4q2.1`).** Supersedes the "3D is a separate
 extension package" posture of `ADR_002` (see §7).
@@ -11,7 +12,7 @@ extension package" posture of `ADR_002` (see §7).
 **Scope note:** this file covers the **data** path (pack → lower → render →
 emit), which has landed. Everything 3D adds that the 2D grammar has no analog
 for — transforms, cameras, depth/occlusion, mark sizing, 3D guides — is
-deliberately _not_ settled here; see **`DESIGN_3D_CONSIDERATIONS.md`**
+deliberately _not_ settled here; see **`../DESIGN_3D_CONSIDERATIONS.md`**
 (`gggplot-4q2.8`) for that open planning work. Several behaviours in the shipped
 slice are accidental rather than designed and are audited there.
 

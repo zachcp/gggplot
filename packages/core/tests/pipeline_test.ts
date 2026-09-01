@@ -3552,6 +3552,10 @@ Deno.test("remaining named theme presets are distinct and themeVoid removes guid
     voidPanel.children.some((node) => node.component === "Axis"),
     false,
   );
+  assertEquals(
+    allNodes(voidPanel).some((node) => node.component === "Label"),
+    false,
+  );
 });
 
 Deno.test("theme() merges over a prior theme_*() instead of replacing it", () => {

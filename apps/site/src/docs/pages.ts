@@ -50,6 +50,7 @@ import {
   mpgContinuousPalettes,
   mpgFuelEconomy,
   mtcarsLineStyles,
+  packedTensorReuse,
   polarBars,
   polarThetaY,
   residentCategoricalCount,
@@ -62,6 +63,7 @@ import {
   themeComparison,
   themedChart,
   tileHeatmap,
+  weightedHistogramFallback,
   zoomedPanel,
 } from "./examples.tsx";
 import { tinyMlpInspection } from "./model_examples.ts";
@@ -279,7 +281,16 @@ export const docPages: DocPage[] = [
       {
         heading: "Resident execution boundary",
         body:
-          "A direct mark can consume typed columns without a reducer. Resident histogram and categorical stat_count products stay on the GPU only when their source, count grid, bounded scale metadata, and mark consumer all support that path. Weighted or mapped-fill counts remain named CPU-reference fallbacks; the site never labels a stat GPU-native merely because its final mark renders with WebGPU.",
+          "A direct mark can consume typed columns without a reducer. Resident histogram and categorical stat_count products stay on the GPU only when their source, count grid, bounded scale metadata, and mark consumer all support that path. Weighted counts remain a named CPU-reference fallback; factor-group fill or color can remain resident when it uses the grouping column and default scale, while other mappings fall back. The site never labels a stat GPU-native merely because its final mark renders with WebGPU.",
+      },
+      {
+        heading: "Large generated-data demo is opt-in",
+        body:
+          "The performance route generates nothing until requested and never emits or previews its generated rows. Its million-row option demonstrates a resident histogram. The existing roughly five-second PERF_BASELINE measurement is different: it measures CPU packing of one million input bars, not resident histogram execution.",
+        action: {
+          href: "?performance",
+          label: "Open the lazy generated-data route →",
+        },
       },
       {
         heading: "Adding a geom or stat",
@@ -290,6 +301,8 @@ export const docPages: DocPage[] = [
     examples: [
       histogramStatBin,
       residentCategoricalCount,
+      packedTensorReuse,
+      weightedHistogramFallback,
       groupedHistogram,
       smoothLm,
     ],

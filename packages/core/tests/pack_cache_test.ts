@@ -3,7 +3,11 @@
 // against compile()'s RenderTree output. Kept in its own file (rather than
 // pipeline_test.ts) per the bead's scope fence, to leave that file untouched
 // for tzc.6.
-import { assertEquals, assertStrictEquals } from "@std/assert";
+import {
+  assertEquals,
+  assertNotStrictEquals,
+  assertStrictEquals,
+} from "@std/assert";
 import {
   aes,
   coordPolar,
@@ -41,16 +45,19 @@ function topologyOf(n: RenderNode): MarkTopology {
 // 1. Cartesian points
 // ---------------------------------------------------------------------------
 
-Deno.test("pack cache: Cartesian points are reference-identical across a same-spec recompile and a DSL-rebuilt spec", () => {
+Deno.test("pack cache: Cartesian points are reference-identical across repeated build() on one builder and separate builders sharing an ingested frame", () => {
   const typed = ingest({ x: [0, 1, 2, 3], y: [0, 1, 4, 9] });
   const buildSpec = () =>
     ggplot(typed, aes({ x: "x", y: "y" })).add(geomPoint()).build();
   const cache = createPackCache();
 
-  // (a) compile the SAME spec object twice.
-  const spec = buildSpec();
-  const treeA1 = compile(spec, { packCache: cache });
-  const treeA2 = compile(spec, { packCache: cache });
+  // (a) build twice from the SAME builder. build() does not re-ingest.
+  const builder = ggplot(typed, aes({ x: "x", y: "y" })).add(geomPoint());
+  const specA1 = builder.build();
+  const specA2 = builder.build();
+  assertStrictEquals(specA1, specA2);
+  const treeA1 = compile(specA1, { packCache: cache });
+  const treeA2 = compile(specA2, { packCache: cache });
   const pointA1 = findNodes(treeA1, "Point")[0];
   const pointA2 = findNodes(treeA2, "Point")[0];
   assertStrictEquals(positionsOf(pointA1).array, positionsOf(pointA2).array);
@@ -63,6 +70,41 @@ Deno.test("pack cache: Cartesian points are reference-identical across a same-sp
   const pointB = findNodes(treeB, "Point")[0];
   assertStrictEquals(positionsOf(pointA1).array, positionsOf(pointB).array);
   assertStrictEquals(positionsOf(pointA1), positionsOf(pointB));
+});
+
+Deno.test("pack cache: separate builders over the same mutable raw object take fresh snapshots and intentionally miss", () => {
+  const raw = { x: [0, 1, 2], y: [0, 1, 4] };
+  const buildSpec = () =>
+    ggplot(raw, aes({ x: "x", y: "y" })).add(geomPoint()).build();
+  const cache = createPackCache();
+
+  const specA = buildSpec();
+  const specB = buildSpec();
+
+  // Equal raw values do not imply shared Column identity: every ggplot(raw)
+  // call snapshots independently, so separate builders intentionally miss.
+  assertEquals(specA.data.x.values, [0, 1, 2]);
+  assertEquals(specB.data.x.values, [0, 1, 2]);
+  assertNotStrictEquals(specA.data.x, specB.data.x);
+
+  const pointA = findNodes(
+    compile(specA, { packCache: cache }),
+    "Point",
+  )[0];
+  const pointB = findNodes(
+    compile(specB, { packCache: cache }),
+    "Point",
+  )[0];
+  assertNotStrictEquals(positionsOf(pointA), positionsOf(pointB));
+  assertNotStrictEquals(positionsOf(pointA).array, positionsOf(pointB).array);
+
+  // Snapshotting is load-bearing: a later constructor observes mutation while
+  // both earlier specs remain decoupled from the caller's arrays.
+  raw.x[0] = 10;
+  const specAfterMutation = buildSpec();
+  assertEquals(specA.data.x.values, [0, 1, 2]);
+  assertEquals(specB.data.x.values, [0, 1, 2]);
+  assertEquals(specAfterMutation.data.x.values, [10, 1, 2]);
 });
 
 // ---------------------------------------------------------------------------

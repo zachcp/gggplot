@@ -1,10 +1,22 @@
 # CPU/GPU Residency Matrix
 
-**Status: living.** This file records, per computation, where it runs (CPU or
-GPU) and — when it stays on the CPU — the eligibility gate and the reason. It is
-the reviewable companion to the GPU-native execution model in `ARCHITECTURE.md`
-§4: the project's standing rule is that a CPU deviation from the GPU-native
-target needs a good, stated reason, and this table is where that reason lives.
+**Status: living; authoritative for detailed execution status.** This file is
+the single per-computation record of where work currently runs (CPU or GPU), its
+eligibility gate, and the reason for each CPU fallback. `ARCHITECTURE.md` §4–5
+owns the two-flow model, principles, and phase definitions; `PERF_BASELINE.md`
+owns measured evidence. Neither duplicates the detailed status tables here.
+
+The two live flows are:
+
+- **Resident product:** required typed columns become GPU StorageSources and an
+  eligible product runs its stat, topology, supported positioning, and palette
+  expansion on-device, returning only bounded summaries.
+- **CPU pack-once:** CPU stats/scales/positions produce stable packed tensors;
+  unchanged tensor identity and pack keys let their GPU RawData sources redraw
+  without another mark-data upload.
+
+The project's standing rule is that a CPU deviation from the GPU-native target
+needs a good, stated reason, and this table is where that reason lives.
 
 Schema: rows = one computation each; columns = executor, eligibility gate, and
 the documented reason (with the relevant trajectory phase) for staying on CPU.
@@ -74,19 +86,19 @@ residency-matrix-shaped summary.
 `apps/site/src/InstrumentProbe.tsx`):** `PackCache`'s Stage A cache is rooted on
 the MAPPED COLUMN OBJECT's own identity (a `WeakMap<Column, ...>` —
 `compile/pack_cache.ts`'s `stageAPrimaryColumn`/`stageAStore`), not on data
-VALUES. A host that calls `ggplot(rawJsObject, ...)` — passing an un-ingested
-plain object — gets a FRESH `ingest()` call (and therefore fresh `Column`
-wrapper objects) on every `.build()`, which makes Stage A miss on every
-recompile regardless of whether anything eligible actually changed. Every
-`PackCache` test in this repo (`pack_cache_test.ts`,
-`raw_position_domain_test.ts`) already follows the correct pattern — `ingest()`
-once, reuse the same typed frame across `.build()` calls — but this is easy for
-a first-time embedder to get wrong silently: nothing errors, it just re-packs
-and re-uploads every time. Candidate follow-up: either surface a dev-mode
-warning when `PackCache` roots miss repeatedly for what looks like the same
-logical data, or make `ggplot()`'s own data-ingestion path memoize by input
-object identity so passing the same raw object twice is enough (not requiring
-the caller to call `ingest()` explicitly).
+VALUES. Raw input is deliberately snapshotted when each `ggplot()` constructor
+runs: repeated `.build()` calls on one `GG` builder do not re-ingest, but two
+separate `ggplot(rawJsObject, ...)` calls create fresh `Column` wrappers. That
+preserves mutable-input and per-call `IngestOptions` semantics, but separate
+specs built this way miss Stage A even when the raw values did not change.
+
+Hosts that rebuild specs over unchanged data should call `ingest()` once and
+pass the resulting `TypedDataFrame` to each `ggplot()` call. Already-ingested
+frames pass through by identity, so this explicit pattern preserves snapshot
+semantics and gives the pack cache stable roots. `pack_cache_test.ts` asserts
+all three cases: repeated builds from one builder hit; separate builders sharing
+an ingested frame hit; separate builders over one mutable raw object create
+fresh snapshots and intentionally miss.
 
 ---
 

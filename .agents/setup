@@ -30,12 +30,43 @@ install_deno() {
 }
 
 install_beads() {
+  local version="1.2.2"
+  local installed=""
   if command -v bd >/dev/null 2>&1; then
-    printf 'bd is already installed.\n'
+    installed="$(bd version | awk 'NR == 1 { print $3 }')"
+  fi
+  if [[ "$installed" == "$version" ]]; then
+    printf 'bd %s is already installed.\n' "$version"
     return
   fi
 
-  curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash
+  local arch archive checksum
+  case "$(uname -m)" in
+    x86_64)
+      arch="amd64"
+      checksum="8140098a51d3b81d5548d1c5e6db1a2d9930e5d141efe2a4bff7d079c4d321e8"
+      ;;
+    aarch64 | arm64)
+      arch="arm64"
+      checksum="501f38a1070d4b9b3b6261a86a3c92c4a52366869021560430a4bb0036afd83a"
+      ;;
+    *)
+      printf 'Unsupported Beads architecture: %s\n' "$(uname -m)" >&2
+      return 1
+      ;;
+  esac
+  archive="beads_${version}_linux_${arch}.tar.gz"
+  (
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/gggplot-beads.XXXXXX")"
+    trap 'rm -rf "$tmp"' EXIT
+    curl -fsSL \
+      "https://github.com/gastownhall/beads/releases/download/v${version}/${archive}" \
+      -o "$tmp/$archive"
+    printf '%s  %s\n' "$checksum" "$tmp/$archive" |
+      sha256sum --check --status
+    tar -xzf "$tmp/$archive" -C "$tmp" bd
+    install -Dm755 "$tmp/bd" "$HOME/.local/bin/bd"
+  )
 }
 
 configure_login_shell() {
@@ -69,6 +100,7 @@ install_chromium() {
 
 step "Install Deno" install_deno
 step "Install Beads" install_beads
+step "Bootstrap Beads database" "$PWD/scripts/bootstrap_beads.sh"
 step "Configure login shells" configure_login_shell
 step "Install locked dependencies" install_dependencies
 step "Install Playwright Chromium" install_chromium

@@ -7,6 +7,7 @@ import {
   ggplot,
   ingest,
   scaleXContinuous,
+  theme,
 } from "@gggplot/core";
 import { Scene } from "./scene.tsx";
 
@@ -87,6 +88,10 @@ export function InstrumentProbe(): React.ReactElement {
         .add(geomPoint({ size: 4 }))
         .add(geomLine())
         .add(scaleXContinuous({ domain: [0, xDomainMax] }))
+        // This probe measures mark-data uploads, so exclude guide/font vertex
+        // buffers from the surface rather than mixing unrelated allocations
+        // into the browser gate.
+        .add(theme({ axes: false, axisTitles: false, grid: false }))
         .build(),
     [xDomainMax],
   );

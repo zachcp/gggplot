@@ -57,18 +57,28 @@ Issues in Beads are:
 
 ## Get Started with Beads
 
-Try Beads in your own projects:
+For this repository, bootstrap from the existing reconciled Dolt remote:
 
 ```bash
-# Install Beads
-curl -sSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
-
-# Initialize in your repo
-bd init
+# Never run bd init here: it creates unrelated Dolt ancestry.
+./scripts/bootstrap_beads.sh
 
 # Create your first issue
 bd create "Try out Beads"
 ```
+
+`scripts/bootstrap_beads.sh` pins the supported bd 1.2.2 contract, runs the
+non-destructive `bd bootstrap --yes`, and repairs the ignored, machine-local
+`events` table that the shared remote intentionally does not clone. The repair
+uses a checksum-pinned Dolt CLI only to create that ignored table. It does not
+run `bd migrate`, commit schema, or advance shared Dolt history; a clean Dolt
+status is required before the script succeeds.
+
+Why this exists: the reconciled remote has the migration-62 `dolt_ignore` rule
+for `events` while remaining on the schema compatible with bd 1.2.2. A fresh
+clone therefore reads all issues but cannot record a mutation event until its
+local table is recreated. Do not remove the ignore rule, import JSONL, run
+`bd init`, or migrate/push a newer accidental schema as a workaround.
 
 ## Learn More
 

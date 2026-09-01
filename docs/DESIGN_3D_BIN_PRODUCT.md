@@ -1,11 +1,10 @@
 # 3D bin product: `stat_bin_3d` and `geom_voxel`
 
-Status: specification for `gggplot-lcy.5`\
-Date: 2026-08-21
+Status: implemented V1 contract\
+Last verified: 2026-08-30
 
-Implementation is `gggplot-lcy.6`, which is deliberately sequenced after this
-document so that "this cell contains n observations" is a claim the grammar has
-defined before anything renders it.
+The product was specified in `gggplot-lcy.5` and implemented in `gggplot-lcy.6`.
+See [DESIGN_3D.md](DESIGN_3D.md) for the current architecture.
 
 ## Naming
 
@@ -62,8 +61,9 @@ every other stat produces:
 | _(z column name)_ | Cell center on z                                                         |
 | `count`           | Observations in the cell; always present                                 |
 | `density`         | `count / (total × cellVolume)`; always present                           |
-| `value`           | Summary of a mapped value column, when `fun` is supplied                 |
-| _(group columns)_ | Carried through unchanged, one cell per group                            |
+| `binWidthX`       | Cell width on x                                                          |
+| `binWidthY`       | Cell width on y                                                          |
+| `binWidthZ`       | Cell width on z                                                          |
 
 Cell geometry **is** emitted per row, as `binWidthX`, `binWidthY`, and
 `binWidthZ`. This reverses the original plan, which put the lattice widths in
@@ -90,12 +90,14 @@ known bin widths, not merely check that density rises with count.
 Mirrors the 2D binning vocabulary so a reader who knows `stat_summary_2d` can
 predict this:
 
-| Parameter  | Meaning                                                        |
-| ---------- | -------------------------------------------------------------- |
-| `bins`     | Bin count per axis; scalar or `[x, y, z]`                      |
-| `binwidth` | Width per axis; scalar or `[x, y, z]`. Overrides `bins`        |
-| `boundary` | Bin edge alignment; scalar or `[x, y, z]`                      |
-| `fun`      | Optional summary over a mapped value column, producing `value` |
+| Parameter  | Meaning                                                 |
+| ---------- | ------------------------------------------------------- |
+| `bins`     | Bin count per axis; scalar or `[x, y, z]`               |
+| `binwidth` | Width per axis; scalar or `[x, y, z]`. Overrides `bins` |
+| `boundary` | Bin edge alignment; scalar or `[x, y, z]`               |
+
+V1 does not carry groups through the reducer and does not support weights,
+`fun`, mapped-value summaries, or a `value` output column.
 
 Scalar-or-triple is the existing 2D convention (`params.binwidth` already
 accepts a scalar or a pair), extended by one axis.
@@ -114,40 +116,28 @@ The reference implementation is a single pass, and its shape follows
    cell.
 3. Resolve per-axis width and origin from `bins`/`binwidth`/`boundary` against
    the finite extent.
-4. Assign each row a cell index triple, keyed with any group columns.
-5. Accumulate count, and the value list when `fun` is supplied.
-6. Emit one row per occupied cell with centers, `count`, and optionally
-   `density` and `value`.
+4. Assign each row a cell index triple.
+5. Accumulate count.
+6. Emit one row per occupied cell with centers, `count`, `density`, and the
+   three bin-width columns.
 
 Degenerate extents — every observation sharing an x, for instance — collapse to
 a single bin on that axis rather than dividing by a zero width.
 
 ## Renderer topology
 
-**Voxels reuse the existing prism primitive.** `PrismInstances3D`
-(`packages/core/src/render/prism_instances_3d.tsx`) already draws instanced,
-axis-aligned, filled boxes from `{ center, size, color }` — which is exactly a
-voxel. It was built for the model-inspection scene, and nothing about it is
-model-specific.
-
-One change is required: it currently hardcodes `mode: "opaque"` with `depthTest`
-and `depthWrite` both true. Voxels need the resolved depth props from the
-layer's declared policy, because interior cells are invisible without
-translucency.
-
-That makes the dependency chain concrete:
-
-- `geom_voxel` declares `depth: "alphaAware"`, so a voxel layer with alpha
-  becomes translucent.
-- Translucent boxes overlap heavily by construction — a lattice is nothing but
-  overlapping depth ranges — so correct blending needs the back-to-front sort
-  from `gggplot-lcy.12`. Voxels are the geom that makes that sort visible.
+Voxels are packed as axis-aligned boxes into one `ChunkedFace` through the
+shared `boxNode` lowering path. `geom_voxel` declares alpha-aware depth: opaque
+cells test and write depth; a translucent layer enters the transparent pass and
+does not write depth. use.gpu sorts transparent draw calls each frame, while
+boxes inside this one packed draw retain packing order. The measured artifact
+and its accepted scope are recorded in
+[the geom matrix](DESIGN_3D_GEOM_MATRIX.md#ordering-inside-one-draw-call-is-an-accepted-limitation).
 
 Sizing: one instance per occupied cell, `size` set to the three bin widths so
-cells tile exactly, `center` at the emitted cell center. A `padding` parameter
-shrinking each box slightly is worth considering during implementation — it
-makes individual cells legible in a dense lattice — but it is a rendering
-affordance, not part of the stat contract.
+cells tile exactly, `center` at the emitted cell center. The implemented
+`padding` parameter shrinks each box toward its center for legibility; it is a
+rendering affordance, not part of the stat contract.
 
 ## Domain and scale behavior
 

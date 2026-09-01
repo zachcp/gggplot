@@ -25,8 +25,12 @@ export function ExampleSection({
 }) {
   const resolved = useResolvedExample(example);
   const tree = resolved.spec ? compile(resolved.spec) : undefined;
+  const liveTree = resolved.spec
+    ? compile(resolved.spec, { resident: true })
+    : undefined;
   const emitted = tree ? emitSource(tree, example.id) : undefined;
   const nodeCount = tree ? countNodes(tree) : undefined;
+  const resident = liveTree ? hasComponent(liveTree, "ResidentProduct") : false;
   const dataset = example.dataSource
     ? staticDatasets[example.dataSource.id]
     : undefined;
@@ -63,6 +67,30 @@ export function ExampleSection({
           : null}
         <Panel title="What changed">
           <p style={styles.bodyCopy}>{example.whatChanged}</p>
+          {liveTree
+            ? (
+              <p
+                data-execution-flow={resident ? "resident" : "pack-once"}
+                style={resident
+                  ? styles.executionBadgeResident
+                  : styles.executionBadgePacked}
+              >
+                {resident
+                  ? "Flow A · GPU-resident product"
+                  : "Flow B · CPU pack-once, GPU-rendered marks"}
+              </p>
+            )
+            : null}
+          {example.executionDetail
+            ? <p style={styles.metaCopy}>{example.executionDetail}</p>
+            : null}
+          {example.action
+            ? (
+              <a href={example.action.href} style={styles.actionLink}>
+                {example.action.label}
+              </a>
+            )
+            : null}
           <p style={styles.metaCopy}>
             {nodeCount === undefined
               ? resolved.error
@@ -169,4 +197,15 @@ function DataPreview(
 function countNodes(node: { children?: unknown[] }): number {
   const children = (node.children ?? []) as Array<{ children?: unknown[] }>;
   return 1 + children.reduce((total, child) => total + countNodes(child), 0);
+}
+
+function hasComponent(
+  node: { component?: string; children?: unknown[] },
+  component: string,
+): boolean {
+  if (node.component === component) return true;
+  return ((node.children ?? []) as Array<{
+    component?: string;
+    children?: unknown[];
+  }>).some((child) => hasComponent(child, component));
 }

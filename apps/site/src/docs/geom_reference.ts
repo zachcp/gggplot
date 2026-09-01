@@ -24,9 +24,9 @@ export const geomReferenceEntries: GeomReferenceEntry[] = Object.entries(
     params: definition.doc.params ?? {},
     residency: definition.residentPlan
       ? constructor === "geomBar"
-        ? "GPU-resident for unweighted factor x with optional factor group; mapped fill/color and facets use CPU."
+        ? "GPU-resident for unweighted factor x; default-scale factor fill/color can supply the optional group. Weights, custom fill scales, and facets use CPU."
         : constructor === "geomHistogram"
-        ? "GPU-resident for unweighted numeric x with optional factor group; mapped fill/color and facets use CPU."
+        ? "GPU-resident for unweighted numeric x; default-scale factor fill/color can supply the optional group. Weights, custom fill scales, and facets use CPU."
         : "GPU-resident when the geom capability gate accepts the layer."
       : "CPU statistic/lowering; marks render through WebGPU.",
     exampleIds: geomExampleCoverage[constructor].exampleIds,

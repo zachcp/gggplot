@@ -217,23 +217,12 @@ Implemented and tested:
 10. **Backends**: live WebGPU rendering and emitted UseGPU Live source share the
     same RenderTree.
 
-The GPU-first trajectory and what remains on the CPU (with the reason for each
-deviation) live in one reviewable place: `RESIDENCY_MATRIX.md`. The execution
-model it implements is described in §4 below. In brief, as of the current tree:
-
-- `GGSpec.data` stores `TypedDataFrame` directly; `typedArrayForColumn` exposes
-  each column's canonical `Float32Array`/`Uint32Array` for GPU lowering. Storing
-  typed `values` with validity masks in place of the boxed arrays is still open.
-- Marks pack once into flat `FlatTensor`/`MarkTopology` and bind as stable
-  `RawData` sources; the pack cache gives reference-identity reuse so an
-  unchanged spec re-renders with zero re-upload. Eligible `stat_bin`/
-  `stat_count` bar and tile layers run fully GPU-resident (grid, vertex
-  expansion, per-group palette, bounded summary readback only); everything else
-  is a documented CPU deviation (see the residency matrix).
-- Text/label layout uses a real glyph-measurement pass (`FontResources`), which
-  drives legend boxes, `geom_label` backgrounds, and guide placement.
-
-Fine-grained future work remains tracked in beads rather than duplicated here.
+The phase model and execution principles live in §4–5 below. Detailed current
+executor, eligibility, and fallback status lives only in the
+[CPU/GPU residency matrix](./RESIDENCY_MATRIX.md), so capability changes have
+one status table to update. Measurements that support its upload claims live in
+[the performance baseline](./PERF_BASELINE.md); fine-grained future work remains
+tracked in beads.
 
 ---
 
@@ -261,6 +250,38 @@ and guide labels. **The GPU data plane** owns large numeric columns, derived
 fields, reductions, topology, and mark attributes. This is not a plan to port
 every JavaScript function to WGSL — the split is deliberate, and the CPU stays a
 first-class, non-WebGPU backend for compile/emit/tests.
+
+The live backend realizes that model through two explicit flows. Both finish in
+UseGPU/WebGPU rendering; they differ in where plot computation happens and what
+is uploaded:
+
+```
+raw input → typed columns → resident eligibility plan
+                             │
+              ┌──────────────┴────────────────┐
+              │                               │
+              ▼                               ▼
+Flow A: resident product             Flow B: CPU pack-once
+required typed columns               CPU stats / scales / positions
+        │                                      │
+        ▼                                      ▼
+GPU StorageSources                  FlatTensor / MarkTopology
+        │                                      │
+GPU stat → topology → supported                ▼
+position / palette expansion         stable GPU RawData sources
+        │                                      │
+        └──────────────┬───────────────────────┘
+                       ▼
+                  UseGPU marks
+```
+
+Flow A applies only when a registered resident product's eligibility gate
+accepts the full layer. It returns bounded guide/domain summaries rather than
+row-shaped data. Flow B covers general plots: CPU work produces packed tensors
+whose stable references prevent another upload while mapped column identities,
+revisions, and pack keys remain unchanged. The
+[residency matrix](./RESIDENCY_MATRIX.md) is the authoritative detailed list of
+which operations currently take each flow.
 
 ### Two compiler products
 
@@ -320,27 +341,17 @@ explicit export/debug boundary, never a live-geom step.
 ## 5. Phased trajectory & status
 
 The migration is dependency-ordered; no GPU reducer lands before its semantic
-and mounted-runtime contracts exist. Current status:
+and mounted-runtime contracts exist. The coarse trajectory is:
 
-1. **Typed columns through the semantic IR** — _done._ `GGSpec.data` and
-   `Layer.data` are typed-column objects end-to-end; row/column arrays are
-   ingested only at public input boundaries.
-2. **Persistent source-backed marks** — _done._ Final mark attributes lower once
-   into flat typed arrays bound as stable Use.GPU sources and reused across
-   rerenders (the pack cache), with segment topology replacing per-group `Line`
-   nodes where the primitive permits.
-3. **Shader-accessible scales and view updates** — _partial._ Continuous
-   domain→pixel mapping already routes through the view node's `range` prop (a
-   view-only change re-packs nothing); moving continuous transforms and discrete
-   factor/palette lookup into derived shader sources is still open.
-4. **Resident aggregate-to-mark pipelines** — _partial._ Unweighted
-   `stat_bin`/`stat_count` bar and tile layers run fully resident (atomic count
-   grid → on-device vertex expansion, stack/dodge/fill in the vertex pass,
-   bounded summaries only). `bin2d`/density and weighted reductions are open
-   (weighted bin deliberately stays on the deterministic CPU reducer).
-5. **Advanced topology and spatial operators** — _open._ GPU compaction,
-   sort/segment generation, density grids, contours, and polar tessellation land
-   only when profiling shows the prior phase is the bottleneck.
+1. **Typed columns through the semantic IR** — _done._
+2. **Persistent source-backed marks** — _done._
+3. **Shader-accessible scales and view updates** — _partial._
+4. **Resident aggregate-to-mark pipelines** — _partial._
+5. **Advanced topology and spatial operators** — _open._
+
+These phases define ordering and architectural intent. The
+[residency matrix](./RESIDENCY_MATRIX.md) owns the detailed current status for
+individual scales, stats, geoms, and positions.
 
 **Guardrails.** Do not put strings, arbitrary JS callbacks, or the theme system
 in WGSL; do not read GPU results back merely to rebuild a row `DataFrame`; do

@@ -1,9 +1,16 @@
+import { lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { ggsave, type GgSaveOptions, pngDimensions } from "@gggplot/core";
 import { scatterLine } from "./docs/examples.tsx";
 import { helix3dSpec } from "./docs/example_3d.ts";
 import { InstrumentProbe } from "./InstrumentProbe.tsx";
+
+const PerformanceProbe = lazy(() =>
+  import("./PerformanceProbe.tsx").then((module) => ({
+    default: module.PerformanceProbe,
+  }))
+);
 
 // Declared as a global `var` rather than on `interface Window`: the probe is
 // reached through `globalThis`, and only a var declaration types that. An
@@ -83,8 +90,15 @@ if (exportProbeMode) {
 // instrumentation, so this route and the library's own gate agree on what
 // "instrumented" means.
 const root = document.getElementById("root")!;
+const query = new URLSearchParams(location.search);
 createRoot(root).render(
-  new URLSearchParams(location.search).has("instrument")
+  query.has("instrument")
     ? <InstrumentProbe />
+    : query.has("performance")
+    ? (
+      <Suspense fallback={<p>Loading performance route…</p>}>
+        <PerformanceProbe />
+      </Suspense>
+    )
     : <App />,
 );
