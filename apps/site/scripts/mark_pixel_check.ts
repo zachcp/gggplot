@@ -115,6 +115,15 @@ const RESIDENT_SURFACES: { match: string; min: number }[] = [
   // must also confirm the summary itself: 20,000 rows over 4 categories must
   // give stackedMaximum=5000, not 0.
   { match: "Twenty thousand factor ids", min: 0.25 },
+  // examples_basics.tsx :: groupedHistogram — a resident stat_bin view, which
+  // additionally exercises the auto-domain path (its x bounds are reduced on
+  // the GPU before the bin grid is sized).
+  //
+  // MEASURED the same way as above: 27.4% with the bin kernel dispatching, 4.5%
+  // with it dead (axes, grid and tick labels are ordinary marks and still
+  // draw). It sits lower than the bar chart's figure simply because a 16-bin
+  // histogram covers less of its canvas than four wide category bars.
+  { match: "All 150 iris measurements", min: 0.15 },
 ];
 
 const host = "127.0.0.1";

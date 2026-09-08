@@ -28,12 +28,23 @@
 
 import type { LiveElement } from "@use-gpu/live";
 import type { RenderNode } from "../compile/rendertree.ts";
-import { RESIDENT_STAT_COUNT_PRODUCT } from "../compile/resident.ts";
+import {
+  RESIDENT_STAT_BIN_PRODUCT,
+  RESIDENT_STAT_COUNT_PRODUCT,
+} from "../compile/resident.ts";
 import { GPUDataProvider } from "./live.tsx";
 import {
   type ResidentCountProduct,
   ResidentCountProvider,
 } from "./resident_count_live.tsx";
+import {
+  type ResidentDomainProduct,
+  ResidentDomainProvider,
+} from "./resident_domain_live.tsx";
+import {
+  type ResidentHistogramProduct,
+  ResidentHistogramProvider,
+} from "./resident_live.tsx";
 import { paletteToRgbaF32 } from "./resident_bar.tsx";
 import type { GPUStorageSource } from "./types.ts";
 import {
@@ -42,6 +53,7 @@ import {
   Fragment,
   makeContext,
   provide,
+  useAwait,
   useContext,
   useOne,
   yeet,
@@ -111,6 +123,27 @@ const ResidentCompute = (
   });
 };
 
+/** One kernel's contribution to the frame's compute pass. */
+export interface ComputeEntry {
+  encode(): GPUCommandBuffer | null;
+  version: number;
+  gate: DispatchGate;
+}
+
+/**
+ * What a hoisted node yields.
+ *
+ * `product` is null while the node is still resolving something it needs — the
+ * stat_bin view has to read its x bounds off the GPU before it can size its bin
+ * grid, so on the first frame it contributes only its domain kernel. Its marks
+ * render nothing until the product arrives, which is the same behavior the
+ * in-place path already had.
+ */
+export interface HoistedResult {
+  product: unknown | null;
+  computes: ComputeEntry[];
+}
+
 /** Products built above the plot, keyed by the id stamped on their node. */
 export type ResidentProducts = ReadonlyMap<number, unknown>;
 
@@ -144,7 +177,10 @@ interface HoistedNode {
  * halves of the migration never disagree. Anything absent keeps building its
  * own kernel in place, exactly as before.
  */
-const HOISTED_PRODUCTS = new Set<string>([RESIDENT_STAT_COUNT_PRODUCT]);
+const HOISTED_PRODUCTS = new Set<string>([
+  RESIDENT_STAT_COUNT_PRODUCT,
+  RESIDENT_STAT_BIN_PRODUCT,
+]);
 
 /**
  * Stamps a `residentId` on every hoistable ResidentProduct node and returns
@@ -178,9 +214,7 @@ export function collectResidentNodes(
 const HoistedCount = (
   { props, children }: {
     props: Record<string, unknown>;
-    children: (
-      built: { product: ResidentCountProduct; gate: DispatchGate },
-    ) => LiveElement;
+    children: (result: HoistedResult) => LiveElement;
   },
 ): LiveElement => {
   const x = props.x as string;
@@ -211,21 +245,27 @@ const HoistedCount = (
         // The frame owns submission now; see the module doc.
         defer: true,
         children: (product: ResidentCountProduct) =>
-          children({ product, gate }),
+          children({
+            product: gateSummary(product, gate),
+            computes: [{
+              encode: product.encode,
+              version: product.version,
+              gate,
+            }],
+          }),
       }),
   }) as LiveElement;
 };
 
 /**
- * Wraps a product so its readback waits for this version's dispatch.
+ * Wraps a product so its summary readback waits for this version's dispatch.
  *
- * Everything else about the product is passed through untouched, so the mark
- * below cannot tell a hoisted product from an in-place one.
+ * Everything else is passed through untouched, so the mark below cannot tell a
+ * hoisted product from an in-place one.
  */
-function gateProduct(
-  product: ResidentCountProduct,
-  gate: DispatchGate,
-): ResidentCountProduct {
+function gateSummary<
+  T extends { version: number; readSummary(): Promise<unknown> },
+>(product: T, gate: DispatchGate): T {
   return {
     ...product,
     readSummary: async () => {
@@ -234,6 +274,125 @@ function gateProduct(
     },
   };
 }
+
+/** The same gating for the domain product, whose readback is readDomain. */
+function gateDomain(
+  product: ResidentDomainProduct,
+  gate: DispatchGate,
+): ResidentDomainProduct {
+  return {
+    ...product,
+    readDomain: async () => {
+      await gate.wait(product.version);
+      return product.readDomain();
+    },
+  };
+}
+
+/**
+ * Builds one stat_bin node's kernels and yields its product.
+ *
+ * Two kernels, not one, and the second depends on a readback from the first:
+ * an auto-domain histogram must know its x bounds before it can size the bin
+ * grid. So this contributes its domain kernel immediately and its histogram
+ * kernel only once bounds have resolved — which is why HoistedResult allows a
+ * null product. The in-place path had exactly the same two stages; hoisting
+ * does not add a round trip.
+ */
+const HoistedHistogram = (
+  { props, children }: {
+    props: Record<string, unknown>;
+    children: (result: HoistedResult) => LiveElement;
+  },
+): LiveElement => {
+  const x = props.x as string;
+  const group = props.group as string | undefined;
+  const paletteColors = props.paletteColors as string[] | undefined;
+  const opacity = props.opacity as number | undefined;
+  const base = props.options as Record<string, unknown>;
+  const options = paletteColors
+    ? { ...base, palette: paletteToRgbaF32(paletteColors, opacity ?? 1) }
+    : base;
+  const fields = [
+    { name: x, dtype: "f32", shape: "row", dimensions: ["row"] },
+    ...(group
+      ? [{ name: group, dtype: "u32", shape: "row", dimensions: ["row"] }]
+      : []),
+  ];
+  const domainGate = useOne(() => createDispatchGate());
+  const gridGate = useOne(() => createDispatchGate());
+  return createElement(GPUDataProvider, {
+    data: props.data,
+    fields,
+    children: (sources: Record<string, GPUStorageSource>) =>
+      createElement(ResidentDomainProvider, {
+        x: sources[x],
+        defer: true,
+        children: (domain: ResidentDomainProduct) =>
+          createElement(AwaitHoistedBounds, {
+            domain: gateDomain(domain, domainGate),
+            domainCompute: {
+              encode: domain.encode,
+              version: domain.version,
+              gate: domainGate,
+            },
+            x: sources[x],
+            group: group ? sources[group] : undefined,
+            options,
+            gate: gridGate,
+            children,
+          }),
+      }),
+  }) as LiveElement;
+};
+
+/** Resolves x bounds, then mounts the bin grid sized to them. */
+const AwaitHoistedBounds = (
+  { domain, domainCompute, x, group, options, gate, children }: {
+    domain: ResidentDomainProduct;
+    domainCompute: ComputeEntry;
+    x: GPUStorageSource;
+    group?: GPUStorageSource;
+    options: Record<string, unknown>;
+    gate: DispatchGate;
+    children: (result: HoistedResult) => LiveElement;
+  },
+): LiveElement => {
+  const [bounds, error] = useAwait(() => domain.readDomain(), [
+    domain.version,
+  ]);
+  if (error) throw error;
+  // Contribute the domain kernel even while its bounds are still in flight —
+  // it is what produces them, so withholding it would deadlock.
+  if (!bounds || bounds.empty) {
+    return children({ product: null, computes: [domainCompute] });
+  }
+  const resolved = {
+    ...options,
+    lo: bounds.min,
+    hi: bounds.max,
+    autoDomain: undefined,
+  };
+  return createElement(ResidentHistogramProvider, {
+    x,
+    group,
+    options: resolved,
+    defer: true,
+    children: (product: ResidentHistogramProduct) =>
+      children({
+        product: {
+          ...gateSummary(product, gate),
+          // The view needs the bounds it was sized against to set its x range.
+          hoistedBounds: bounds,
+        },
+        computes: [domainCompute, {
+          encode: product.encode,
+          version: product.version,
+          gate,
+        }],
+      }),
+  }) as LiveElement;
+};
 
 /**
  * Mounts every hoisted node's kernel above `children` and provides the
@@ -249,16 +408,16 @@ export const ResidentHost = (
   if (!nodes.length) return children;
   interface Built {
     id: number;
-    product: ResidentCountProduct;
-    gate: DispatchGate;
+    result: HoistedResult;
   }
   const bind = (index: number, built: Built[]): LiveElement => {
     if (index === nodes.length) {
       const products: ResidentProducts = new Map(
-        built.map((
-          entry,
-        ) => [entry.id, gateProduct(entry.product, entry.gate)]),
+        built
+          .filter((entry) => entry.result.product != null)
+          .map((entry) => [entry.id, entry.result.product]),
       );
+      const computes = built.flatMap((entry) => entry.result.computes);
       return createElement(
         Fragment,
         {},
@@ -268,10 +427,10 @@ export const ResidentHost = (
         createElement(
           Compute,
           {},
-          ...built.map((entry) =>
+          ...computes.map((entry) =>
             createElement(ResidentCompute, {
-              encode: entry.product.encode,
-              version: entry.product.version,
+              encode: entry.encode,
+              version: entry.version,
               gate: entry.gate,
             })
           ),
@@ -281,14 +440,13 @@ export const ResidentHost = (
       ) as LiveElement;
     }
     const node = nodes[index];
-    return createElement(HoistedCount, {
+    const Hoisted = node.props.product === RESIDENT_STAT_BIN_PRODUCT
+      ? HoistedHistogram
+      : HoistedCount;
+    return createElement(Hoisted, {
       props: node.props,
-      children: (
-        { product, gate }: {
-          product: ResidentCountProduct;
-          gate: DispatchGate;
-        },
-      ) => bind(index + 1, [...built, { id: node.id, product, gate }]),
+      children: (result: HoistedResult) =>
+        bind(index + 1, [...built, { id: node.id, result }]),
     }) as LiveElement;
   };
   return bind(0, []);

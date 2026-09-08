@@ -3,6 +3,7 @@
 // A standalone auto-domain Cartesian view for the first resident histogram.
 
 import type { LiveElement } from "@use-gpu/live";
+import type { ResidentDomain1DResult } from "@gggplot/reductions";
 import type { TypedDataFrame } from "../data/mod.ts";
 import type { Theme } from "../ir/types.ts";
 import type { ResidentHistogramOptions } from "../compile/resident.ts";
@@ -16,6 +17,7 @@ import {
   type ResidentHistogramProduct,
   ResidentHistogramProvider,
 } from "./resident_live.tsx";
+import { useHoistedProduct } from "./resident_host.tsx";
 import type { GPUStorageSource } from "./types.ts";
 import {
   Axis,
@@ -41,6 +43,12 @@ export interface ResidentHistogramViewProps {
   paletteColors?: string[];
   axes: string;
   theme: Theme;
+  /**
+   * Set by GGPlot when this node's kernels were built above the plot
+   * (runtime/resident_host.tsx). When present the product — already sized to
+   * GPU-resolved x bounds — comes from context and this component only renders.
+   */
+  residentId?: number;
 }
 
 interface AwaitDomainProps extends Omit<ResidentHistogramViewProps, "data"> {
@@ -125,9 +133,25 @@ const AwaitDomainView = (
 
 /** Awaits bounded domain/summary products before mounting Cartesian and guides. */
 export const ResidentHistogramView = (
-  { data, x, group, options, color, opacity, paletteColors, axes, theme }:
-    ResidentHistogramViewProps,
+  {
+    data,
+    x,
+    group,
+    options,
+    color,
+    opacity,
+    paletteColors,
+    axes,
+    theme,
+    residentId,
+  }: ResidentHistogramViewProps,
 ): LiveElement => {
+  // Runs unconditionally to keep hook order stable; null when not hoisted, and
+  // also null on the first frame of a hoisted node, while its x bounds are
+  // still being read back off the GPU.
+  const hoisted = useHoistedProduct<
+    ResidentHistogramProduct & { hoistedBounds: ResidentDomain1DResult }
+  >(residentId);
   const palette = useMemo(
     () =>
       paletteColors ? paletteToRgbaF32(paletteColors, opacity ?? 1) : undefined,
@@ -144,6 +168,20 @@ export const ResidentHistogramView = (
       ? [{ name: group, dtype: "u32", shape: "row", dimensions: ["row"] }]
       : []),
   ];
+  if (typeof residentId === "number") {
+    if (!hoisted) return null as never;
+    return createElement(AwaitSummaryView, {
+      product: hoisted,
+      xRange: histogramRange(
+        hoisted.hoistedBounds.min,
+        hoisted.hoistedBounds.max,
+      ),
+      color,
+      opacity,
+      axes,
+      theme,
+    });
+  }
   return createElement(GPUDataProvider, {
     data,
     fields,
