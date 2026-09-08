@@ -51,6 +51,10 @@ import { mat4 } from "gl-matrix";
 import { resolveResidentProduct } from "../runtime/mod.ts";
 import type { ComponentName, RenderNode } from "../compile/rendertree.ts";
 import type { FlatTensor } from "../compile/rendertree.ts";
+import {
+  collectResidentNodes,
+  ResidentHost,
+} from "../runtime/resident_host.tsx";
 import type { Camera3D, GGSpec } from "../ir/types.ts";
 import { compile, createPackCache } from "../compile/mod.ts";
 import { cameraNearOrigin3d } from "../compile/guides_3d.ts";
@@ -695,7 +699,16 @@ const GlyphMeasuredPlot = (
     sceneExtras != null && interactiveTree.component === "Scene3D"
       ? appendSceneExtras(interactiveTree, sceneExtras)
       : interactiveTree;
-  return renderTree(renderedTree) as LiveElement;
+  // Resident kernels are built ABOVE the compiled tree and handed down by
+  // context; <Plot>'s VirtualLayers boundary makes below-the-tree construction
+  // a dead end for compute. See runtime/resident_host.tsx.
+  const { tree: hostedTree, nodes: residentNodes } = collectResidentNodes(
+    renderedTree,
+  );
+  return createElement(ResidentHost, {
+    nodes: residentNodes,
+    children: renderTree(hostedTree) as LiveElement,
+  }) as LiveElement;
 };
 
 /**

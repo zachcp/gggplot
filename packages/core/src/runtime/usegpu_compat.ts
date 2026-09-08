@@ -36,6 +36,9 @@ export type UseMemo = <T>(
   create: () => T,
   dependencies: readonly unknown[],
 ) => T;
+/** Creates a Live context; supplied with provide(), read with useContext(). */
+export type MakeContext = <T>(initial: T, displayName?: string) => unknown;
+export type UseContext = <T>(context: unknown) => T;
 export type UseOne = <T>(create: () => T, dependency?: unknown) => T;
 export type UseResource = <T>(
   create: (dispose: (cleanup: () => void) => void) => T,
@@ -92,16 +95,40 @@ export type RawDataComponent = LiveComponent<{
   children: (source: GPUStorageSource) => LiveElement;
 }>;
 
-const live = Live as unknown as {
+/**
+ * Picks the namespace that actually carries the API.
+ *
+ * Deno resolves these packages to their CommonJS build, where the exports sit
+ * on `.default` and the namespace itself holds only `__esModule`/`default`;
+ * Vite resolves the ESM build, where they are on the namespace directly. A
+ * plain cast therefore yields `undefined` for every member under Deno, which
+ * stays invisible until something actually calls one — so probe for a known
+ * member rather than assuming either shape.
+ *
+ * The probe member must be one that only the FULL api carries. @use-gpu/live
+ * also ships a default export that is just the JSX shim
+ * ({createElement, Fragment, Yeet, ...}), so probing on `createElement` picks
+ * that shim under Vite and loses every hook — which fails as a blank canvas,
+ * not as a missing export. Probe on a hook instead.
+ */
+const interop = <T>(namespace: unknown, probe: string): T => {
+  // deno-lint-ignore no-explicit-any
+  const ns = namespace as any;
+  return (ns?.default && ns.default[probe] ? ns.default : ns) as T;
+};
+
+const live = interop<{
   createElement: CreateElement;
   provide: Provide;
   useMemo: UseMemo;
   useOne: UseOne;
   useResource: UseResource;
   useAwait: UseAwait;
-};
+  makeContext: MakeContext;
+  useContext: UseContext;
+}>(Live, "useMemo");
 
-const workbench = Workbench as unknown as {
+const workbench = interop<{
   RawData: RawDataComponent;
   FaceLayer: LiveComponent;
   useDeviceContext: UseDeviceContext;
@@ -118,14 +145,14 @@ const workbench = Workbench as unknown as {
   useShaderRef: UseShaderRef;
   useMaterialContext: UseMaterialContext;
   MaterialContext: unknown;
-};
+}>(Workbench, "useDeviceContext");
 
-const plot = Plot as unknown as {
+const plot = interop<{
   Cartesian: LiveComponent;
   Grid: LiveComponent;
   Axis: LiveComponent;
   Face: LiveComponent;
-};
+}>(Plot, "Cartesian");
 
 // @use-gpu/live
 export const createElement = live.createElement;
@@ -134,6 +161,8 @@ export const useMemo = live.useMemo;
 export const useOne = live.useOne;
 export const useResource = live.useResource;
 export const useAwait = live.useAwait;
+export const makeContext = live.makeContext;
+export const useContext = live.useContext;
 
 // @use-gpu/workbench
 export const RawData = workbench.RawData;
