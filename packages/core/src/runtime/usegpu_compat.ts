@@ -36,6 +36,8 @@ export type UseMemo = <T>(
   create: () => T,
   dependencies: readonly unknown[],
 ) => T;
+/** Emits a value to the nearest gathering ancestor (a compute or render pass). */
+export type Yeet = (value: unknown) => LiveElement;
 /** Creates a Live context; supplied with provide(), read with useContext(). */
 export type MakeContext = <T>(initial: T, displayName?: string) => unknown;
 export type UseContext = <T>(context: unknown) => T;
@@ -119,6 +121,8 @@ const interop = <T>(namespace: unknown, probe: string): T => {
 
 const live = interop<{
   createElement: CreateElement;
+  Fragment: unknown;
+  yeet: Yeet;
   provide: Provide;
   useMemo: UseMemo;
   useOne: UseOne;
@@ -129,6 +133,7 @@ const live = interop<{
 }>(Live, "useMemo");
 
 const workbench = interop<{
+  Compute: LiveComponent;
   RawData: RawDataComponent;
   FaceLayer: LiveComponent;
   useDeviceContext: UseDeviceContext;
@@ -156,6 +161,8 @@ const plot = interop<{
 
 // @use-gpu/live
 export const createElement = live.createElement;
+export const Fragment = live.Fragment;
+export const yeet = live.yeet;
 export const provide = live.provide;
 export const useMemo = live.useMemo;
 export const useOne = live.useOne;
@@ -165,6 +172,14 @@ export const makeContext = live.makeContext;
 export const useContext = live.useContext;
 
 // @use-gpu/workbench
+/**
+ * Gathers compute work from its children and mounts the passes that run it.
+ *
+ * Must be mounted OUTSIDE <Plot>: its Resume returns pass elements, and inside
+ * <Plot> those land in VirtualLayers' layer tree and corrupt rendering. See
+ * runtime/resident_host.tsx.
+ */
+export const Compute = workbench.Compute;
 export const RawData = workbench.RawData;
 export const FaceLayer = workbench.FaceLayer;
 export const useDeviceContext = workbench.useDeviceContext;

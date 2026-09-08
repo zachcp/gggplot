@@ -15,14 +15,16 @@
 // below only consumes it. That puts the kernel somewhere a sibling <Compute>
 // can reach, which is the prerequisite for the <Kernel> port (gggplot-vs7.5).
 //
-// WHAT THIS STEP DELIBERATELY DOES NOT CHANGE: the kernel still dispatches from
-// the provider, not from a compute pass. Moving the dispatch requires moving the
-// summary readback in the same change — they are coupled, and splitting them
-// yields a plot that renders and is silently wrong (gggplot-vs7.1 attempt 2:
-// stackedMaximum reads 0 instead of 5000 and the y-range collapses). Because
-// construction now happens above the tree, the provider still renders before
-// the marks below it, so the existing dispatch-then-readback ordering is
-// preserved exactly.
+// DISPATCH AND READBACK MOVE TOGETHER. The kernel's commands are now recorded,
+// not submitted, and handed to a sibling <Compute> as a `pre` call, so they join
+// the frame's single submit. That alone would break every summary-reading view:
+// useAwait fires during reconciliation, so readSummary's copyBufferToBuffer
+// would be submitted BEFORE the compute that fills the buffer, and the view
+// would read zeros (gggplot-vs7.1 attempt 2 — stackedMaximum 0 instead of 5000,
+// y-range collapsing from 5000 to 1, bars overflowing the plot). So the product
+// handed downward has its readSummary GATED: it waits until this version's
+// commands have actually been submitted. Queue order does the rest, since the
+// readback copy is then enqueued behind the compute on the same queue.
 
 import type { LiveElement } from "@use-gpu/live";
 import type { RenderNode } from "../compile/rendertree.ts";
@@ -35,11 +37,79 @@ import {
 import { paletteToRgbaF32 } from "./resident_bar.tsx";
 import type { GPUStorageSource } from "./types.ts";
 import {
+  Compute,
   createElement,
+  Fragment,
   makeContext,
   provide,
   useContext,
+  useOne,
+  yeet,
 } from "./usegpu_compat.ts";
+
+/**
+ * A one-shot barrier per kernel version.
+ *
+ * `wait()` resolves once `open()` has been called for that version, which the
+ * compute leaf does immediately after submitting. A version that has already
+ * been submitted resolves immediately, so a re-render does not stall.
+ */
+interface DispatchGate {
+  wait(version: number): Promise<void>;
+  open(version: number): void;
+}
+
+function createDispatchGate(): DispatchGate {
+  let submitted = -1;
+  let pending: {
+    version: number;
+    resolve: () => void;
+    promise: Promise<void>;
+  } = { version: -1, resolve: () => {}, promise: Promise.resolve() };
+  const pendingFor = (version: number) => {
+    if (pending.version !== version) {
+      let resolve!: () => void;
+      const promise = new Promise<void>((r) => (resolve = r));
+      pending = { version, resolve, promise };
+    }
+    return pending;
+  };
+  return {
+    wait(version) {
+      if (submitted >= version) return Promise.resolve();
+      return pendingFor(version).promise;
+    },
+    open(version) {
+      submitted = version;
+      pendingFor(version).resolve();
+    },
+  };
+}
+
+/** Records one kernel's work into the frame's compute pass. */
+const ResidentCompute = (
+  { encode, version, gate }: {
+    encode: () => GPUCommandBuffer | null;
+    version: number;
+    gate: DispatchGate;
+  },
+): LiveElement => {
+  // `pre` runs every frame the pass runs, so the version guard is what keeps a
+  // steady-state plot from re-encoding.
+  const state = useOne(() => ({ encoded: -1 }), encode);
+  return yeet({
+    pre: () => {
+      if (state.encoded === version) return null;
+      state.encoded = version;
+      const command = encode();
+      // Opened after the command buffer is handed back: ComputePass pushes it
+      // into the same submit it is building, so anything awaiting this gate
+      // enqueues its copy behind the compute.
+      gate.open(version);
+      return command;
+    },
+  });
+};
 
 /** Products built above the plot, keyed by the id stamped on their node. */
 export type ResidentProducts = ReadonlyMap<number, unknown>;
@@ -108,7 +178,9 @@ export function collectResidentNodes(
 const HoistedCount = (
   { props, children }: {
     props: Record<string, unknown>;
-    children: (product: unknown) => LiveElement;
+    children: (
+      built: { product: ResidentCountProduct; gate: DispatchGate },
+    ) => LiveElement;
   },
 ): LiveElement => {
   const x = props.x as string;
@@ -127,6 +199,7 @@ const HoistedCount = (
       ? [{ name: group, dtype: "u32", shape: "row", dimensions: ["row"] }]
       : []),
   ];
+  const gate = useOne(() => createDispatchGate());
   return createElement(GPUDataProvider, {
     data: props.data,
     fields,
@@ -135,10 +208,32 @@ const HoistedCount = (
         x: sources[x],
         group: group ? sources[group] : undefined,
         options,
-        children: (product: ResidentCountProduct) => children(product),
+        // The frame owns submission now; see the module doc.
+        defer: true,
+        children: (product: ResidentCountProduct) =>
+          children({ product, gate }),
       }),
   }) as LiveElement;
 };
+
+/**
+ * Wraps a product so its readback waits for this version's dispatch.
+ *
+ * Everything else about the product is passed through untouched, so the mark
+ * below cannot tell a hoisted product from an in-place one.
+ */
+function gateProduct(
+  product: ResidentCountProduct,
+  gate: DispatchGate,
+): ResidentCountProduct {
+  return {
+    ...product,
+    readSummary: async () => {
+      await gate.wait(product.version);
+      return product.readSummary();
+    },
+  };
+}
 
 /**
  * Mounts every hoisted node's kernel above `children` and provides the
@@ -152,24 +247,49 @@ export const ResidentHost = (
   { nodes, children }: { nodes: HoistedNode[]; children: LiveElement },
 ): LiveElement => {
   if (!nodes.length) return children;
-  const bind = (
-    index: number,
-    products: Map<number, unknown>,
-  ): LiveElement => {
+  interface Built {
+    id: number;
+    product: ResidentCountProduct;
+    gate: DispatchGate;
+  }
+  const bind = (index: number, built: Built[]): LiveElement => {
     if (index === nodes.length) {
-      // Live contexts are supplied with provide(), not a .Provider element.
-      return provide(
-        ResidentProductsContext,
-        products as ResidentProducts,
-        children,
+      const products: ResidentProducts = new Map(
+        built.map((
+          entry,
+        ) => [entry.id, gateProduct(entry.product, entry.gate)]),
       );
+      return createElement(
+        Fragment,
+        {},
+        // <Compute> gathers the recorded commands and runs them in the frame's
+        // compute pass. It is a SIBLING of the plot, never an ancestor: its
+        // Resume returns pass elements, which must not land in the layer tree.
+        createElement(
+          Compute,
+          {},
+          ...built.map((entry) =>
+            createElement(ResidentCompute, {
+              encode: entry.product.encode,
+              version: entry.product.version,
+              gate: entry.gate,
+            })
+          ),
+        ),
+        // Live contexts are supplied with provide(), not a .Provider element.
+        provide(ResidentProductsContext, products, children),
+      ) as LiveElement;
     }
     const node = nodes[index];
     return createElement(HoistedCount, {
       props: node.props,
-      children: (product: unknown) =>
-        bind(index + 1, new Map(products).set(node.id, product)),
+      children: (
+        { product, gate }: {
+          product: ResidentCountProduct;
+          gate: DispatchGate;
+        },
+      ) => bind(index + 1, [...built, { id: node.id, product, gate }]),
     }) as LiveElement;
   };
-  return bind(0, new Map());
+  return bind(0, []);
 };
