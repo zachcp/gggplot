@@ -181,9 +181,10 @@ Deno.test("linked and raw domain kernels agree on the same input", async () => {
     size: [values.length],
     version: 1,
   };
-  // Value order mirrors <Kernel>: dataSize first, then targets/sources in the
-  // bundle's declaration order.
-  runLinked(device, DOMAIN_CLEAR_KERNEL, [domainTarget], 1);
+  // Value order mirrors <Kernel> EXACTLY: it always passes dataSize first, then
+  // args/sources/targets. A bundle that declares no getSize would bind its
+  // first real link to that lambda, which is why both kernels take one.
+  runLinked(device, DOMAIN_CLEAR_KERNEL, [() => [2, 1], domainTarget], 1);
   runLinked(
     device,
     FINITE_DOMAIN_1D_KERNEL,

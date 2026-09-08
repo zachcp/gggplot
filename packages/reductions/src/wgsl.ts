@@ -34,16 +34,28 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
  * inputs through getValue()/getSize(), and write only through `domain`.
  */
 export const DOMAIN_CLEAR_BODY: string = `
-@compute @workgroup_size(1)
-fn main() {
-  atomicStore(&domain[0], 0xffffffffu);
-  atomicStore(&domain[1], 0u);
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let i = global_id.x;
+  if (i >= getSize().x) {
+    return;
+  }
+  // Slot 0 accumulates a minimum and slot 1 a maximum, so they seed from
+  // opposite ends of the ordered-bit range.
+  atomicStore(&domain[i], select(0u, 0xffffffffu, i == 0u));
 }
 `.trim();
 
 /** Hand-numbered preamble for the standalone (non-Use.GPU) executor. */
 export const DOMAIN_CLEAR_RAW_PREAMBLE: string = `
 @group(0) @binding(0) var<storage, read_write> domain: array<atomic<u32>>;
+
+// The accumulator is a fixed pair. This is a function rather than a binding so
+// the body can stay identical to the linked form, where <Kernel> supplies the
+// same value as its dispatch size.
+fn getSize() -> vec2<u32> {
+  return vec2<u32>(2u, 1u);
+}
 `.trim();
 
 export const DOMAIN_CLEAR_WGSL: string =

@@ -26,12 +26,18 @@ import { wgsl } from "@use-gpu/shader/wgsl";
  * "Virtual module '@access [...]' has unresolved data bindings", which does not
  * name the ordering as the cause — hence this comment.
  *
+ * EVERY kernel must declare getSize, even one that has no natural use for it:
+ * <Kernel> ALWAYS passes dataSize as value 0, so a bundle without it binds its
+ * first real link to a size lambda instead of a buffer. That is why the clear
+ * pass is written size-driven rather than hardcoding two atomicStores.
+ *
  * `@link` on a `var` (rather than a `fn`) is what makes an ATOMIC target
  * expressible: the linker emits a raw whole-buffer binding for a link whose
  * attribute resolves with `args === null`, and `atomicMin`/`atomicMax` need
  * that. A function accessor could not be written against.
  */
 export const DOMAIN_CLEAR_KERNEL = wgsl`
+@link fn getSize() -> vec2<u32>;
 @link var<storage, read_write> domain: array<atomic<u32>>;
 
 ${DOMAIN_CLEAR_BODY}
