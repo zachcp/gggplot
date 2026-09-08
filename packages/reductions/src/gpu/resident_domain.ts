@@ -10,6 +10,18 @@ export interface ResidentDomain1DResult {
 
 export interface ResidentDomain1D {
   readonly domain: GPUBuffer;
+  /**
+   * Records this kernel's passes into a command buffer WITHOUT submitting it.
+   *
+   * The mounted Use.GPU backend yeets the result into the frame's compute pass
+   * so every kernel in a plot lands in ONE `device.queue.submit` (see
+   * workbench's RenderComputePass). `dispatch()` is the standalone form for the
+   * headless executor and tests, and is defined in terms of this.
+   *
+   * Returns null when the kernel has no work to record; callers must skip a
+   * null rather than submitting it.
+   */
+  encode(): GPUCommandBuffer | null;
   dispatch(): void;
   readback(): Promise<ResidentDomain1DResult>;
   destroy(): void;
@@ -64,21 +76,27 @@ export function createResidentDomain1D(
     ],
   });
 
+  const encode = (): GPUCommandBuffer | null => {
+    const encoder = device.createCommandEncoder();
+    const clearPass = encoder.beginComputePass();
+    clearPass.setPipeline(clear);
+    clearPass.setBindGroup(0, clearBind);
+    clearPass.dispatchWorkgroups(1);
+    clearPass.end();
+    const reducePass = encoder.beginComputePass();
+    reducePass.setPipeline(reduce);
+    reducePass.setBindGroup(0, reduceBind);
+    reducePass.dispatchWorkgroups(Math.ceil(rows / 64));
+    reducePass.end();
+    return encoder.finish();
+  };
+
   return {
     domain,
+    encode,
     dispatch() {
-      const encoder = device.createCommandEncoder();
-      const clearPass = encoder.beginComputePass();
-      clearPass.setPipeline(clear);
-      clearPass.setBindGroup(0, clearBind);
-      clearPass.dispatchWorkgroups(1);
-      clearPass.end();
-      const reducePass = encoder.beginComputePass();
-      reducePass.setPipeline(reduce);
-      reducePass.setBindGroup(0, reduceBind);
-      reducePass.dispatchWorkgroups(Math.ceil(rows / 64));
-      reducePass.end();
-      device.queue.submit([encoder.finish()]);
+      const command = encode();
+      if (command) device.queue.submit([command]);
     },
     async readback() {
       const values = await readBuffer(
