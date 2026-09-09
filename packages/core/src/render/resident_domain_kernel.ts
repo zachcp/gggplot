@@ -12,11 +12,7 @@
 // so the link form has one fewer binding. Identical OUTPUT for identical input
 // is the invariant, and packages/core/tests/resident_domain_link_test.ts asserts
 // exactly that on a real device.
-import {
-  CLEAR_U32_BODY,
-  DOMAIN_CLEAR_BODY,
-  FINITE_DOMAIN_1D_BODY,
-} from "@gggplot/reductions";
+import { DOMAIN_CLEAR_BODY, FINITE_DOMAIN_1D_BODY } from "@gggplot/reductions";
 import { wgsl } from "@use-gpu/shader/wgsl";
 
 /**
@@ -60,17 +56,4 @@ export const FINITE_DOMAIN_1D_KERNEL = wgsl`
 @link var<storage, read_write> domain: array<atomic<u32>>;
 
 ${FINITE_DOMAIN_1D_BODY}
-`;
-
-/**
- * The u32 grid clear, shared by the count and histogram kernels.
- *
- * No `source`, one Stage target, so <Kernel>'s value list is
- * [dataSize, target] and the declarations follow in that order.
- */
-export const CLEAR_U32_KERNEL = wgsl`
-@link fn getSize() -> vec2<u32>;
-@link var<storage, read_write> values: array<u32>;
-
-${CLEAR_U32_BODY}
 `;

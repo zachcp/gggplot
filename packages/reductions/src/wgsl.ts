@@ -407,7 +407,52 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 `.trim();
 
 /** Produces compact [group totals..., stacked maximum] metadata from counts. */
-export const HISTOGRAM_SUMMARY_WGSL: string = `
+/**
+ * Shared pass BODY for the grid summary (per-group totals plus the position's
+ * stacked maximum), with no bindings of its own.
+ *
+ * Dual surface, and the most instructive of the three so far: every SCALAR this
+ * pass needs — the bin count, the group count, the position mode — is reached
+ * through an accessor. The standalone preamble reads them out of its existing
+ * HistogramParams uniform; the linked form gets them as <Kernel> `args`, which
+ * become uniform refs whose updates do not rebuild the pipeline.
+ */
+export const GRID_SUMMARY_BODY: string = `
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let bins = getSize().x;
+  let bin = global_id.x;
+  if (bin >= bins) {
+    return;
+  }
+  let groups = getGroups();
+  var stacked = 0u;
+  for (var group = 0u; group < groups; group = group + 1u) {
+    let count = getCount(group * bins + bin);
+    atomicAdd(&summary[group], count);
+    stacked = stacked + count;
+  }
+  let position = getPosition();
+  if (position == 1u) {
+    atomicMax(&summary[groups], stacked);
+  } else if (position == 3u) {
+    atomicMax(&summary[groups], select(0u, 1u, stacked > 0u));
+  } else {
+    for (var group = 0u; group < groups; group = group + 1u) {
+      atomicMax(&summary[groups], getCount(group * bins + bin));
+    }
+  }
+}
+`.trim();
+
+/**
+ * Hand-numbered preamble for the standalone executor.
+ *
+ * Bindings 0/1/2 and the HistogramParams layout are unchanged, so the existing
+ * bind groups in resident_count.ts and resident_histogram.ts keep working
+ * untouched — only the accessor indirection is new.
+ */
+export const GRID_SUMMARY_RAW_PREAMBLE: string = `
 struct HistogramParams {
   rows: u32,
   bins: u32,
@@ -418,33 +463,29 @@ struct HistogramParams {
   position: u32,
 };
 
-@group(0) @binding(0) var<storage, read> counts: array<u32>;
+@group(0) @binding(0) var<storage, read> countsStorage: array<u32>;
 @group(0) @binding(1) var<storage, read_write> summary: array<atomic<u32>>;
 @group(0) @binding(2) var<uniform> params: HistogramParams;
 
-@compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-  let bin = global_id.x;
-  if (bin >= params.bins) {
-    return;
-  }
-  var stacked = 0u;
-  for (var group = 0u; group < params.groups; group = group + 1u) {
-    let count = counts[group * params.bins + bin];
-    atomicAdd(&summary[group], count);
-    stacked = stacked + count;
-  }
-  if (params.position == 1u) {
-    atomicMax(&summary[params.groups], stacked);
-  } else if (params.position == 3u) {
-    atomicMax(&summary[params.groups], select(0u, 1u, stacked > 0u));
-  } else {
-    for (var group = 0u; group < params.groups; group = group + 1u) {
-      atomicMax(&summary[params.groups], counts[group * params.bins + bin]);
-    }
-  }
+fn getSize() -> vec2<u32> {
+  return vec2<u32>(params.bins, 1u);
+}
+
+fn getGroups() -> u32 {
+  return params.groups;
+}
+
+fn getPosition() -> u32 {
+  return params.position;
+}
+
+fn getCount(i: u32) -> u32 {
+  return countsStorage[i];
 }
 `.trim();
+
+export const HISTOGRAM_SUMMARY_WGSL: string =
+  `${GRID_SUMMARY_RAW_PREAMBLE}\n\n${GRID_SUMMARY_BODY}`;
 
 /**
  * Expands a per-group palette into per-vertex bar colors. One invocation per

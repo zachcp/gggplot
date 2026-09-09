@@ -19,7 +19,6 @@ import {
 } from "@use-gpu/shader/wgsl";
 import * as CoreNamespace from "@use-gpu/core";
 import {
-  CLEAR_U32_KERNEL,
   DOMAIN_CLEAR_KERNEL,
   FINITE_DOMAIN_1D_KERNEL,
 } from "../src/render/resident_domain_kernel.ts";
@@ -59,25 +58,6 @@ const LOCAL_DEFINES = {
   "@group(CUSTOM)": "@group(2)",
   "@group(LOCAL)": "@group(3)",
 };
-
-async function readU32(
-  device: GPUDevice,
-  source: GPUBuffer,
-  count: number,
-): Promise<Uint32Array> {
-  const staging = device.createBuffer({
-    size: count * 4,
-    usage: USAGE.COPY_DST | USAGE.MAP_READ,
-  });
-  const encoder = device.createCommandEncoder();
-  encoder.copyBufferToBuffer(source, 0, staging, 0, count * 4);
-  device.queue.submit([encoder.finish()]);
-  await staging.mapAsync(USAGE.MAP_READ);
-  const values = new Uint32Array(staging.getMappedRange().slice(0));
-  staging.unmap();
-  staging.destroy();
-  return values;
-}
 
 /** Links one bundle against positional values and runs it, as <Kernel> does. */
 function runLinked(
@@ -235,43 +215,5 @@ Deno.test("linked and raw domain kernels agree on the same input", async () => {
   domain.destroy();
   valueBuffer.destroy();
   staging.destroy();
-  device.destroy();
-});
-
-Deno.test("the linked u32 clear zeroes exactly its declared size", async () => {
-  const device = await requestTestDevice();
-  if (!device) return;
-
-  // Deliberately longer than the clear's dispatch size: the guard that stops it
-  // at getSize().x is the whole point of the shared body, and a clear that runs
-  // past its length would silently wipe a neighbouring region of a shared grid.
-  const length = 8;
-  const cleared = 5;
-  const seeded = Uint32Array.from({ length }, (_, i) => i + 1);
-  const buffer = device.createBuffer({
-    size: seeded.byteLength,
-    usage: USAGE.STORAGE | USAGE.COPY_SRC | USAGE.COPY_DST,
-  });
-  device.queue.writeBuffer(buffer, 0, seeded);
-
-  runLinked(
-    device,
-    CLEAR_U32_KERNEL,
-    [() => [cleared, 1], {
-      buffer,
-      format: "u32",
-      length,
-      size: [length],
-      version: 1,
-      readWrite: true,
-    }],
-    1,
-  );
-
-  assertEquals(
-    [...await readU32(device, buffer, length)],
-    [0, 0, 0, 0, 0, 6, 7, 8],
-  );
-  buffer.destroy();
   device.destroy();
 });
