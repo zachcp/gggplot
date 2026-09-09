@@ -22,6 +22,9 @@ import {
   GRID_BAR_VERTEX_COLORS_KERNEL,
   GRID_SUMMARY_KERNEL,
   GROUPED_COUNT_1D_KERNEL,
+  GROUPED_HISTOGRAM_1D_KERNEL,
+  HISTOGRAM_BAR_VERTICES_KERNEL,
+  HISTOGRAM_TILE_VERTICES_KERNEL,
 } from "../src/render/resident_grid_kernels.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -491,6 +494,244 @@ Deno.test("the linked bar vertices lay out one quad per cell", async () => {
   }
   countsBuffer.destroy();
   summaryBuffer.destroy();
+  verticesBuffer.destroy();
+  device.destroy();
+});
+
+/** Approximate float comparison; several of these offsets are not exact in f32. */
+function assertClose(got: number[], want: number[], label: string): void {
+  assertEquals(got.length, want.length, `${label}: length`);
+  for (let i = 0; i < want.length; i++) {
+    assert(
+      Math.abs(got[i] - want[i]) < 1e-5,
+      `${label} float ${i}: got ${got[i]}, want ${want[i]}`,
+    );
+  }
+}
+
+Deno.test("the linked histogram binning clamps out-of-range values into the end bins", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+
+  // lo 0, binwidth 1, two bins. 5.0 falls far past the last bin and must be
+  // CLAMPED into it rather than dropped or written out of bounds — that clamp
+  // is the difference between this pass and a plain bounds guard.
+  const rows = 6;
+  const bins = 2;
+  const values = Float32Array.from([0.1, 0.5, 1.2, 1.7, 1.9, 5.0]);
+  const valueBuffer = device.createBuffer({
+    size: values.byteLength,
+    usage: USAGE.STORAGE | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(valueBuffer, 0, values);
+  const groupBuffer = device.createBuffer({
+    size: rows * 4,
+    usage: USAGE.STORAGE | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(groupBuffer, 0, new Uint32Array(rows));
+  const countsBuffer = device.createBuffer({
+    size: bins * 4,
+    usage: USAGE.STORAGE | USAGE.COPY_SRC | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(countsBuffer, 0, new Uint32Array(bins));
+
+  runLinked(
+    device,
+    GROUPED_HISTOGRAM_1D_KERNEL,
+    [
+      () => [rows, 1],
+      bins,
+      1,
+      0,
+      0,
+      1,
+      {
+        buffer: valueBuffer,
+        format: "f32",
+        length: rows,
+        size: [rows],
+        version: 1,
+      },
+      {
+        buffer: groupBuffer,
+        format: "u32",
+        length: rows,
+        size: [rows],
+        version: 1,
+      },
+      {
+        buffer: countsBuffer,
+        format: "atomic<u32>",
+        length: bins,
+        size: [bins],
+        version: 1,
+        readWrite: true,
+      },
+    ],
+    1,
+  );
+
+  // bin 0 takes 0.1 and 0.5; bin 1 takes 1.2, 1.7, 1.9 and the clamped 5.0.
+  assertEquals([...await readU32(device, countsBuffer, bins)], [2, 4]);
+  valueBuffer.destroy();
+  groupBuffer.destroy();
+  countsBuffer.destroy();
+  device.destroy();
+});
+
+Deno.test("the linked histogram bars span their bin and rise to their count", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+
+  const bins = 2;
+  const groups = 1;
+  const cells = bins * groups;
+  const counts = Uint32Array.from([3, 5]);
+  const countsBuffer = device.createBuffer({
+    size: counts.byteLength,
+    usage: USAGE.STORAGE | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(countsBuffer, 0, counts);
+  const summaryBuffer = device.createBuffer({
+    size: 8,
+    usage: USAGE.STORAGE | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(summaryBuffer, 0, Uint32Array.from([8, 5]));
+
+  const floats = cells * 4 * 2;
+  const verticesBuffer = device.createBuffer({
+    size: floats * 4,
+    usage: USAGE.STORAGE | USAGE.COPY_SRC | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(verticesBuffer, 0, new Float32Array(floats));
+
+  const u32Source = (buffer: GPUBuffer, length: number) => ({
+    buffer,
+    format: "u32",
+    length,
+    size: [length],
+    version: 1,
+  });
+
+  // lo 0, binwidth 2, identity position: bins span [0,2) and [2,4).
+  runLinked(
+    device,
+    HISTOGRAM_BAR_VERTICES_KERNEL,
+    [
+      () => [cells, 1],
+      bins,
+      groups,
+      0,
+      0,
+      2,
+      u32Source(countsBuffer, counts.length),
+      u32Source(summaryBuffer, 2),
+      {
+        buffer: verticesBuffer,
+        format: "vec2<f32>",
+        length: cells * 4,
+        size: [cells * 4],
+        version: 1,
+        readWrite: true,
+      },
+    ],
+    1,
+  );
+
+  assertClose([...await readF32(device, verticesBuffer, floats)], [
+    0,
+    0,
+    0,
+    3,
+    2,
+    3,
+    2,
+    0,
+    2,
+    0,
+    2,
+    5,
+    4,
+    5,
+    4,
+    0,
+  ], "histogram bars");
+  countsBuffer.destroy();
+  summaryBuffer.destroy();
+  verticesBuffer.destroy();
+  device.destroy();
+});
+
+Deno.test("the linked tile grid derives cells from bin geometry alone", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+
+  // No counts source at all: every cell comes from lo/binwidth and its group
+  // row. Two groups of two bins, lo 10, binwidth 0.5.
+  const bins = 2;
+  const groups = 2;
+  const cells = bins * groups;
+  const floats = cells * 4 * 2;
+  const verticesBuffer = device.createBuffer({
+    size: floats * 4,
+    usage: USAGE.STORAGE | USAGE.COPY_SRC | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(verticesBuffer, 0, new Float32Array(floats));
+
+  runLinked(
+    device,
+    HISTOGRAM_TILE_VERTICES_KERNEL,
+    [
+      () => [cells, 1],
+      bins,
+      10,
+      0.5,
+      {
+        buffer: verticesBuffer,
+        format: "vec2<f32>",
+        length: cells * 4,
+        size: [cells * 4],
+        version: 1,
+        readWrite: true,
+      },
+    ],
+    1,
+  );
+
+  assertClose([...await readF32(device, verticesBuffer, floats)], [
+    10,
+    0,
+    10,
+    1,
+    10.5,
+    1,
+    10.5,
+    0,
+    10.5,
+    0,
+    10.5,
+    1,
+    11,
+    1,
+    11,
+    0,
+    10,
+    1,
+    10,
+    2,
+    10.5,
+    2,
+    10.5,
+    1,
+    10.5,
+    1,
+    10.5,
+    2,
+    11,
+    2,
+    11,
+    1,
+  ], "tiles");
   verticesBuffer.destroy();
   device.destroy();
 });

@@ -140,7 +140,40 @@ fn getSize() -> vec2<u32> {
 export const FINITE_DOMAIN_1D_WGSL: string =
   `${FINITE_DOMAIN_1D_RAW_PREAMBLE}\n\n${FINITE_DOMAIN_1D_BODY}`;
 
-export const GROUPED_HISTOGRAM_1D_WGSL: string = `
+/** Shared pass BODY for the grouped 1-D binning accumulation. */
+export const GROUPED_HISTOGRAM_1D_BODY: string = `
+fn isFiniteValue(value: f32) -> bool {
+  return value == value && abs(value) <= 3.4e38;
+}
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let row = global_id.x;
+  let bins = getBins();
+  let groups = getGroups();
+  if (row >= getSize().x || bins == 0u || groups == 0u) {
+    return;
+  }
+
+  let value = getValue(row);
+  if (!isFiniteValue(value)) {
+    return;
+  }
+  let rawBin = i32(floor((value - getLo()) / getBinwidth()));
+  let clamped = clamp(rawBin, 0, i32(bins) - 1);
+  let bin = u32(clamped);
+  let group = select(0u, getGroupId(row), getHasGroups() != 0u);
+
+  if (group >= groups) {
+    return;
+  }
+
+  atomicAdd(&counts[group * bins + bin], 1u);
+}
+`.trim();
+
+/** Hand-numbered preamble for the standalone executor; bindings unchanged. */
+export const GROUPED_HISTOGRAM_1D_RAW_PREAMBLE: string = `
 struct HistogramParams {
   rows: u32,
   bins: u32,
@@ -151,39 +184,46 @@ struct HistogramParams {
   position: u32,
 };
 
-@group(0) @binding(0) var<storage, read> values: array<f32>;
-@group(0) @binding(1) var<storage, read> groupIds: array<u32>;
+@group(0) @binding(0) var<storage, read> valuesStorage: array<f32>;
+@group(0) @binding(1) var<storage, read> groupIdsStorage: array<u32>;
 @group(0) @binding(2) var<storage, read_write> counts: array<atomic<u32>>;
 @group(0) @binding(3) var<uniform> params: HistogramParams;
 
-fn isFiniteValue(value: f32) -> bool {
-  return value == value && abs(value) <= 3.4e38;
+fn getSize() -> vec2<u32> {
+  return vec2<u32>(params.rows, 1u);
 }
 
-@compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-  let row = global_id.x;
-  if (row >= params.rows || params.bins == 0u || params.groups == 0u) {
-    return;
-  }
+fn getBins() -> u32 {
+  return params.bins;
+}
 
-  let value = values[row];
-  if (!isFiniteValue(value)) {
-    return;
-  }
-  let rawBin = i32(floor((value - params.lo) / params.binwidth));
-  let clamped = clamp(rawBin, 0, i32(params.bins) - 1);
-  let bin = u32(clamped);
-  let group = select(0u, groupIds[row], params.hasGroups != 0u);
+fn getGroups() -> u32 {
+  return params.groups;
+}
 
-  if (group >= params.groups) {
-    return;
-  }
+fn getHasGroups() -> u32 {
+  return params.hasGroups;
+}
 
-  let offset = group * params.bins + bin;
-  atomicAdd(&counts[offset], 1u);
+fn getLo() -> f32 {
+  return params.lo;
+}
+
+fn getBinwidth() -> f32 {
+  return params.binwidth;
+}
+
+fn getValue(i: u32) -> f32 {
+  return valuesStorage[i];
+}
+
+fn getGroupId(i: u32) -> u32 {
+  return groupIdsStorage[i];
 }
 `.trim();
+
+export const GROUPED_HISTOGRAM_1D_WGSL: string =
+  `${GROUPED_HISTOGRAM_1D_RAW_PREAMBLE}\n\n${GROUPED_HISTOGRAM_1D_BODY}`;
 
 /**
  * Shared pass BODY for the grouped categorical count, with no bindings.
@@ -363,68 +403,63 @@ export const COUNT_BAR_VERTICES_WGSL: string =
  * It encodes identity, stack, dodge, and fill directly into GPU vertices so
  * the Face mark never needs a CPU count-grid readback.
  */
-export const HISTOGRAM_BAR_VERTICES_WGSL: string = `
-struct HistogramParams {
-  rows: u32,
-  bins: u32,
-  groups: u32,
-  hasGroups: u32,
-  lo: f32,
-  binwidth: f32,
-  position: u32,
-};
-
-@group(0) @binding(0) var<storage, read> counts: array<u32>;
-@group(0) @binding(1) var<storage, read_write> vertices: array<vec2<f32>>;
-@group(0) @binding(2) var<uniform> params: HistogramParams;
-@group(0) @binding(3) var<storage, read> summary: array<u32>;
-
+/**
+ * Shared pass BODY for expanding the bin grid into bar quad vertices.
+ *
+ * Like the count variant, the summary is an INPUT here: dodge divides each bin
+ * among the groups actually present, which it reads from per-group totals.
+ */
+export const HISTOGRAM_BAR_VERTICES_BODY: string = `
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   let cell = global_id.x;
-  let cells = params.groups * params.bins;
-  if (cell >= cells || params.bins == 0u) {
+  let bins = getBins();
+  let groups = getGroups();
+  if (cell >= getSize().x || bins == 0u) {
     return;
   }
 
-  let group = cell / params.bins;
-  let bin = cell % params.bins;
-  let count = counts[cell];
+  let group = cell / bins;
+  let bin = cell % bins;
+  let count = getCount(cell);
+  let position = getPosition();
+  let lo = getLo();
+  let binwidth = getBinwidth();
   var lower = 0u;
   var upper = count;
-  if (params.position == 1u || params.position == 3u) {
+  if (position == 1u || position == 3u) {
     for (var prior = 0u; prior < group; prior = prior + 1u) {
-      lower = lower + counts[prior * params.bins + bin];
+      lower = lower + getCount(prior * bins + bin);
     }
     upper = lower + count;
   }
-  let x0 = params.lo + f32(bin) * params.binwidth;
-  var x1 = x0 + params.binwidth;
+  let x0 = lo + f32(bin) * binwidth;
+  var x1 = x0 + binwidth;
   var left = x0;
-  if (params.position == 2u) {
+  if (position == 2u) {
     // Dodge divides the bin among groups PRESENT in the data (matching CPU
     // dodgeBars, which slots only observed group keys), not the declared
-    // group-dictionary size. summary[g] holds group g's total count and is
+    // group-dictionary size. getSummary(g) holds group g's total count and is
     // dispatched before this pass; an absent group's cell stays degenerate
     // (count 0) so its slot collision is invisible.
     var present = 0u;
     var slot = 0u;
-    for (var g = 0u; g < params.groups; g = g + 1u) {
-      if (summary[g] > 0u) {
+    for (var g = 0u; g < groups; g = g + 1u) {
+      if (getSummary(g) > 0u) {
         if (g < group) { slot = slot + 1u; }
         present = present + 1u;
       }
     }
-    let width = params.binwidth / f32(max(present, 1u));
+    let width = binwidth / f32(max(present, 1u));
     left = x0 + f32(slot) * width;
     x1 = left + width;
   }
   var y0 = f32(lower);
   var y1 = f32(upper);
-  if (params.position == 3u) {
+  if (position == 3u) {
     var total = 0u;
-    for (var index = 0u; index < params.groups; index = index + 1u) {
-      total = total + counts[index * params.bins + bin];
+    for (var index = 0u; index < groups; index = index + 1u) {
+      total = total + getCount(index * bins + bin);
     }
     if (total > 0u) {
       y0 = f32(lower) / f32(total);
@@ -442,12 +477,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `.trim();
 
-/**
- * Emits one rectangular tile for every dense [group, bin] count-grid cell.
- * Counts remain resident for a later color/opacity field; even zero cells keep
- * their declared topology and therefore need no CPU sparse-row reconstruction.
- */
-export const HISTOGRAM_TILE_VERTICES_WGSL: string = `
+/** Hand-numbered preamble for the standalone executor; bindings unchanged. */
+export const HISTOGRAM_BAR_VERTICES_RAW_PREAMBLE: string = `
 struct HistogramParams {
   rows: u32,
   bins: u32,
@@ -458,21 +489,73 @@ struct HistogramParams {
   position: u32,
 };
 
-@group(0) @binding(0) var<storage, read> counts: array<u32>;
+@group(0) @binding(0) var<storage, read> countsStorage: array<u32>;
 @group(0) @binding(1) var<storage, read_write> vertices: array<vec2<f32>>;
 @group(0) @binding(2) var<uniform> params: HistogramParams;
+@group(0) @binding(3) var<storage, read> summaryStorage: array<u32>;
 
+fn getSize() -> vec2<u32> {
+  return vec2<u32>(params.groups * params.bins, 1u);
+}
+
+fn getBins() -> u32 {
+  return params.bins;
+}
+
+fn getGroups() -> u32 {
+  return params.groups;
+}
+
+fn getPosition() -> u32 {
+  return params.position;
+}
+
+fn getLo() -> f32 {
+  return params.lo;
+}
+
+fn getBinwidth() -> f32 {
+  return params.binwidth;
+}
+
+fn getCount(i: u32) -> u32 {
+  return countsStorage[i];
+}
+
+fn getSummary(i: u32) -> u32 {
+  return summaryStorage[i];
+}
+`.trim();
+
+export const HISTOGRAM_BAR_VERTICES_WGSL: string =
+  `${HISTOGRAM_BAR_VERTICES_RAW_PREAMBLE}\n\n${HISTOGRAM_BAR_VERTICES_BODY}`;
+
+/**
+ * Emits one rectangular tile for every dense [group, bin] count-grid cell.
+ * Counts remain resident for a later color/opacity field; even zero cells keep
+ * their declared topology and therefore need no CPU sparse-row reconstruction.
+ */
+/**
+ * Shared pass BODY for the dense [group, bin] tile grid.
+ *
+ * Purely geometric — it derives every cell from the bin geometry and does NOT
+ * read the counts. That is why the linked form below declares no count
+ * accessor at all, and why the raw form needs the workaround described on its
+ * preamble.
+ */
+export const HISTOGRAM_TILE_VERTICES_BODY: string = `
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   let cell = global_id.x;
-  let cells = params.groups * params.bins;
-  if (cell >= cells || params.bins == 0u) {
+  let bins = getBins();
+  if (cell >= getSize().x || bins == 0u) {
     return;
   }
-  let group = cell / params.bins;
-  let bin = cell % params.bins;
-  let x0 = params.lo + f32(bin) * params.binwidth;
-  let x1 = x0 + params.binwidth;
+  let group = cell / bins;
+  let bin = cell % bins;
+  let binwidth = getBinwidth();
+  let x0 = getLo() + f32(bin) * binwidth;
+  let x1 = x0 + binwidth;
   let y0 = f32(group);
   let y1 = y0 + 1.0;
   let offset = cell * 4u;
@@ -482,6 +565,55 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   vertices[offset + 3u] = vec2<f32>(x1, y0);
 }
 `.trim();
+
+/**
+ * Hand-numbered preamble for the standalone executor.
+ *
+ * Binding 0 is declared but never read, which is deliberate and load-bearing:
+ * it keeps this preamble identical to the other grid passes, and
+ * resident_histogram.ts's tile bind group already compensates by OMITTING it,
+ * because Dawn drops a declared-but-unused binding from an `auto` layout and
+ * binding it anyway invalidates the whole command buffer.
+ *
+ * The linked form has no such problem — the shader linker generates bindings
+ * from actual links, so an unused one cannot be emitted. Once the mounted
+ * histogram runs on <Kernel> (gggplot-vs7.8) this declaration and that omission
+ * can both go.
+ */
+export const HISTOGRAM_TILE_VERTICES_RAW_PREAMBLE: string = `
+struct HistogramParams {
+  rows: u32,
+  bins: u32,
+  groups: u32,
+  hasGroups: u32,
+  lo: f32,
+  binwidth: f32,
+  position: u32,
+};
+
+@group(0) @binding(0) var<storage, read> countsStorage: array<u32>;
+@group(0) @binding(1) var<storage, read_write> vertices: array<vec2<f32>>;
+@group(0) @binding(2) var<uniform> params: HistogramParams;
+
+fn getSize() -> vec2<u32> {
+  return vec2<u32>(params.groups * params.bins, 1u);
+}
+
+fn getBins() -> u32 {
+  return params.bins;
+}
+
+fn getLo() -> f32 {
+  return params.lo;
+}
+
+fn getBinwidth() -> f32 {
+  return params.binwidth;
+}
+`.trim();
+
+export const HISTOGRAM_TILE_VERTICES_WGSL: string =
+  `${HISTOGRAM_TILE_VERTICES_RAW_PREAMBLE}\n\n${HISTOGRAM_TILE_VERTICES_BODY}`;
 
 /** Produces compact [group totals..., stacked maximum] metadata from counts. */
 /**

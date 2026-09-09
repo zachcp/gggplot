@@ -17,6 +17,9 @@ import {
   GRID_BAR_VERTEX_COLORS_BODY,
   GRID_SUMMARY_BODY,
   GROUPED_COUNT_1D_BODY,
+  GROUPED_HISTOGRAM_1D_BODY,
+  HISTOGRAM_BAR_VERTICES_BODY,
+  HISTOGRAM_TILE_VERTICES_BODY,
 } from "@gggplot/reductions";
 import { wgsl } from "@use-gpu/shader/wgsl";
 
@@ -106,4 +109,62 @@ export const COUNT_BAR_VERTICES_KERNEL = wgsl`
 @link var<storage, read_write> vertices: array<vec2<f32>>;
 
 ${COUNT_BAR_VERTICES_BODY}
+`;
+
+/**
+ * Accumulates the grouped 1-D bin grid.
+ *
+ * Five args, two sources, one target:
+ * [dataSize, bins, groups, hasGroups, lo, binwidth, values, groupIds, counts].
+ */
+export const GROUPED_HISTOGRAM_1D_KERNEL = wgsl`
+@link fn getSize() -> vec2<u32>;
+@link fn getBins() -> u32;
+@link fn getGroups() -> u32;
+@link fn getHasGroups() -> u32;
+@link fn getLo() -> f32;
+@link fn getBinwidth() -> f32;
+@link fn getValue(i: u32) -> f32;
+@link fn getGroupId(i: u32) -> u32;
+@link var<storage, read_write> counts: array<atomic<u32>>;
+
+${GROUPED_HISTOGRAM_1D_BODY}
+`;
+
+/**
+ * Expands the bin grid into bar quad vertices.
+ *
+ * [dataSize, bins, groups, position, lo, binwidth, counts, summary, vertices].
+ * The summary is an input, so the summary pass must be dispatched first.
+ */
+export const HISTOGRAM_BAR_VERTICES_KERNEL = wgsl`
+@link fn getSize() -> vec2<u32>;
+@link fn getBins() -> u32;
+@link fn getGroups() -> u32;
+@link fn getPosition() -> u32;
+@link fn getLo() -> f32;
+@link fn getBinwidth() -> f32;
+@link fn getCount(i: u32) -> u32;
+@link fn getSummary(i: u32) -> u32;
+@link var<storage, read_write> vertices: array<vec2<f32>>;
+
+${HISTOGRAM_BAR_VERTICES_BODY}
+`;
+
+/**
+ * The dense [group, bin] tile grid.
+ *
+ * Purely geometric, so it has no source at all: [dataSize, bins, lo, binwidth,
+ * vertices]. Declaring no count accessor is what removes the need for the
+ * Dawn auto-layout workaround the raw form carries — the linker emits bindings
+ * only for actual links, so an unused one cannot exist here.
+ */
+export const HISTOGRAM_TILE_VERTICES_KERNEL = wgsl`
+@link fn getSize() -> vec2<u32>;
+@link fn getBins() -> u32;
+@link fn getLo() -> f32;
+@link fn getBinwidth() -> f32;
+@link var<storage, read_write> vertices: array<vec2<f32>>;
+
+${HISTOGRAM_TILE_VERTICES_BODY}
 `;
