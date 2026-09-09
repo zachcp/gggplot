@@ -83,6 +83,49 @@ const MARK_COLORS: {
   { match: "swirl field", color: [56, 189, 248], min: 1000 },
 ];
 
+/**
+ * GPU-resident surfaces, matched by a substring of the surface's aria-label
+ * (ExampleSection labels each canvas with `visualSummary ?? description`).
+ *
+ * These exist because the resident stat_bin/stat_count path can die SILENTLY:
+ * its compute never dispatching leaves the canvas element, the accessibility
+ * label, the layout bounds and every other mark on the route intact, so
+ * route-health cannot see it (gggplot-vs7.11). Only a pixel floor can.
+ *
+ * The floor is coverage of the surface's own canvas, not of the page.
+ */
+const RESIDENT_ROUTE = "internals";
+const RESIDENT_SURFACES: { match: string; min: number }[] = [
+  // examples_stats.tsx :: residentCategoricalCount — stat_count keeps its u32
+  // grid on the GPU and bar topology consumes it directly.
+  //
+  // MEASURED, and the two numbers are why the floor is this high: with the
+  // resident kernel dispatching, this surface covers 70.4%. With its dispatch
+  // removed — the exact silent failure this guard exists for — it still covers
+  // 5.3%, because the axes, grid and tick labels are drawn by ordinary marks
+  // and do not care that the bars are missing. A generic "not blank" floor of a
+  // few percent therefore passes a chart with NO BARS IN IT. 25% sits well
+  // clear of the furniture and well below the real figure.
+  //
+  // KNOWN BLIND SPOT — a floor cannot catch a COLLAPSED Y-RANGE. If the summary
+  // readback races the compute and returns 0, `Math.max(1, 0)` makes yMax 1,
+  // the bars overflow the plot area, and coverage goes UP (measured at 73.9%),
+  // not down — gggplot-vs7.1 attempt 2. So passing this check means "the bars
+  // drew", NOT "the bars are right". Anyone changing WHEN the kernel dispatches
+  // must also confirm the summary itself: 20,000 rows over 4 categories must
+  // give stackedMaximum=5000, not 0.
+  { match: "Twenty thousand factor ids", min: 0.25 },
+  // examples_basics.tsx :: groupedHistogram — a resident stat_bin view, which
+  // additionally exercises the auto-domain path (its x bounds are reduced on
+  // the GPU before the bin grid is sized).
+  //
+  // MEASURED the same way as above: 27.4% with the bin kernel dispatching, 4.5%
+  // with it dead (axes, grid and tick labels are ordinary marks and still
+  // draw). It sits lower than the bar chart's figure simply because a 16-bin
+  // histogram covers less of its canvas than four wide category bars.
+  { match: "All 150 iris measurements", min: 0.15 },
+];
+
 const host = "127.0.0.1";
 const port = 20_000 + Math.floor(Math.random() * 20_000);
 const baseUrl = `http://${host}:${port}`;
@@ -551,6 +594,94 @@ try {
               `${centroids.high.toFixed(0)}. A y-axis flip inverts this.`,
           );
         }
+      }
+    }
+
+    // --- GPU-resident 2D surfaces (gggplot-vs7.11)
+    // A separate page: the instrumentation keys shots by surface label, and a
+    // fresh context keeps a failed 3D mount from starving this route.
+    {
+      const residentPage = await browser.newPage({
+        viewport: { width: 1400, height: 1000 },
+      });
+      try {
+        await residentPage.addInitScript(INSTRUMENT);
+        await residentPage.goto(`${baseUrl}/#${RESIDENT_ROUTE}`, {
+          waitUntil: "networkidle",
+        });
+        await residentPage.waitForTimeout(9000);
+        const residentStats = await residentPage.evaluate(
+          async ({ background }) => {
+            const shots = (globalThis as unknown as {
+              __markShots: Record<string, {
+                buffer: GPUBuffer;
+                bytesPerRow: number;
+                width: number;
+                height: number;
+                format: string;
+              }>;
+            }).__markShots;
+            const out: { label: string; coverage: number }[] = [];
+            for (const [label, shot] of Object.entries(shots)) {
+              await shot.buffer.mapAsync(GPUMapMode.READ);
+              const bytes = new Uint8Array(
+                shot.buffer.getMappedRange().slice(0),
+              );
+              shot.buffer.unmap();
+              const bgra = (shot.format || "").startsWith("bgra");
+              let nonBackground = 0;
+              for (let y = 0; y < shot.height; y++) {
+                for (let x = 0; x < shot.width; x++) {
+                  const i = y * shot.bytesPerRow + x * 4;
+                  const r = bgra ? bytes[i + 2] : bytes[i];
+                  const g = bytes[i + 1];
+                  const b = bgra ? bytes[i] : bytes[i + 2];
+                  if (
+                    Math.abs(r - background[0]) > 6 ||
+                    Math.abs(g - background[1]) > 6 ||
+                    Math.abs(b - background[2]) > 6
+                  ) nonBackground++;
+                }
+              }
+              out.push({
+                label,
+                coverage: nonBackground / (shot.width * shot.height),
+              });
+            }
+            return out;
+          },
+          { background: BACKGROUND },
+        );
+        for (const wanted of RESIDENT_SURFACES) {
+          const shot = residentStats.find((entry) =>
+            entry.label.includes(wanted.match)
+          );
+          if (!shot) {
+            failures.push(
+              `no surface on #${RESIDENT_ROUTE} matched "${wanted.match}" — ` +
+                `RESIDENT_SURFACES is stale relative to docs/examples_stats.ts, ` +
+                `or the example never mounted a canvas at all.`,
+            );
+            continue;
+          }
+          console.log(
+            `resident "${shot.label.slice(0, 46)}": coverage=${
+              (shot.coverage * 100).toFixed(1)
+            }%`,
+          );
+          if (shot.coverage < wanted.min) {
+            failures.push(
+              `resident surface "${shot.label.slice(0, 46)}" is blank: ` +
+                `${(shot.coverage * 100).toFixed(2)}% coverage (floor ${
+                  wanted.min * 100
+                }%). ` +
+                `The GPU-resident reduction most likely never dispatched — ` +
+                `this failure mode leaves the DOM and every other mark intact.`,
+            );
+          }
+        }
+      } finally {
+        await residentPage.close();
       }
     }
 

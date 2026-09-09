@@ -39,6 +39,8 @@ export interface ResidentGridKernel {
   readonly summary: GPUBuffer;
   readonly groupsCount: number;
   dispatch(): void;
+  /** Records the kernel's passes without submitting; used by the deferred path. */
+  encode(): GPUCommandBuffer | null;
   destroy(): void;
 }
 
@@ -59,6 +61,14 @@ export interface ResidentGridProduct<S> {
   readonly bins: number;
   readonly groupsCount: number;
   readSummary(): Promise<S>;
+  /**
+   * Records this kernel's work for a caller that owns submission. Present so a
+   * hoisted host can put the dispatch in the frame's compute pass; the in-place
+   * path ignores it and dispatches itself.
+   */
+  encode(): GPUCommandBuffer | null;
+  /** The input version this product was built for. */
+  readonly version: number;
 }
 
 export interface ResidentGridProviderProps<O, S> {
@@ -66,6 +76,12 @@ export interface ResidentGridProviderProps<O, S> {
   group?: GPUStorageSource;
   options: O;
   children: (product: ResidentGridProduct<S>) => LiveElement;
+  /**
+   * Leave the dispatch to the caller. A hoisted host sets this so the kernel's
+   * commands go into the frame's compute pass instead of being submitted during
+   * reconciliation; it then owns sequencing the readback after them.
+   */
+  defer?: boolean;
 }
 
 export interface ResidentGridMarkProps<O> {
@@ -177,11 +193,13 @@ export function createResidentGrid<K extends ResidentGridKernel, O, S>(
       bins,
       groupsCount: resident.groupsCount,
       readSummary: () => config.readSummary(resident),
+      encode: () => resident.encode(),
+      version,
     };
   };
 
   const Provider = (
-    { x, group, options, children }: ResidentGridProviderProps<O, S>,
+    { x, group, options, children, defer }: ResidentGridProviderProps<O, S>,
   ): LiveElement => {
     const device = useDeviceContext();
     const resident = useResource((dispose) => {
@@ -191,9 +209,9 @@ export function createResidentGrid<K extends ResidentGridKernel, O, S>(
     }, [device, x.buffer, group?.buffer, ...config.optionKeys(options)]);
     const version = Math.max(x.version, group?.version ?? 0);
     const product = useMemo(() => {
-      resident.dispatch();
+      if (!defer) resident.dispatch();
       return productFrom(resident, version);
-    }, [resident, version]);
+    }, [resident, version, defer]);
     return children(product);
   };
 

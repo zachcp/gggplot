@@ -11,16 +11,26 @@ import { useDeviceContext, useMemo, useResource } from "./usegpu_compat.ts";
 export interface ResidentDomainProduct {
   readonly domain: GPUStorageSource;
   readDomain(): Promise<ResidentDomain1DResult>;
+  /** Records this kernel's work for a caller that owns submission. */
+  encode(): GPUCommandBuffer | null;
+  /** The input version this product was built for. */
+  readonly version: number;
 }
 
 export interface ResidentDomainProviderProps {
   x: GPUStorageSource;
   children: (product: ResidentDomainProduct) => LiveElement;
+  /**
+   * Leave the dispatch to the caller, so the commands can go into the frame's
+   * compute pass instead of being submitted during reconciliation. The caller
+   * then owns sequencing readDomain() after them.
+   */
+  defer?: boolean;
 }
 
 /** Re-dispatches on source-version changes and reads back only its two words on request. */
 export const ResidentDomainProvider = (
-  { x, children }: ResidentDomainProviderProps,
+  { x, children, defer }: ResidentDomainProviderProps,
 ): LiveElement => {
   const device = useDeviceContext();
   const resident = useResource((dispose) => {
@@ -29,7 +39,7 @@ export const ResidentDomainProvider = (
     return result;
   }, [device, x.buffer]);
   const product = useMemo(() => {
-    resident.dispatch();
+    if (!defer) resident.dispatch();
     return {
       domain: {
         buffer: resident.domain,
@@ -39,7 +49,9 @@ export const ResidentDomainProvider = (
         version: x.version,
       },
       readDomain: () => resident.readback(),
+      encode: () => resident.encode(),
+      version: x.version,
     } satisfies ResidentDomainProduct;
-  }, [resident, x.version]);
+  }, [resident, x.version, defer]);
   return children(product);
 };

@@ -10,12 +10,37 @@ export interface ResidentDomain1DResult {
 
 export interface ResidentDomain1D {
   readonly domain: GPUBuffer;
+  /**
+   * Records this kernel's passes into a command buffer WITHOUT submitting it.
+   *
+   * The mounted Use.GPU backend yeets the result into the frame's compute pass
+   * so every kernel in a plot lands in ONE `device.queue.submit` (see
+   * workbench's RenderComputePass). `dispatch()` is the standalone form for the
+   * headless executor and tests, and is defined in terms of this.
+   *
+   * Returns null when the kernel has no work to record; callers must skip a
+   * null rather than submitting it.
+   */
+  encode(): GPUCommandBuffer | null;
   dispatch(): void;
   readback(): Promise<ResidentDomain1DResult>;
   destroy(): void;
 }
 
-function floatFromOrdered(ordered: number): number {
+/** An untouched accumulator: the seeds the clear pass writes, in order. */
+export function isEmptyDomain(words: Uint32Array): boolean {
+  return words[0] === 0xffffffff && words[1] === 0;
+}
+
+/**
+ * Decodes the ordered-bit representation the domain kernels accumulate into.
+ *
+ * Exported because a mounted caller that owns its own accumulator buffer (the
+ * Use.GPU <Kernel> path) still has to decode it, and this must stay in lockstep
+ * with `orderedBits` in FINITE_DOMAIN_1D_BODY — reimplementing it elsewhere
+ * would let the two drift silently.
+ */
+export function floatFromOrdered(ordered: number): number {
   const bits = (ordered & 0x80000000) === 0 ? ~ordered : ordered ^ 0x80000000;
   const bytes = new ArrayBuffer(4);
   const view = new DataView(bytes);
@@ -64,21 +89,27 @@ export function createResidentDomain1D(
     ],
   });
 
+  const encode = (): GPUCommandBuffer | null => {
+    const encoder = device.createCommandEncoder();
+    const clearPass = encoder.beginComputePass();
+    clearPass.setPipeline(clear);
+    clearPass.setBindGroup(0, clearBind);
+    clearPass.dispatchWorkgroups(1);
+    clearPass.end();
+    const reducePass = encoder.beginComputePass();
+    reducePass.setPipeline(reduce);
+    reducePass.setBindGroup(0, reduceBind);
+    reducePass.dispatchWorkgroups(Math.ceil(rows / 64));
+    reducePass.end();
+    return encoder.finish();
+  };
+
   return {
     domain,
+    encode,
     dispatch() {
-      const encoder = device.createCommandEncoder();
-      const clearPass = encoder.beginComputePass();
-      clearPass.setPipeline(clear);
-      clearPass.setBindGroup(0, clearBind);
-      clearPass.dispatchWorkgroups(1);
-      clearPass.end();
-      const reducePass = encoder.beginComputePass();
-      reducePass.setPipeline(reduce);
-      reducePass.setBindGroup(0, reduceBind);
-      reducePass.dispatchWorkgroups(Math.ceil(rows / 64));
-      reducePass.end();
-      device.queue.submit([encoder.finish()]);
+      const command = encode();
+      if (command) device.queue.submit([command]);
     },
     async readback() {
       const values = await readBuffer(
@@ -87,7 +118,7 @@ export function createResidentDomain1D(
         8,
         (buffer) => new Uint32Array(buffer),
       );
-      const empty = values[0] === 0xffffffff && values[1] === 0;
+      const empty = isEmptyDomain(values);
       return {
         min: empty ? Number.NaN : floatFromOrdered(values[0]),
         max: empty ? Number.NaN : floatFromOrdered(values[1]),

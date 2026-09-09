@@ -36,6 +36,11 @@ export type UseMemo = <T>(
   create: () => T,
   dependencies: readonly unknown[],
 ) => T;
+/** Emits a value to the nearest gathering ancestor (a compute or render pass). */
+export type Yeet = (value: unknown) => LiveElement;
+/** Creates a Live context; supplied with provide(), read with useContext(). */
+export type MakeContext = <T>(initial: T, displayName?: string) => unknown;
+export type UseContext = <T>(context: unknown) => T;
 export type UseOne = <T>(create: () => T, dependency?: unknown) => T;
 export type UseResource = <T>(
   create: (dispose: (cleanup: () => void) => void) => T,
@@ -92,16 +97,46 @@ export type RawDataComponent = LiveComponent<{
   children: (source: GPUStorageSource) => LiveElement;
 }>;
 
-const live = Live as unknown as {
+/**
+ * Picks the namespace that actually carries the API.
+ *
+ * Deno resolves these packages to their CommonJS build, where the exports sit
+ * on `.default` and the namespace itself holds only `__esModule`/`default`;
+ * Vite resolves the ESM build, where they are on the namespace directly. A
+ * plain cast therefore yields `undefined` for every member under Deno, which
+ * stays invisible until something actually calls one — so probe for a known
+ * member rather than assuming either shape.
+ *
+ * The probe member must be one that only the FULL api carries. @use-gpu/live
+ * also ships a default export that is just the JSX shim
+ * ({createElement, Fragment, Yeet, ...}), so probing on `createElement` picks
+ * that shim under Vite and loses every hook — which fails as a blank canvas,
+ * not as a missing export. Probe on a hook instead.
+ */
+const interop = <T>(namespace: unknown, probe: string): T => {
+  // deno-lint-ignore no-explicit-any
+  const ns = namespace as any;
+  return (ns?.default && ns.default[probe] ? ns.default : ns) as T;
+};
+
+const live = interop<{
   createElement: CreateElement;
+  Fragment: unknown;
+  yeet: Yeet;
   provide: Provide;
   useMemo: UseMemo;
   useOne: UseOne;
   useResource: UseResource;
   useAwait: UseAwait;
-};
+  makeContext: MakeContext;
+  useContext: UseContext;
+}>(Live, "useMemo");
 
-const workbench = Workbench as unknown as {
+const workbench = interop<{
+  Compute: LiveComponent;
+  ComputeBuffer: LiveComponent;
+  Stage: LiveComponent;
+  Kernel: LiveComponent;
   RawData: RawDataComponent;
   FaceLayer: LiveComponent;
   useDeviceContext: UseDeviceContext;
@@ -118,24 +153,49 @@ const workbench = Workbench as unknown as {
   useShaderRef: UseShaderRef;
   useMaterialContext: UseMaterialContext;
   MaterialContext: unknown;
-};
+}>(Workbench, "useDeviceContext");
 
-const plot = Plot as unknown as {
+const plot = interop<{
   Cartesian: LiveComponent;
   Grid: LiveComponent;
   Axis: LiveComponent;
   Face: LiveComponent;
-};
+}>(Plot, "Cartesian");
 
 // @use-gpu/live
 export const createElement = live.createElement;
+export const Fragment = live.Fragment;
+export const yeet = live.yeet;
 export const provide = live.provide;
 export const useMemo = live.useMemo;
 export const useOne = live.useOne;
 export const useResource = live.useResource;
 export const useAwait = live.useAwait;
+export const makeContext = live.makeContext;
+export const useContext = live.useContext;
 
 // @use-gpu/workbench
+/**
+ * Gathers compute work from its children and mounts the passes that run it.
+ *
+ * Must be mounted OUTSIDE <Plot>: its Resume returns pass elements, and inside
+ * <Plot> those land in VirtualLayers' layer tree and corrupt rendering. See
+ * runtime/resident_host.tsx.
+ */
+export const Compute = workbench.Compute;
+/**
+ * Read-write GPU storage for compute. Mountable anywhere with a device — it is
+ * a buffer, not a pass — so a caller can create one outside <Compute> and hand
+ * the target to a <Stage> inside it.
+ *
+ * Its width/height/depth DEFAULT TO THE RENDER CONTEXT (screen size), so a
+ * data-shaped grid must always pass its own dimensions.
+ */
+export const ComputeBuffer = workbench.ComputeBuffer;
+/** Sets the compute target(s) that <Kernel>s inside it write to. */
+export const Stage = workbench.Stage;
+/** Runs one linked compute shader against the enclosing <Stage>'s targets. */
+export const Kernel = workbench.Kernel;
 export const RawData = workbench.RawData;
 export const FaceLayer = workbench.FaceLayer;
 export const useDeviceContext = workbench.useDeviceContext;

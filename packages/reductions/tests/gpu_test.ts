@@ -620,3 +620,49 @@ Deno.test("groupedHistogram2dGpu matches CPU counts when WebGPU is available", a
   assertEquals(gpuResult.backend, "webgpu");
   device.destroy();
 });
+
+Deno.test("encode() records the same work dispatch() submits", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+
+  // encode()/dispatch() exist so the mounted backend can batch a kernel's
+  // commands into the frame's single submit (gggplot-vs7.1) while the headless
+  // path keeps a self-contained dispatch. Both must produce identical results.
+  const values = Float32Array.from({ length: 512 }, (_, i) => (i % 8) + 0.5);
+  const usage = 0x0080 | 0x0008 | 0x0004;
+  const buffer = device.createBuffer({ size: values.byteLength, usage });
+  device.queue.writeBuffer(buffer, 0, values);
+
+  const dispatched = createResidentHistogram1DFromSources(device, {
+    values: buffer,
+    rows: values.length,
+    lo: 0,
+    hi: 8,
+    bins: 8,
+    groupsCount: 1,
+    position: "stack",
+  });
+  dispatched.dispatch();
+  const viaDispatch = [...await dispatched.readback()];
+  dispatched.destroy();
+
+  const encoded = createResidentHistogram1DFromSources(device, {
+    values: buffer,
+    rows: values.length,
+    lo: 0,
+    hi: 8,
+    bins: 8,
+    groupsCount: 1,
+    position: "stack",
+  });
+  const command = encoded.encode();
+  assertExists(command, "encode() must record work for a non-empty kernel");
+  device.queue.submit([command]);
+  const viaEncode = [...await encoded.readback()];
+  encoded.destroy();
+
+  assertEquals(viaEncode, viaDispatch);
+  assertEquals(viaEncode.reduce((a, b) => a + b, 0), values.length);
+  buffer.destroy();
+  device.destroy();
+});

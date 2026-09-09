@@ -27,6 +27,18 @@ export interface ResidentHistogram1D {
   readonly summary: GPUBuffer;
   readonly bins: number;
   readonly groupsCount: number;
+  /**
+   * Records this kernel's passes into a command buffer WITHOUT submitting it.
+   *
+   * The mounted Use.GPU backend yeets the result into the frame's compute pass
+   * so every kernel in a plot lands in ONE `device.queue.submit` (see
+   * workbench's RenderComputePass). `dispatch()` is the standalone form for the
+   * headless executor and tests, and is defined in terms of this.
+   *
+   * Returns null when the kernel has no work to record; callers must skip a
+   * null rather than submitting it.
+   */
+  encode(): GPUCommandBuffer | null;
   dispatch(): void;
   readback(): Promise<Uint32Array>;
   readbackBarVertices(): Promise<Float32Array>;
@@ -300,6 +312,52 @@ export function createResidentHistogram1DFromSources(
     create: (buffer: ArrayBuffer) => T,
   ): Promise<T> => readBuffer(device, source, bytes, create);
 
+  const encode = (): GPUCommandBuffer | null => {
+    const encoder = device.createCommandEncoder();
+    const clearPass = encoder.beginComputePass();
+    clearPass.setPipeline(clear);
+    clearPass.setBindGroup(0, clearBind);
+    clearPass.dispatchWorkgroups(Math.ceil(packed.countsLength / 64));
+    clearPass.end();
+    const binPass = encoder.beginComputePass();
+    binPass.setPipeline(histogram);
+    binPass.setBindGroup(0, histogramBind);
+    binPass.dispatchWorkgroups(Math.ceil(input.rows / 64));
+    binPass.end();
+    const summaryClearPass = encoder.beginComputePass();
+    summaryClearPass.setPipeline(clear);
+    summaryClearPass.setBindGroup(0, summaryClearBind);
+    summaryClearPass.dispatchWorkgroups(Math.ceil(summaryLength / 64));
+    summaryClearPass.end();
+    const summaryPass = encoder.beginComputePass();
+    summaryPass.setPipeline(summarize);
+    summaryPass.setBindGroup(0, summarizeBind);
+    summaryPass.dispatchWorkgroups(Math.ceil(packed.bins / 64));
+    summaryPass.end();
+    const barPass = encoder.beginComputePass();
+    barPass.setPipeline(bars);
+    barPass.setBindGroup(0, barsBind);
+    barPass.dispatchWorkgroups(Math.ceil(packed.countsLength / 64));
+    barPass.end();
+    const tilePass = encoder.beginComputePass();
+    tilePass.setPipeline(tiles);
+    tilePass.setBindGroup(0, tilesBind);
+    tilePass.dispatchWorkgroups(Math.ceil(packed.countsLength / 64));
+    tilePass.end();
+    if (colorize && colorBind) {
+      // One vertex-color invocation per cell, after the bar-vertex pass so it
+      // shares the same encoder submission; reads only the params group/width
+      // fields plus the per-group palette.
+      const colorPass = encoder.beginComputePass();
+      colorPass.setPipeline(colorize);
+      colorPass.setBindGroup(0, colorBind);
+      colorPass.dispatchWorkgroups(Math.ceil(packed.countsLength / 64));
+      colorPass.end();
+    }
+    dispatches++;
+    return encoder.finish();
+  };
+
   return {
     counts,
     barVertices,
@@ -308,50 +366,10 @@ export function createResidentHistogram1DFromSources(
     summary,
     bins: packed.bins,
     groupsCount: packed.groupsCount,
+    encode,
     dispatch() {
-      const encoder = device.createCommandEncoder();
-      const clearPass = encoder.beginComputePass();
-      clearPass.setPipeline(clear);
-      clearPass.setBindGroup(0, clearBind);
-      clearPass.dispatchWorkgroups(Math.ceil(packed.countsLength / 64));
-      clearPass.end();
-      const binPass = encoder.beginComputePass();
-      binPass.setPipeline(histogram);
-      binPass.setBindGroup(0, histogramBind);
-      binPass.dispatchWorkgroups(Math.ceil(input.rows / 64));
-      binPass.end();
-      const summaryClearPass = encoder.beginComputePass();
-      summaryClearPass.setPipeline(clear);
-      summaryClearPass.setBindGroup(0, summaryClearBind);
-      summaryClearPass.dispatchWorkgroups(Math.ceil(summaryLength / 64));
-      summaryClearPass.end();
-      const summaryPass = encoder.beginComputePass();
-      summaryPass.setPipeline(summarize);
-      summaryPass.setBindGroup(0, summarizeBind);
-      summaryPass.dispatchWorkgroups(Math.ceil(packed.bins / 64));
-      summaryPass.end();
-      const barPass = encoder.beginComputePass();
-      barPass.setPipeline(bars);
-      barPass.setBindGroup(0, barsBind);
-      barPass.dispatchWorkgroups(Math.ceil(packed.countsLength / 64));
-      barPass.end();
-      const tilePass = encoder.beginComputePass();
-      tilePass.setPipeline(tiles);
-      tilePass.setBindGroup(0, tilesBind);
-      tilePass.dispatchWorkgroups(Math.ceil(packed.countsLength / 64));
-      tilePass.end();
-      if (colorize && colorBind) {
-        // One vertex-color invocation per cell, after the bar-vertex pass so it
-        // shares the same encoder submission; reads only the params group/width
-        // fields plus the per-group palette.
-        const colorPass = encoder.beginComputePass();
-        colorPass.setPipeline(colorize);
-        colorPass.setBindGroup(0, colorBind);
-        colorPass.dispatchWorkgroups(Math.ceil(packed.countsLength / 64));
-        colorPass.end();
-      }
-      device.queue.submit([encoder.finish()]);
-      dispatches++;
+      const command = encode();
+      if (command) device.queue.submit([command]);
     },
     async readback() {
       const bytes = packed.countsLength * Uint32Array.BYTES_PER_ELEMENT;

@@ -226,6 +226,17 @@ async function verifyRouteLifecycle(browser: import("playwright").Browser) {
     }
   };
   page.on("console", onConsole);
+  // An UNCAUGHT exception does not reach page.on("console") — Playwright routes
+  // it to "pageerror" instead, even though DevTools shows it in the console.
+  // Without this hook the gate is blind to the whole class of mount-time
+  // failures that leave the DOM intact: gggplot-vs7.1 shipped a broken resident
+  // compute path that threw "Yeet without aggregator" on every resident mark,
+  // and all 17 routes still reported healthy because the canvas element existed
+  // and no console.* call was ever made (gggplot-vs7.11).
+  const onPageError = (error: Error) => {
+    console.push(`uncaught: ${error.message ?? String(error)}`);
+  };
+  page.on("pageerror", onPageError);
   try {
     for (const route of ["start", "stats", "internals", "faq", "start"]) {
       await page.goto(`${baseUrl}/#${route}`, { waitUntil: "networkidle" });
@@ -249,6 +260,7 @@ async function verifyRouteLifecycle(browser: import("playwright").Browser) {
     }
   } finally {
     page.off("console", onConsole);
+    page.off("pageerror", onPageError);
     await page.close();
   }
 }
@@ -297,6 +309,17 @@ async function inspectRoute(
     }
   };
   page.on("console", onConsole);
+  // An UNCAUGHT exception does not reach page.on("console") — Playwright routes
+  // it to "pageerror" instead, even though DevTools shows it in the console.
+  // Without this hook the gate is blind to the whole class of mount-time
+  // failures that leave the DOM intact: gggplot-vs7.1 shipped a broken resident
+  // compute path that threw "Yeet without aggregator" on every resident mark,
+  // and all 17 routes still reported healthy because the canvas element existed
+  // and no console.* call was ever made (gggplot-vs7.11).
+  const onPageError = (error: Error) => {
+    console.push(`uncaught: ${error.message ?? String(error)}`);
+  };
+  page.on("pageerror", onPageError);
   try {
     await page.goto(`${baseUrl}/#${route}`, { waitUntil: "networkidle" });
     await page.waitForTimeout(750);
@@ -386,6 +409,7 @@ async function inspectRoute(
     };
   } finally {
     page.off("console", onConsole);
+    page.off("pageerror", onPageError);
     await page.close();
   }
 }

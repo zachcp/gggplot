@@ -10,6 +10,7 @@ import {
   ResidentCountProvider,
 } from "./resident_count_live.tsx";
 import { paletteToRgbaF32, ResidentHistogramBars } from "./resident_bar.tsx";
+import { useHoistedProduct } from "./resident_host.tsx";
 import type { GPUStorageSource } from "./types.ts";
 import {
   Axis,
@@ -31,6 +32,13 @@ export interface ResidentCountViewProps {
   paletteColors?: string[];
   axes: string;
   theme: Theme;
+  /**
+   * Set by GGPlot when this node's kernel was built above the plot
+   * (runtime/resident_host.tsx). When present the product comes from context
+   * and this component only renders; when absent it builds its own kernel, the
+   * path every non-hoisted resident product still takes.
+   */
+  residentId?: number;
 }
 const AwaitCountSummary = (
   { product, options, color, opacity, axes, theme }:
@@ -75,9 +83,22 @@ const AwaitCountSummary = (
   }, ...guides);
 };
 export const ResidentCountView = (
-  { data, x, group, options, color, opacity, paletteColors, axes, theme }:
-    ResidentCountViewProps,
+  {
+    data,
+    x,
+    group,
+    options,
+    color,
+    opacity,
+    paletteColors,
+    axes,
+    theme,
+    residentId,
+  }: ResidentCountViewProps,
 ): LiveElement => {
+  // useHoistedProduct runs unconditionally to keep hook order stable; it
+  // returns null for a node the host did not hoist.
+  const hoisted = useHoistedProduct<ResidentCountProduct>(residentId);
   const palette = useMemo(
     () =>
       paletteColors ? paletteToRgbaF32(paletteColors, opacity ?? 1) : undefined,
@@ -94,6 +115,16 @@ export const ResidentCountView = (
       ? [{ name: group, dtype: "u32", shape: "row", dimensions: ["row"] }]
       : []),
   ];
+  if (hoisted) {
+    return createElement(AwaitCountSummary, {
+      product: hoisted,
+      options,
+      color,
+      opacity,
+      axes,
+      theme,
+    });
+  }
   return createElement(GPUDataProvider, {
     data,
     fields,

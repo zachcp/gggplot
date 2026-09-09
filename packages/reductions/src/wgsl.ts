@@ -19,22 +19,55 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 `.trim();
 
 /** Initializes the ordered-float [minimum, maximum] domain accumulator. */
-export const DOMAIN_CLEAR_WGSL: string = `
-@group(0) @binding(0) var<storage, read_write> domain: array<atomic<u32>>;
-
-@compute @workgroup_size(1)
-fn main() {
-  atomicStore(&domain[0], 0xffffffffu);
-  atomicStore(&domain[1], 0u);
+/**
+ * Shared pass BODY for the domain-clear kernel, with no bindings of its own.
+ *
+ * DUAL SURFACE (gggplot-vs7.6): the body is written against ACCESSORS rather
+ * than against bound variables, so exactly one copy of the logic can be
+ * compiled two ways — under the hand-numbered `@group/@binding` preamble the
+ * standalone Deno executor uses, and under the `@link` preamble Use.GPU's
+ * <Kernel> links. The two forms deliberately do NOT have the same bindings
+ * (scalar params become <Kernel> uniform refs), so the invariant that matters
+ * is identical OUTPUT for identical input, not identical layout.
+ *
+ * Everything below the preamble must therefore stay binding-agnostic: reach
+ * inputs through getValue()/getSize(), and write only through `domain`.
+ */
+export const DOMAIN_CLEAR_BODY: string = `
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let i = global_id.x;
+  if (i >= getSize().x) {
+    return;
+  }
+  // Slot 0 accumulates a minimum and slot 1 a maximum, so they seed from
+  // opposite ends of the ordered-bit range.
+  atomicStore(&domain[i], select(0u, 0xffffffffu, i == 0u));
 }
 `.trim();
 
-/** Reduces finite f32 values to an ordered-bit [minimum, maximum] pair. */
-export const FINITE_DOMAIN_1D_WGSL: string = `
-@group(0) @binding(0) var<storage, read> values: array<f32>;
-@group(0) @binding(1) var<storage, read_write> domain: array<atomic<u32>>;
-@group(0) @binding(2) var<uniform> rows: u32;
+/** Hand-numbered preamble for the standalone (non-Use.GPU) executor. */
+export const DOMAIN_CLEAR_RAW_PREAMBLE: string = `
+@group(0) @binding(0) var<storage, read_write> domain: array<atomic<u32>>;
 
+// The accumulator is a fixed pair. This is a function rather than a binding so
+// the body can stay identical to the linked form, where <Kernel> supplies the
+// same value as its dispatch size.
+fn getSize() -> vec2<u32> {
+  return vec2<u32>(2u, 1u);
+}
+`.trim();
+
+export const DOMAIN_CLEAR_WGSL: string =
+  `${DOMAIN_CLEAR_RAW_PREAMBLE}\n\n${DOMAIN_CLEAR_BODY}`;
+
+/** Reduces finite f32 values to an ordered-bit [minimum, maximum] pair. */
+/**
+ * Shared pass BODY for the finite-domain reduction. See DOMAIN_CLEAR_BODY for
+ * the dual-surface rule this obeys: inputs come from getValue()/getSize(), and
+ * the only bound name it touches directly is the atomic `domain` target.
+ */
+export const FINITE_DOMAIN_1D_BODY: string = `
 fn orderedBits(value: f32) -> u32 {
   let bits = bitcast<u32>(value);
   return select(~bits, bits ^ 0x80000000u, (bits & 0x80000000u) == 0u);
@@ -50,10 +83,10 @@ fn isFiniteValue(value: f32) -> bool {
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   let row = global_id.x;
-  if (row >= rows) {
+  if (row >= getSize().x) {
     return;
   }
-  let value = values[row];
+  let value = getValue(row);
   if (!isFiniteValue(value)) {
     return;
   }
@@ -62,6 +95,28 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   atomicMax(&domain[1], ordered);
 }
 `.trim();
+
+/**
+ * Hand-numbered preamble for the standalone executor. It defines getValue and
+ * getSize as ordinary functions over its own bindings, which is what lets the
+ * body stay identical to the linked form.
+ */
+export const FINITE_DOMAIN_1D_RAW_PREAMBLE: string = `
+@group(0) @binding(0) var<storage, read> valuesStorage: array<f32>;
+@group(0) @binding(1) var<storage, read_write> domain: array<atomic<u32>>;
+@group(0) @binding(2) var<uniform> rowCount: u32;
+
+fn getValue(i: u32) -> f32 {
+  return valuesStorage[i];
+}
+
+fn getSize() -> vec2<u32> {
+  return vec2<u32>(rowCount, 1u);
+}
+`.trim();
+
+export const FINITE_DOMAIN_1D_WGSL: string =
+  `${FINITE_DOMAIN_1D_RAW_PREAMBLE}\n\n${FINITE_DOMAIN_1D_BODY}`;
 
 export const GROUPED_HISTOGRAM_1D_WGSL: string = `
 struct HistogramParams {

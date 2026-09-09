@@ -35,6 +35,18 @@ export interface ResidentCount1D {
   summary: GPUBuffer;
   valuesCount: number;
   groupsCount: number;
+  /**
+   * Records this kernel's passes into a command buffer WITHOUT submitting it.
+   *
+   * The mounted Use.GPU backend yeets the result into the frame's compute pass
+   * so every kernel in a plot lands in ONE `device.queue.submit` (see
+   * workbench's RenderComputePass). `dispatch()` is the standalone form for the
+   * headless executor and tests, and is defined in terms of this.
+   *
+   * Returns null when the kernel has no work to record; callers must skip a
+   * null rather than submitting it.
+   */
+  encode(): GPUCommandBuffer | null;
   dispatch(): void;
   readback(): Promise<Uint32Array>;
   readbackBarVertices(): Promise<Float32Array>;
@@ -159,6 +171,25 @@ export function createResidentCount1DFromSources(
     bytes === 0
       ? Promise.resolve(create(new ArrayBuffer(0)))
       : readBuffer(device, source, bytes, create);
+  const encode = (): GPUCommandBuffer | null => {
+    if (cells === 0) return null;
+    const encoder = device.createCommandEncoder();
+    const run = (p: GPUComputePipeline, b: GPUBindGroup, n: number) => {
+      const pass = encoder.beginComputePass();
+      pass.setPipeline(p);
+      pass.setBindGroup(0, b);
+      pass.dispatchWorkgroups(Math.ceil(n / 64));
+      pass.end();
+    };
+    run(clear, clearBind, cells);
+    if (input.rows > 0) run(count, countBind, input.rows);
+    run(clear, summaryClearBind, summaryLength);
+    run(summarize, summaryBind, valuesCount);
+    run(bars, barsBind, cells);
+    if (colorize && colorBind) run(colorize, colorBind, cells);
+    return encoder.finish();
+  };
+
   return {
     counts,
     barVertices,
@@ -166,23 +197,10 @@ export function createResidentCount1DFromSources(
     summary,
     valuesCount,
     groupsCount,
+    encode,
     dispatch() {
-      if (cells === 0) return;
-      const encoder = device.createCommandEncoder();
-      const run = (p: GPUComputePipeline, b: GPUBindGroup, n: number) => {
-        const pass = encoder.beginComputePass();
-        pass.setPipeline(p);
-        pass.setBindGroup(0, b);
-        pass.dispatchWorkgroups(Math.ceil(n / 64));
-        pass.end();
-      };
-      run(clear, clearBind, cells);
-      if (input.rows > 0) run(count, countBind, input.rows);
-      run(clear, summaryClearBind, summaryLength);
-      run(summarize, summaryBind, valuesCount);
-      run(bars, barsBind, cells);
-      if (colorize && colorBind) run(colorize, colorBind, cells);
-      device.queue.submit([encoder.finish()]);
+      const command = encode();
+      if (command) device.queue.submit([command]);
     },
     readback: () => read(counts, cells * 4, (data) => new Uint32Array(data)),
     readbackBarVertices: () =>
