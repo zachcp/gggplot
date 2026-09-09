@@ -11,7 +11,13 @@
 // declares getSize first, then its args, then its source, and its storage
 // TARGET LAST. Getting this wrong does not fail loudly — it binds a buffer to a
 // size lambda, or one accessor to another's value.
-import { CLEAR_U32_BODY, GRID_SUMMARY_BODY } from "@gggplot/reductions";
+import {
+  CLEAR_U32_BODY,
+  COUNT_BAR_VERTICES_BODY,
+  GRID_BAR_VERTEX_COLORS_BODY,
+  GRID_SUMMARY_BODY,
+  GROUPED_COUNT_1D_BODY,
+} from "@gggplot/reductions";
 import { wgsl } from "@use-gpu/shader/wgsl";
 
 /**
@@ -44,4 +50,60 @@ export const GRID_SUMMARY_KERNEL = wgsl`
 @link var<storage, read_write> summary: array<atomic<u32>>;
 
 ${GRID_SUMMARY_BODY}
+`;
+
+/**
+ * Expands a per-group palette into per-vertex bar colors (four vertices per
+ * cell). Optional in both kernels — absent when a layer takes a scalar fill.
+ *
+ * One arg, one source and one target: [dataSize, perGroup, palette, colors].
+ */
+export const GRID_BAR_VERTEX_COLORS_KERNEL = wgsl`
+@link fn getSize() -> vec2<u32>;
+@link fn getPerGroup() -> u32;
+@link fn getPaletteColor(i: u32) -> vec4<f32>;
+@link var<storage, read_write> colors: array<vec4<f32>>;
+
+${GRID_BAR_VERTEX_COLORS_BODY}
+`;
+
+/**
+ * Accumulates a grouped categorical count grid.
+ *
+ * The first pass here with TWO inputs, which go in <Kernel>'s plural `sources`
+ * slot: [dataSize, values, groups, hasGroups, valueIds, groupIds, counts].
+ * `sources` are linked before a singular `source` and before targets, so the
+ * two accessors are declared together, ahead of the atomic grid.
+ */
+export const GROUPED_COUNT_1D_KERNEL = wgsl`
+@link fn getSize() -> vec2<u32>;
+@link fn getValues() -> u32;
+@link fn getGroups() -> u32;
+@link fn getHasGroups() -> u32;
+@link fn getValueId(i: u32) -> u32;
+@link fn getGroupId(i: u32) -> u32;
+@link var<storage, read_write> counts: array<atomic<u32>>;
+
+${GROUPED_COUNT_1D_BODY}
+`;
+
+/**
+ * Expands a count grid into bar quad vertices.
+ *
+ * Two sources and one target:
+ * [dataSize, values, groups, position, counts, summary, vertices]. The summary
+ * is an input here, not an output — the dodge layout needs each group's total
+ * to know which groups are actually present, so the summary pass must be
+ * dispatched before this one.
+ */
+export const COUNT_BAR_VERTICES_KERNEL = wgsl`
+@link fn getSize() -> vec2<u32>;
+@link fn getValues() -> u32;
+@link fn getGroups() -> u32;
+@link fn getPosition() -> u32;
+@link fn getCount(i: u32) -> u32;
+@link fn getSummary(i: u32) -> u32;
+@link var<storage, read_write> vertices: array<vec2<f32>>;
+
+${COUNT_BAR_VERTICES_BODY}
 `;

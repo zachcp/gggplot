@@ -185,77 +185,110 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `.trim();
 
-export const GROUPED_COUNT_1D_WGSL: string = `
-struct CountParams {
-  rows: u32,
-  values: u32,
-  groups: u32,
-  hasGroups: u32,
-};
-
-@group(0) @binding(0) var<storage, read> valueIds: array<u32>;
-@group(0) @binding(1) var<storage, read> groupIds: array<u32>;
-@group(0) @binding(2) var<storage, read_write> counts: array<atomic<u32>>;
-@group(0) @binding(3) var<uniform> params: CountParams;
-
+/**
+ * Shared pass BODY for the grouped categorical count, with no bindings.
+ *
+ * Both inputs are read through accessors, which is what lets the linked form
+ * take them as <Kernel>'s plural `sources` while the standalone form keeps its
+ * two hand-numbered storage bindings.
+ */
+export const GROUPED_COUNT_1D_BODY: string = `
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   let row = global_id.x;
-  if (row >= params.rows || params.values == 0u || params.groups == 0u) {
+  let values = getValues();
+  let groups = getGroups();
+  if (row >= getSize().x || values == 0u || groups == 0u) {
     return;
   }
-  let value = valueIds[row];
-  let group = select(0u, groupIds[row], params.hasGroups != 0u);
-  if (value >= params.values || group >= params.groups) {
+  let value = getValueId(row);
+  let group = select(0u, getGroupId(row), getHasGroups() != 0u);
+  if (value >= values || group >= groups) {
     return;
   }
-  atomicAdd(&counts[group * params.values + value], 1u);
+  atomicAdd(&counts[group * values + value], 1u);
 }
 `.trim();
 
-/** Expands a [group, category] count grid into 0.9-wide categorical bars. */
-export const COUNT_BAR_VERTICES_WGSL: string = `
+/** Hand-numbered preamble for the standalone executor; bindings unchanged. */
+export const GROUPED_COUNT_1D_RAW_PREAMBLE: string = `
 struct CountParams {
   rows: u32,
   values: u32,
   groups: u32,
   hasGroups: u32,
-  unusedLo: f32,
-  unusedWidth: f32,
-  position: u32,
 };
-@group(0) @binding(0) var<storage, read> counts: array<u32>;
-@group(0) @binding(1) var<storage, read_write> vertices: array<vec2<f32>>;
-@group(0) @binding(2) var<uniform> params: CountParams;
-@group(0) @binding(3) var<storage, read> summary: array<u32>;
 
+@group(0) @binding(0) var<storage, read> valueIdsStorage: array<u32>;
+@group(0) @binding(1) var<storage, read> groupIdsStorage: array<u32>;
+@group(0) @binding(2) var<storage, read_write> counts: array<atomic<u32>>;
+@group(0) @binding(3) var<uniform> params: CountParams;
+
+fn getSize() -> vec2<u32> {
+  return vec2<u32>(params.rows, 1u);
+}
+
+fn getValues() -> u32 {
+  return params.values;
+}
+
+fn getGroups() -> u32 {
+  return params.groups;
+}
+
+fn getHasGroups() -> u32 {
+  return params.hasGroups;
+}
+
+fn getValueId(i: u32) -> u32 {
+  return valueIdsStorage[i];
+}
+
+fn getGroupId(i: u32) -> u32 {
+  return groupIdsStorage[i];
+}
+`.trim();
+
+export const GROUPED_COUNT_1D_WGSL: string =
+  `${GROUPED_COUNT_1D_RAW_PREAMBLE}\n\n${GROUPED_COUNT_1D_BODY}`;
+
+/** Expands a [group, category] count grid into 0.9-wide categorical bars. */
+/**
+ * Shared pass BODY for expanding a count grid into bar quad vertices, with no
+ * bindings of its own. The widest of these: two inputs (the grid and the
+ * per-group summary), one output, and three scalars.
+ */
+export const COUNT_BAR_VERTICES_BODY: string = `
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   let cell = global_id.x;
-  if (cell >= params.groups * params.values || params.values == 0u) { return; }
-  let group = cell / params.values;
-  let value = cell % params.values;
-  let count = counts[cell];
+  let values = getValues();
+  let groups = getGroups();
+  if (cell >= getSize().x || values == 0u) { return; }
+  let group = cell / values;
+  let value = cell % values;
+  let count = getCount(cell);
+  let position = getPosition();
   var lower = 0u;
   var upper = count;
-  if (params.position == 1u || params.position == 3u) {
+  if (position == 1u || position == 3u) {
     for (var prior = 0u; prior < group; prior = prior + 1u) {
-      lower = lower + counts[prior * params.values + value];
+      lower = lower + getCount(prior * values + value);
     }
     upper = lower + count;
   }
   var width = 0.9;
   var left = f32(value) - width * 0.5;
-  if (params.position == 2u) {
+  if (position == 2u) {
     // Dodge divides the band among groups PRESENT in the data (matching CPU
     // dodgeBars, which slots only observed group keys), not the declared
-    // group-dictionary size. summary[g] holds group g's total count and is
+    // group-dictionary size. getSummary(g) holds group g's total count and is
     // dispatched before this pass; an absent group's cell stays degenerate
     // (count 0) so its slot collision is invisible.
     var present = 0u;
     var slot = 0u;
-    for (var g = 0u; g < params.groups; g = g + 1u) {
-      if (summary[g] > 0u) {
+    for (var g = 0u; g < groups; g = g + 1u) {
+      if (getSummary(g) > 0u) {
         if (g < group) { slot = slot + 1u; }
         present = present + 1u;
       }
@@ -265,10 +298,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   }
   var y0 = f32(lower);
   var y1 = f32(upper);
-  if (params.position == 3u) {
+  if (position == 3u) {
     var total = 0u;
-    for (var index = 0u; index < params.groups; index = index + 1u) {
-      total = total + counts[index * params.values + value];
+    for (var index = 0u; index < groups; index = index + 1u) {
+      total = total + getCount(index * values + value);
     }
     y0 = select(0.0, f32(lower) / f32(total), total > 0u);
     y1 = select(0.0, f32(upper) / f32(total), total > 0u);
@@ -280,6 +313,50 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   vertices[offset + 3u] = vec2<f32>(left + width, y0);
 }
 `.trim();
+
+/** Hand-numbered preamble for the standalone executor; bindings unchanged. */
+export const COUNT_BAR_VERTICES_RAW_PREAMBLE: string = `
+struct CountParams {
+  rows: u32,
+  values: u32,
+  groups: u32,
+  hasGroups: u32,
+  unusedLo: f32,
+  unusedWidth: f32,
+  position: u32,
+};
+@group(0) @binding(0) var<storage, read> countsStorage: array<u32>;
+@group(0) @binding(1) var<storage, read_write> vertices: array<vec2<f32>>;
+@group(0) @binding(2) var<uniform> params: CountParams;
+@group(0) @binding(3) var<storage, read> summaryStorage: array<u32>;
+
+fn getSize() -> vec2<u32> {
+  return vec2<u32>(params.groups * params.values, 1u);
+}
+
+fn getValues() -> u32 {
+  return params.values;
+}
+
+fn getGroups() -> u32 {
+  return params.groups;
+}
+
+fn getPosition() -> u32 {
+  return params.position;
+}
+
+fn getCount(i: u32) -> u32 {
+  return countsStorage[i];
+}
+
+fn getSummary(i: u32) -> u32 {
+  return summaryStorage[i];
+}
+`.trim();
+
+export const COUNT_BAR_VERTICES_WGSL: string =
+  `${COUNT_BAR_VERTICES_RAW_PREAMBLE}\n\n${COUNT_BAR_VERTICES_BODY}`;
 
 /**
  * Expands the resident [group, bin] count grid into four XY vertices per bar.
@@ -499,26 +576,23 @@ export const HISTOGRAM_SUMMARY_WGSL: string =
  * source — the same trick HISTOGRAM_SUMMARY_WGSL relies on. A larger bound
  * uniform buffer (32 bytes) is legal against this three-field view.
  */
-export const GRID_BAR_VERTEX_COLORS_WGSL: string = `
-struct GridParams {
-  rows: u32,
-  perGroup: u32,
-  groups: u32,
-};
-
-@group(0) @binding(0) var<storage, read> palette: array<vec4<f32>>;
-@group(0) @binding(1) var<storage, read_write> colors: array<vec4<f32>>;
-@group(0) @binding(2) var<uniform> params: GridParams;
-
+/**
+ * Shared pass BODY for expanding a per-group palette into per-vertex bar
+ * colors, with no bindings of its own.
+ *
+ * The cell count is taken straight from getSize() rather than recomputed as
+ * groups*perGroup, so the group count stops being an input here entirely — the
+ * dispatch size already carries it.
+ */
+export const GRID_BAR_VERTEX_COLORS_BODY: string = `
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   let cell = global_id.x;
-  let cells = params.groups * params.perGroup;
-  if (cell >= cells || params.perGroup == 0u) {
+  let perGroup = getPerGroup();
+  if (cell >= getSize().x || perGroup == 0u) {
     return;
   }
-  let group = cell / params.perGroup;
-  let color = palette[group];
+  let color = getPaletteColor(cell / perGroup);
   let offset = cell * 4u;
   colors[offset] = color;
   colors[offset + 1u] = color;
@@ -526,6 +600,34 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   colors[offset + 3u] = color;
 }
 `.trim();
+
+/** Hand-numbered preamble for the standalone executor; bindings unchanged. */
+export const GRID_BAR_VERTEX_COLORS_RAW_PREAMBLE: string = `
+struct GridParams {
+  rows: u32,
+  perGroup: u32,
+  groups: u32,
+};
+
+@group(0) @binding(0) var<storage, read> paletteStorage: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read_write> colors: array<vec4<f32>>;
+@group(0) @binding(2) var<uniform> params: GridParams;
+
+fn getSize() -> vec2<u32> {
+  return vec2<u32>(params.groups * params.perGroup, 1u);
+}
+
+fn getPerGroup() -> u32 {
+  return params.perGroup;
+}
+
+fn getPaletteColor(i: u32) -> vec4<f32> {
+  return paletteStorage[i];
+}
+`.trim();
+
+export const GRID_BAR_VERTEX_COLORS_WGSL: string =
+  `${GRID_BAR_VERTEX_COLORS_RAW_PREAMBLE}\n\n${GRID_BAR_VERTEX_COLORS_BODY}`;
 
 export const GROUPED_HISTOGRAM_2D_WGSL: string = `
 struct Histogram2DParams {

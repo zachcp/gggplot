@@ -18,7 +18,10 @@ import {
 import * as CoreNamespace from "@use-gpu/core";
 import {
   CLEAR_U32_KERNEL,
+  COUNT_BAR_VERTICES_KERNEL,
+  GRID_BAR_VERTEX_COLORS_KERNEL,
   GRID_SUMMARY_KERNEL,
+  GROUPED_COUNT_1D_KERNEL,
 } from "../src/render/resident_grid_kernels.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -236,5 +239,258 @@ Deno.test("the linked grid summary totals groups and the stacked maximum", async
   ]);
   countsBuffer.destroy();
   summaryBuffer.destroy();
+  device.destroy();
+});
+
+async function readF32(
+  device: GPUDevice,
+  source: GPUBuffer,
+  count: number,
+): Promise<Float32Array> {
+  const staging = device.createBuffer({
+    size: count * 4,
+    usage: USAGE.COPY_DST | USAGE.MAP_READ,
+  });
+  const encoder = device.createCommandEncoder();
+  encoder.copyBufferToBuffer(source, 0, staging, 0, count * 4);
+  device.queue.submit([encoder.finish()]);
+  await staging.mapAsync(USAGE.MAP_READ);
+  const values = new Float32Array(staging.getMappedRange().slice(0));
+  staging.unmap();
+  staging.destroy();
+  return values;
+}
+
+Deno.test("the linked palette expansion fills four vertices per cell", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+
+  // Two groups of two cells each. Every cell writes its group's colour to four
+  // consecutive vertices, so cells 0-1 are red and cells 2-3 are green.
+  const perGroup = 2;
+  const cells = 4;
+  const palette = Float32Array.from([1, 0, 0, 1, 0, 1, 0, 1]);
+  const paletteBuffer = device.createBuffer({
+    size: palette.byteLength,
+    usage: USAGE.STORAGE | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(paletteBuffer, 0, palette);
+
+  const vertexFloats = cells * 4 * 4;
+  const colorsBuffer = device.createBuffer({
+    size: vertexFloats * 4,
+    usage: USAGE.STORAGE | USAGE.COPY_SRC | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(colorsBuffer, 0, new Float32Array(vertexFloats));
+
+  runLinked(
+    device,
+    GRID_BAR_VERTEX_COLORS_KERNEL,
+    [
+      () => [cells, 1],
+      perGroup,
+      {
+        buffer: paletteBuffer,
+        format: "vec4<f32>",
+        length: 2,
+        size: [2],
+        version: 1,
+      },
+      {
+        buffer: colorsBuffer,
+        format: "vec4<f32>",
+        length: cells * 4,
+        size: [cells * 4],
+        version: 1,
+        readWrite: true,
+      },
+    ],
+    1,
+  );
+
+  const colors = [...await readF32(device, colorsBuffer, vertexFloats)];
+  const red = [1, 0, 0, 1];
+  const green = [0, 1, 0, 1];
+  // Eight vertices of red (cells 0 and 1), then eight of green.
+  assertEquals(
+    colors.slice(0, 32),
+    Array.from({ length: 8 }, () => red).flat(),
+  );
+  assertEquals(
+    colors.slice(32),
+    Array.from({ length: 8 }, () => green).flat(),
+  );
+  paletteBuffer.destroy();
+  colorsBuffer.destroy();
+  device.destroy();
+});
+
+Deno.test("the linked grouped count bins rows and drops out-of-range ids", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+
+  const rows = 7;
+  const valuesCount = 3;
+  const groups = 2;
+  // Deliberately lopsided so a transposed index or an off-by-one in
+  // group*values+value shows up, rather than a uniform grid that would look
+  // correct under several wrong layouts. The last row's value id is out of
+  // range and must be dropped by the guard, not clamped into a real cell.
+  const valueIds = Uint32Array.from([0, 0, 1, 2, 2, 2, 5]);
+  const groupIds = Uint32Array.from([0, 0, 0, 1, 1, 1, 0]);
+
+  const storage = (data: Uint32Array) => {
+    const buffer = device.createBuffer({
+      size: data.byteLength,
+      usage: USAGE.STORAGE | USAGE.COPY_DST,
+    });
+    device.queue.writeBuffer(buffer, 0, data);
+    return buffer;
+  };
+  const valueBuffer = storage(valueIds);
+  const groupBuffer = storage(groupIds);
+
+  const cells = valuesCount * groups;
+  const countsBuffer = device.createBuffer({
+    size: cells * 4,
+    usage: USAGE.STORAGE | USAGE.COPY_SRC | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(countsBuffer, 0, new Uint32Array(cells));
+
+  const source = (buffer: GPUBuffer, length: number) => ({
+    buffer,
+    format: "u32",
+    length,
+    size: [length],
+    version: 1,
+  });
+
+  runLinked(
+    device,
+    GROUPED_COUNT_1D_KERNEL,
+    [
+      () => [rows, 1],
+      valuesCount,
+      groups,
+      1,
+      source(valueBuffer, rows),
+      source(groupBuffer, rows),
+      {
+        buffer: countsBuffer,
+        format: "atomic<u32>",
+        length: cells,
+        size: [cells],
+        version: 1,
+        readWrite: true,
+      },
+    ],
+    1,
+  );
+
+  // group 0: value 0 twice, value 1 once. group 1: value 2 three times.
+  assertEquals([...await readU32(device, countsBuffer, cells)], [
+    2,
+    1,
+    0,
+    0,
+    0,
+    3,
+  ]);
+  valueBuffer.destroy();
+  groupBuffer.destroy();
+  countsBuffer.destroy();
+  device.destroy();
+});
+
+Deno.test("the linked bar vertices lay out one quad per cell", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+
+  // One group, two categories, identity position: each bar is a 0.9-wide quad
+  // centred on its category index, rising from zero to its count.
+  const valuesCount = 2;
+  const groups = 1;
+  const cells = valuesCount * groups;
+  const counts = Uint32Array.from([3, 5]);
+  const countsBuffer = device.createBuffer({
+    size: counts.byteLength,
+    usage: USAGE.STORAGE | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(countsBuffer, 0, counts);
+  const summary = Uint32Array.from([8, 5]);
+  const summaryBuffer = device.createBuffer({
+    size: summary.byteLength,
+    usage: USAGE.STORAGE | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(summaryBuffer, 0, summary);
+
+  const floats = cells * 4 * 2;
+  const verticesBuffer = device.createBuffer({
+    size: floats * 4,
+    usage: USAGE.STORAGE | USAGE.COPY_SRC | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(verticesBuffer, 0, new Float32Array(floats));
+
+  const u32Source = (buffer: GPUBuffer, length: number) => ({
+    buffer,
+    format: "u32",
+    length,
+    size: [length],
+    version: 1,
+  });
+
+  runLinked(
+    device,
+    COUNT_BAR_VERTICES_KERNEL,
+    [
+      () => [cells, 1],
+      valuesCount,
+      groups,
+      0,
+      u32Source(countsBuffer, counts.length),
+      u32Source(summaryBuffer, summary.length),
+      {
+        buffer: verticesBuffer,
+        format: "vec2<f32>",
+        length: cells * 4,
+        size: [cells * 4],
+        version: 1,
+        readWrite: true,
+      },
+    ],
+    1,
+  );
+
+  // 0.9 is not exactly representable in f32, so the half-width offsets are
+  // compared with a tolerance rather than for equality.
+  const got = [...await readF32(device, verticesBuffer, floats)];
+  const want = [
+    -0.45,
+    0,
+    -0.45,
+    3,
+    0.45,
+    3,
+    0.45,
+    0,
+    0.55,
+    0,
+    0.55,
+    5,
+    1.45,
+    5,
+    1.45,
+    0,
+  ];
+  assertEquals(got.length, want.length);
+  for (let i = 0; i < want.length; i++) {
+    assert(
+      Math.abs(got[i] - want[i]) < 1e-5,
+      `vertex float ${i}: got ${got[i]}, want ${want[i]}`,
+    );
+  }
+  countsBuffer.destroy();
+  summaryBuffer.destroy();
+  verticesBuffer.destroy();
   device.destroy();
 });
