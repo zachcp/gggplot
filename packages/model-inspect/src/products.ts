@@ -1,4 +1,9 @@
-import { tensorRangeCacheKey, type TensorSource } from "./residency.ts";
+import {
+  isGPUTensorSource,
+  tensorRangeCacheKey,
+  type TensorSource,
+  type TensorStorageSource,
+} from "./residency.ts";
 import type {
   Dimension,
   ModelDocument,
@@ -446,8 +451,24 @@ export interface TensorContentProduct {
   representation: TensorContentRepresentation;
   descriptor: TensorDescriptor;
   layout?: TensorViewLayout;
-  /** Exact/tile/downsample values, serialized separately from geometry. */
+  /**
+   * Exact/tile/downsample values, serialized separately from geometry.
+   *
+   * RETAINED, not replaced, by the GPU path (ADR 006): this is the CPU, parity-
+   * test and export surface, and the reference every dtype-adapter kernel is
+   * checked against — the same dual-surface discipline the WGSL passes follow.
+   * A product built by a GPU loader populates `source` and leaves this unset.
+   */
   values?: number[];
+  /**
+   * The uploaded range, bound with `useSource` exactly the way
+   * `core/src/runtime/resident_bar.tsx` binds the histogram's own buffers.
+   *
+   * A product carrying this is RUNTIME-ONLY and no longer JSON-serializable —
+   * the same rule `RuntimeGpuTensorBinding` already states. Anything that
+   * serializes a product must go through `values`.
+   */
+  source?: TensorStorageSource;
   gridShape?: [number, number];
   summary?: TensorSummary;
   diagnostics: string[];
@@ -734,7 +755,38 @@ async function readValues(
   return result;
 }
 
-/** Select bounded tensor data; no GPU resource is created by this function. */
+/**
+ * Uploads a range when the source is a GPU loader that supports its dtype.
+ *
+ * Returns undefined -- not an error -- for a plain byte source or a dtype with
+ * no adapter pass, which is what routes those to `readValues` unchanged. Only
+ * the `exact` representation uses this: `tile` slices rows and `downsample`
+ * samples a grid, and both do that arithmetic on the CPU today (gggplot-vs7.13).
+ */
+function residentRange(
+  source: TensorSource,
+  layout: TensorViewLayout,
+): Promise<TensorStorageSource | undefined> | undefined {
+  if (!isGPUTensorSource(source) || !source.supports(layout.dtype)) {
+    return undefined;
+  }
+  return source.readRangeSource({
+    sourceId: source.id,
+    sourceVersion: source.version,
+    byteOffset: layout.byteOffset,
+    byteLength: layout.byteLength,
+    dtype: layout.dtype,
+    shape: layout.shape,
+  });
+}
+
+/**
+ * Select bounded tensor data.
+ *
+ * A GPU resource is created only when `sources` is a `GPUTensorSource` and the
+ * representation is `exact`; every other combination is the byte path it always
+ * was.
+ */
 export async function buildTensorContentProduct(
   document: ModelDocument,
   sources: TensorSource | ReadonlyMap<string, TensorSource>,
@@ -828,6 +880,26 @@ export async function buildTensorContentProduct(
       payload.byteOffset,
       payload.byteLength,
     );
+    const gridShape: [number, number] = shape!.length === 1
+      ? [shape![0], 1]
+      : [shape![shape!.length - 2], shape![shape!.length - 1]];
+    // The GPU path (ADR 006). A contiguous exact range is the case where the
+    // byte range IS the buffer, so it uploads once and the product carries a
+    // handle instead of a boxed array. `values` stays unset here by design:
+    // populating both would put the copy back that this exists to remove.
+    const resident = await residentRange(source!, layout);
+    if (resident) {
+      return {
+        kind: "matrix_content",
+        target: request.target,
+        representation,
+        descriptor,
+        layout,
+        source: resident,
+        gridShape,
+        diagnostics,
+      };
+    }
     return {
       kind: "matrix_content",
       target: request.target,
@@ -835,9 +907,7 @@ export async function buildTensorContentProduct(
       descriptor,
       layout,
       values: await readValues(source!, layout),
-      gridShape: shape!.length === 1
-        ? [shape![0], 1]
-        : [shape![shape!.length - 2], shape![shape!.length - 1]],
+      gridShape,
       diagnostics,
     };
   }

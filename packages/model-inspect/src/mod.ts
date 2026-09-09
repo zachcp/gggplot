@@ -14,16 +14,31 @@ export {
   TRANSFORMERS_JS_WEBGPU_CAPABILITIES,
 } from "./runtime.ts";
 export {
+  alignedUploadBytes,
   ByteArrayTensorSource,
+  evictResidency,
+  type GPUTensorSource,
+  isGPUTensorSource,
   type ResidencyRecord,
   type ResidencyState,
+  residentUploadCeiling,
+  TENSOR_UPLOAD_PLANS,
   tensorRangeCacheKey,
   type TensorRangeRequest,
   type TensorSource,
   tensorStorageCacheKey,
+  type TensorStorageSource,
+  type TensorUploadPath,
+  type TensorUploadPlan,
+  tensorUploadPlan,
   transitionResidency,
   validateTensorRange,
 } from "./residency.ts";
+export {
+  ByteArrayGPUTensorSource,
+  rangeElementCount,
+  supportsRangeSource,
+} from "./gpu_loader.ts";
 export { assertValidModelDocument, validateModelDocument } from "./validate.ts";
 export {
   inspectSafeTensors,
