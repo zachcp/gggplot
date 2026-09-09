@@ -4,19 +4,41 @@ import type {
   WgpuKernelPlan,
 } from "./types.ts";
 
-export const CLEAR_U32_WGSL: string = `
-@group(0) @binding(0) var<storage, read_write> values: array<u32>;
-@group(0) @binding(1) var<uniform> len: u32;
-
+/**
+ * Shared pass BODY for the u32 grid clear, with no bindings of its own.
+ *
+ * Dual surface, same rule as DOMAIN_CLEAR_BODY: reach the length through
+ * getSize() rather than a bound uniform, so one copy of the logic compiles both
+ * under the hand-numbered preamble the standalone executor uses and under the
+ * `@link` preamble Use.GPU's <Kernel> links.
+ *
+ * This one is worth the indirection more than most: it is dispatched FOUR times
+ * across the resident kernels (the count grid and its summary, the histogram
+ * grid and its summary), each against a different buffer and length.
+ */
+export const CLEAR_U32_BODY: string = `
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   let i = global_id.x;
-  if (i >= len) {
+  if (i >= getSize().x) {
     return;
   }
   values[i] = 0u;
 }
 `.trim();
+
+/** Hand-numbered preamble for the standalone (non-Use.GPU) executor. */
+export const CLEAR_U32_RAW_PREAMBLE: string = `
+@group(0) @binding(0) var<storage, read_write> values: array<u32>;
+@group(0) @binding(1) var<uniform> len: u32;
+
+fn getSize() -> vec2<u32> {
+  return vec2<u32>(len, 1u);
+}
+`.trim();
+
+export const CLEAR_U32_WGSL: string =
+  `${CLEAR_U32_RAW_PREAMBLE}\n\n${CLEAR_U32_BODY}`;
 
 /** Initializes the ordered-float [minimum, maximum] domain accumulator. */
 /**
