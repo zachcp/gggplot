@@ -185,10 +185,11 @@ Deno.test("linked and raw domain kernels agree on the same input", async () => {
   // args/sources/targets. A bundle that declares no getSize would bind its
   // first real link to that lambda, which is why both kernels take one.
   runLinked(device, DOMAIN_CLEAR_KERNEL, [() => [2, 1], domainTarget], 1);
+  // [dataSize, source, target] — <Kernel>'s exact order, targets LAST.
   runLinked(
     device,
     FINITE_DOMAIN_1D_KERNEL,
-    [() => [values.length, 1], domainTarget, valueSource],
+    [() => [values.length, 1], valueSource, domainTarget],
     Math.ceil(values.length / 64),
   );
 

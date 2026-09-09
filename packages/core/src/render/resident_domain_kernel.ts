@@ -26,6 +26,13 @@ import { wgsl } from "@use-gpu/shader/wgsl";
  * "Virtual module '@access [...]' has unresolved data bindings", which does not
  * name the ordering as the cause — hence this comment.
  *
+ * The full order <Kernel> emits is
+ *   [dataSize, ...args, ...sources, source, ...targets, ...history]
+ * so a kernel taking one `source` and one Stage target must declare
+ * getSize, getValue, domain — in that order. TARGETS COME LAST, after the
+ * source, which is why the atomic accumulator is declared third here even
+ * though it is the pass's primary output.
+ *
  * EVERY kernel must declare getSize, even one that has no natural use for it:
  * <Kernel> ALWAYS passes dataSize as value 0, so a bundle without it binds its
  * first real link to a size lambda instead of a buffer. That is why the clear
@@ -45,8 +52,8 @@ ${DOMAIN_CLEAR_BODY}
 
 export const FINITE_DOMAIN_1D_KERNEL = wgsl`
 @link fn getSize() -> vec2<u32>;
-@link var<storage, read_write> domain: array<atomic<u32>>;
 @link fn getValue(i: u32) -> f32;
+@link var<storage, read_write> domain: array<atomic<u32>>;
 
 ${FINITE_DOMAIN_1D_BODY}
 `;

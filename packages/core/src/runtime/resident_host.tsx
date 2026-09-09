@@ -38,9 +38,10 @@ import {
   ResidentCountProvider,
 } from "./resident_count_live.tsx";
 import {
-  type ResidentDomainProduct,
-  ResidentDomainProvider,
-} from "./resident_domain_live.tsx";
+  awaitDomain,
+  DOMAIN_ACCUMULATOR_LENGTH,
+  DomainKernels,
+} from "./resident_domain_kernel_live.tsx";
 import {
   type ResidentHistogramProduct,
   ResidentHistogramProvider,
@@ -49,12 +50,14 @@ import { paletteToRgbaF32 } from "./resident_bar.tsx";
 import type { GPUStorageSource } from "./types.ts";
 import {
   Compute,
+  ComputeBuffer,
   createElement,
   Fragment,
   makeContext,
   provide,
   useAwait,
   useContext,
+  useDeviceContext,
   useOne,
   yeet,
 } from "./usegpu_compat.ts";
@@ -123,13 +126,6 @@ const ResidentCompute = (
   });
 };
 
-/** One kernel's contribution to the frame's compute pass. */
-export interface ComputeEntry {
-  encode(): GPUCommandBuffer | null;
-  version: number;
-  gate: DispatchGate;
-}
-
 /**
  * What a hoisted node yields.
  *
@@ -141,7 +137,8 @@ export interface ComputeEntry {
  */
 export interface HoistedResult {
   product: unknown | null;
-  computes: ComputeEntry[];
+  /** Elements mounted inside the frame's <Compute>; already built by the node. */
+  computes: LiveElement[];
 }
 
 /** Products built above the plot, keyed by the id stamped on their node. */
@@ -247,11 +244,13 @@ const HoistedCount = (
         children: (product: ResidentCountProduct) =>
           children({
             product: gateSummary(product, gate),
-            computes: [{
-              encode: product.encode,
-              version: product.version,
-              gate,
-            }],
+            computes: [
+              createElement(ResidentCompute, {
+                encode: product.encode,
+                version: product.version,
+                gate,
+              }),
+            ],
           }),
       }),
   }) as LiveElement;
@@ -275,29 +274,20 @@ function gateSummary<
   };
 }
 
-/** The same gating for the domain product, whose readback is readDomain. */
-function gateDomain(
-  product: ResidentDomainProduct,
-  gate: DispatchGate,
-): ResidentDomainProduct {
-  return {
-    ...product,
-    readDomain: async () => {
-      await gate.wait(product.version);
-      return product.readDomain();
-    },
-  };
-}
-
 /**
  * Builds one stat_bin node's kernels and yields its product.
  *
  * Two kernels, not one, and the second depends on a readback from the first:
  * an auto-domain histogram must know its x bounds before it can size the bin
- * grid. So this contributes its domain kernel immediately and its histogram
- * kernel only once bounds have resolved — which is why HoistedResult allows a
- * null product. The in-place path had exactly the same two stages; hoisting
- * does not add a round trip.
+ * grid. So this contributes its domain kernels immediately and its bin kernel
+ * only once bounds have resolved — which is why HoistedResult allows a null
+ * product. The in-place path had exactly the same two stages; hoisting does not
+ * add a round trip.
+ *
+ * The domain reduction runs as real <Kernel>s. Its accumulator is created here,
+ * OUTSIDE <Compute>, because <ComputeBuffer> is a buffer rather than a pass and
+ * the handle has to reach both the <Stage> inside the compute and the readback
+ * out here.
  */
 const HoistedHistogram = (
   { props, children }: {
@@ -319,51 +309,73 @@ const HoistedHistogram = (
       ? [{ name: group, dtype: "u32", shape: "row", dimensions: ["row"] }]
       : []),
   ];
+  const device = useDeviceContext();
   const domainGate = useOne(() => createDispatchGate());
   const gridGate = useOne(() => createDispatchGate());
   return createElement(GPUDataProvider, {
     data: props.data,
     fields,
     children: (sources: Record<string, GPUStorageSource>) =>
-      createElement(ResidentDomainProvider, {
-        x: sources[x],
-        defer: true,
-        children: (domain: ResidentDomainProduct) =>
+      createElement(ComputeBuffer, {
+        width: DOMAIN_ACCUMULATOR_LENGTH,
+        height: 1,
+        depth: 1,
+        format: "atomic<u32>",
+        label: "gggplot-domain",
+        children: (target: unknown) =>
           createElement(AwaitHoistedBounds, {
-            domain: gateDomain(domain, domainGate),
-            domainCompute: {
-              encode: domain.encode,
-              version: domain.version,
-              gate: domainGate,
-            },
-            x: sources[x],
-            group: group ? sources[group] : undefined,
+            device,
+            target,
+            xSource: sources[x],
+            groupSource: group ? sources[group] : undefined,
             options,
-            gate: gridGate,
+            domainGate,
+            gridGate,
             children,
           }),
       }),
   }) as LiveElement;
 };
 
-/** Resolves x bounds, then mounts the bin grid sized to them. */
+/** Resolves x bounds off the GPU, then mounts the bin grid sized to them. */
 const AwaitHoistedBounds = (
-  { domain, domainCompute, x, group, options, gate, children }: {
-    domain: ResidentDomainProduct;
-    domainCompute: ComputeEntry;
-    x: GPUStorageSource;
-    group?: GPUStorageSource;
+  {
+    device,
+    target,
+    xSource,
+    groupSource,
+    options,
+    domainGate,
+    gridGate,
+    children,
+  }: {
+    device: GPUDevice;
+    target: unknown;
+    xSource: GPUStorageSource;
+    groupSource?: GPUStorageSource;
     options: Record<string, unknown>;
-    gate: DispatchGate;
+    domainGate: DispatchGate;
+    gridGate: DispatchGate;
     children: (result: HoistedResult) => LiveElement;
   },
 ): LiveElement => {
-  const [bounds, error] = useAwait(() => domain.readDomain(), [
-    domain.version,
-  ]);
+  const version = xSource.version;
+  const domainCompute = createElement(DomainKernels, {
+    target,
+    source: xSource,
+    rows: xSource.length,
+    version,
+    onEncoded: (encoded: number) => domainGate.open(encoded),
+  });
+  // Waits for this version's passes to be encoded before copying the
+  // accumulator, so the copy is enqueued behind the compute on the same queue.
+  const [bounds, error] = useAwait(async () => {
+    await domainGate.wait(version);
+    return awaitDomain(device, (target as { buffer: GPUBuffer }).buffer);
+  }, [version]);
   if (error) throw error;
-  // Contribute the domain kernel even while its bounds are still in flight —
-  // it is what produces them, so withholding it would deadlock.
+  // Contribute the domain kernels even while their bounds are still in flight —
+  // they are what produce them, so withholding them would deadlock.
   if (!bounds || bounds.empty) {
     return children({ product: null, computes: [domainCompute] });
   }
@@ -374,22 +386,25 @@ const AwaitHoistedBounds = (
     autoDomain: undefined,
   };
   return createElement(ResidentHistogramProvider, {
-    x,
-    group,
+    x: xSource,
+    group: groupSource,
     options: resolved,
     defer: true,
     children: (product: ResidentHistogramProduct) =>
       children({
         product: {
-          ...gateSummary(product, gate),
+          ...gateSummary(product, gridGate),
           // The view needs the bounds it was sized against to set its x range.
           hoistedBounds: bounds,
         },
-        computes: [domainCompute, {
-          encode: product.encode,
-          version: product.version,
-          gate,
-        }],
+        computes: [
+          domainCompute,
+          createElement(ResidentCompute, {
+            encode: product.encode,
+            version: product.version,
+            gate: gridGate,
+          }),
+        ],
       }),
   }) as LiveElement;
 };
@@ -427,13 +442,7 @@ export const ResidentHost = (
         createElement(
           Compute,
           {},
-          ...computes.map((entry) =>
-            createElement(ResidentCompute, {
-              encode: entry.encode,
-              version: entry.version,
-              gate: entry.gate,
-            })
-          ),
+          ...computes,
         ),
         // Live contexts are supplied with provide(), not a .Provider element.
         provide(ResidentProductsContext, products, children),

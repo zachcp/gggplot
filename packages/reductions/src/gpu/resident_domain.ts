@@ -27,7 +27,20 @@ export interface ResidentDomain1D {
   destroy(): void;
 }
 
-function floatFromOrdered(ordered: number): number {
+/** An untouched accumulator: the seeds the clear pass writes, in order. */
+export function isEmptyDomain(words: Uint32Array): boolean {
+  return words[0] === 0xffffffff && words[1] === 0;
+}
+
+/**
+ * Decodes the ordered-bit representation the domain kernels accumulate into.
+ *
+ * Exported because a mounted caller that owns its own accumulator buffer (the
+ * Use.GPU <Kernel> path) still has to decode it, and this must stay in lockstep
+ * with `orderedBits` in FINITE_DOMAIN_1D_BODY — reimplementing it elsewhere
+ * would let the two drift silently.
+ */
+export function floatFromOrdered(ordered: number): number {
   const bits = (ordered & 0x80000000) === 0 ? ~ordered : ordered ^ 0x80000000;
   const bytes = new ArrayBuffer(4);
   const view = new DataView(bytes);
@@ -105,7 +118,7 @@ export function createResidentDomain1D(
         8,
         (buffer) => new Uint32Array(buffer),
       );
-      const empty = values[0] === 0xffffffff && values[1] === 0;
+      const empty = isEmptyDomain(values);
       return {
         min: empty ? Number.NaN : floatFromOrdered(values[0]),
         max: empty ? Number.NaN : floatFromOrdered(values[1]),

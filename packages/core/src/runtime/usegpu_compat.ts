@@ -134,6 +134,9 @@ const live = interop<{
 
 const workbench = interop<{
   Compute: LiveComponent;
+  ComputeBuffer: LiveComponent;
+  Stage: LiveComponent;
+  Kernel: LiveComponent;
   RawData: RawDataComponent;
   FaceLayer: LiveComponent;
   useDeviceContext: UseDeviceContext;
@@ -180,6 +183,19 @@ export const useContext = live.useContext;
  * runtime/resident_host.tsx.
  */
 export const Compute = workbench.Compute;
+/**
+ * Read-write GPU storage for compute. Mountable anywhere with a device — it is
+ * a buffer, not a pass — so a caller can create one outside <Compute> and hand
+ * the target to a <Stage> inside it.
+ *
+ * Its width/height/depth DEFAULT TO THE RENDER CONTEXT (screen size), so a
+ * data-shaped grid must always pass its own dimensions.
+ */
+export const ComputeBuffer = workbench.ComputeBuffer;
+/** Sets the compute target(s) that <Kernel>s inside it write to. */
+export const Stage = workbench.Stage;
+/** Runs one linked compute shader against the enclosing <Stage>'s targets. */
+export const Kernel = workbench.Kernel;
 export const RawData = workbench.RawData;
 export const FaceLayer = workbench.FaceLayer;
 export const useDeviceContext = workbench.useDeviceContext;
