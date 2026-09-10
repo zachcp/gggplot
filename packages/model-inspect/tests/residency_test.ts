@@ -67,7 +67,16 @@ Deno.test("eviction clears runtime resource identity", () => {
     sourceId: "source",
     sourceVersion: "v1",
     state: { kind: "range", rangeKey: "range", byteLength: 64 },
-    resource: { gpuBuffer: true },
+    // Narrowed from `unknown` by ADR 006. transitionResidency still only
+    // DROPS the reference; releasing the buffer is evictResidency's job
+    // (covered in gpu_loader_test.ts).
+    resource: {
+      buffer: {} as GPUBuffer,
+      format: "f32",
+      length: 16,
+      size: [4, 4],
+      version: 1,
+    },
   };
   const evicted = transitionResidency(record, {
     kind: "evicted",

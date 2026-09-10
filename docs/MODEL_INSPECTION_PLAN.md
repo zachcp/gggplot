@@ -239,6 +239,41 @@ existing core residency path. Runtime adapters may use `useRawSource`, storage
 buffers, textures, or future equivalent primitives, but the product contract
 must describe the source and cache identity independently of that choice.
 
+### The GPU loader tier
+
+`TensorSource` returns bytes. A `GPUTensorSource`
+(`packages/model-inspect/src/residency.ts`) returns a `TensorStorageSource`
+instead: a validated range becomes a storage buffer with one `writeBuffer` and
+no CPU decode. `readRange` stays on the interface as the CPU, export and parity
+surface, so the two forms are dual-surfaced the same way the resident WGSL
+passes are.
+
+Consequences for this document's contracts:
+
+- `TensorContentProduct` carries `source?: TensorStorageSource` beside
+  `values?: number[]`. A product with `source` populated is runtime-only and no
+  longer serializable, the rule `RuntimeGpuTensorBinding` already states.
+- `ResidencyRecord.resource` is `TensorStorageSource | undefined` rather than
+  `unknown`, which is what lets eviction release the allocation
+  (`evictResidency`) instead of only dropping the reference.
+- Cache identity is unchanged: the loader keys its source on the existing
+  `tensorRangeCacheKey`, which is defined before a resource exists, so the
+  lifecycle above governs GPU buffer lifetime without new invalidation logic.
+- Dtypes WGSL cannot bind directly (f16/bf16, sub-word integers, 64-bit) are
+  converted by adapter compute passes, not by a CPU loop. `TENSOR_UPLOAD_PLANS`
+  is the table; unsupported dtypes fall back to the `values` path unchanged.
+
+Implemented by `ByteArrayGPUTensorSource`
+(`packages/model-inspect/src/gpu_loader.ts`), which any byte-backed source —
+SafeTensors above all, whose `data_offsets` layout already IS the buffer
+contents — can be constructed over. Only the `exact` representation takes the
+GPU path today; `tile` needs a stride contract on the product and `downsample`
+needs a gather kernel (`gggplot-vs7.13`).
+
+Decisions and rejected alternatives — package boundary, out-of-tree loading,
+budget ceiling, and storage-versus-texture — are in
+`docs/ADR_006_GPU_NATIVE_LOADERS.md`.
+
 ### Buffer layout rules
 
 1. Store positions and other frequently transformed geometry interleaved when
