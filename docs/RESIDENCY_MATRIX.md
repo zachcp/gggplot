@@ -20,7 +20,7 @@ needs a good, stated reason, and this table is where that reason lives.
 
 Schema: rows = one computation each; columns = executor, eligibility gate, and
 the documented reason (with the relevant trajectory phase) for staying on CPU.
-Sections cover scales, mark-data upload, stats, geoms, and positions.
+Sections cover scales, mark-data upload, loaders, stats, geoms, and positions.
 
 ## Scales — x/y position
 
@@ -99,6 +99,40 @@ semantics and gives the pack cache stable roots. `pack_cache_test.ts` asserts
 all three cases: repeated builds from one builder hit; separate builders sharing
 an ingested frame hit; separate builders over one mutable raw object create
 fresh snapshots and intentionally miss.
+
+## Loaders — source bytes to GPU
+
+Where a payload is decoded on its way from a file/artifact to a GPU buffer.
+Contracts: `packages/model-inspect/src/residency.ts`. Implementations:
+`model-inspect/src/gpu_loader.ts` (tensors), `core/src/runtime/column_loader.ts`
+(columns), with the adapter pass bodies in `reductions/src/dtype_wgsl.ts` and
+their `@link` forms in `core/src/render/dtype_adapter_kernels.ts`. Decisions:
+`docs/ADR_006_GPU_NATIVE_LOADERS.md`.
+
+| Loader path                                       | Executor                                                | Eligibility gate                             | Reason CPU / plan phase                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tensor range → view, `f32`/`u32`/`i32`            | **GPU**, one `writeBuffer`, zero decode                 | `exact` representation + a `GPUTensorSource` | The byte range IS the buffer contents. Measured at one copy of exactly `byteLength` bytes (`gpu_loader_test.ts`). Handed a plain `TensorSource`, the product is the four-copy byte path it always was.                                                                                  |
+| Tensor range → view, `f16`/`bf16`                 | **GPU**, upload + one widening pass                     | same, plus the adapter registry              | `unpack2x16float` for f16 (a core builtin — no `shader-f16` feature); a `<<16` bit shift for bf16. Both exact, both asserted against `decodeValue` element for element on a real device.                                                                                                |
+| Tensor range → view, `i8`/`i16`/`u8`/`u16`/`bool` | **GPU**, upload + one unpack pass                       | same                                         | Uploaded as u32 words and unpacked; signed widths sign-extend. `bool` matches `decodeValue`'s plain `getUint8` deliberately, including `0xff` → 255.                                                                                                                                    |
+| Tensor range → view, `f64`/`i64`/`u64`            | CPU decode                                              | —                                            | Plan says `narrow`, but no adapter is registered, so `supportsRangeSource` is false and the product falls back. Held back on purpose: unlike every shipped adapter these are not bit reinterpretations, and they need a stated rounding/overflow policy before code (`gggplot-vs7.14`). |
+| Tensor range → view, `string` / unknown dtypes    | **CPU, permanently**                                    | —                                            | No numeric buffer representation. `tensorUploadPlan` answers `unsupported`; this is a fallback, not a phase.                                                                                                                                                                            |
+| Tensor `tile` / `downsample` representations      | CPU decode                                              | —                                            | Only `exact` takes the GPU path. `tile` needs a stride contract on the product and `downsample` needs a gather kernel; both filed as `gggplot-vs7.13`.                                                                                                                                  |
+| Column → mounted source, caller-owned typed data  | **GPU**, one `writeBuffer` at load, then ZERO per mount | Caller passes a `ResidentColumn`             | `createResidentColumn` uploads once, outside the tree; `GPUDataProvider` then mounts no `<RawData>` for that field at all, so remounts cost nothing. Factor level dictionaries stay CPU-owned by design — strings never enter a shader.                                                 |
+| Column → mounted source, boxed input              | CPU lowering (`typedArrayForColumn`) then `<RawData>`   | Identity-cached per `Column`                 | Unavoidable and unchanged: something must turn `Array<number \| null>` into a `Float32Array`. The identity cache is what keeps it to one upload per column object (see "GPU mark-data upload residency" above).                                                                         |
+
+**Mount-chain depth is now stable.** `GPUDataProvider` mounts one level per
+requested field whether or not that field has a column. It previously skipped
+the level for a missing column, so the chain depth tracked the number of PRESENT
+columns — and Live reconciles by position, so a column arriving late remounted
+and re-uploaded every source below it. `<Data>` was evaluated as a flattening
+replacement and rejected: it is an array-of-structs aggregator that re-packs per
+item into buffers it allocates itself, which would destroy exactly the
+reference-identity guarantee this table's upload row depends on. The reasoning
+is recorded at `core/src/runtime/live.tsx`.
+
+**What was already correct and is untouched:** the source side. `<RawData>`,
+`useRawTensorSource`, `useSource`, `useLineSegmentsSource` and `<GeometryData>`
+were never the problem; the gap was the DECODE in front of them.
 
 ---
 

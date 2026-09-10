@@ -4,6 +4,13 @@ export type * from "./types.ts";
 export { GPUPlotRuntime } from "./runtime.ts";
 export { rawArrayForColumn } from "./raw.ts";
 export {
+  createResidentColumn,
+  destroyResidentColumns,
+  residentColumnFromColumn,
+  type ResidentColumnOptions,
+} from "./column_loader.ts";
+export { isResidentColumn } from "./types.ts";
+export {
   GPUStreamingSourceAdapter,
   type StreamingGPUStorageSource,
   type StreamingRange,
