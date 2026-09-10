@@ -232,6 +232,20 @@ const INSTRUMENT = `
       }
       return out;
     };
+    /**
+     * Hand out the shot map with capture FROZEN, so submit() cannot destroy a
+     * buffer a reader is about to map.
+     *
+     * The freeze is set synchronously here and released by the driver once the
+     * read returns (thawCapture below), which means it is held for the WHOLE of
+     * a read -- not per buffer. That matters because the readers iterate
+     * Object.entries(shots) captured up front: a replacement part way through
+     * would leave the loop holding a destroyed buffer for a later label.
+     */
+    globalThis.__takeShots = () => {
+      globalThis.__frozen = true;
+      return shots;
+    };
     /** Read the newest frame for one canvas into a named slot. */
     globalThis.__snapshot = async (label, slot) => {
       globalThis.__frozen = true;
@@ -315,71 +329,76 @@ try {
       throw new Error(`instrumentation failed: ${installError}`);
     }
 
-    const stats = await page.evaluate(
-      async ({ background, tolerance, markColors }) => {
-        const shots = (globalThis as unknown as {
-          __markShots: Record<string, {
-            buffer: GPUBuffer;
-            bytesPerRow: number;
-            width: number;
-            height: number;
-            format: string;
-          }>;
-        }).__markShots;
-        const out: {
-          label: string;
-          pixels: number;
-          nonBackground: number;
-          black: number;
-          marks: { match: string; count: number; min: number }[];
-        }[] = [];
-        for (const [label, shot] of Object.entries(shots)) {
-          await shot.buffer.mapAsync(GPUMapMode.READ);
-          const bytes = new Uint8Array(shot.buffer.getMappedRange().slice(0));
-          shot.buffer.unmap();
-          const bgra = (shot.format || "").startsWith("bgra");
-          const wanted = markColors.filter((m) => label.includes(m.match));
-          const hits = wanted.map(() => 0);
-          let nonBackground = 0;
-          let black = 0;
-          for (let y = 0; y < shot.height; y++) {
-            for (let x = 0; x < shot.width; x++) {
-              const i = y * shot.bytesPerRow + x * 4;
-              const r = bgra ? bytes[i + 2] : bytes[i];
-              const g = bytes[i + 1];
-              const b = bgra ? bytes[i] : bytes[i + 2];
-              if (r === 0 && g === 0 && b === 0) black++;
-              if (
-                Math.abs(r - background[0]) > 6 ||
-                Math.abs(g - background[1]) > 6 ||
-                Math.abs(b - background[2]) > 6
-              ) nonBackground++;
-              for (let k = 0; k < wanted.length; k++) {
-                const c = wanted[k].color;
+    const stats = await readWithThaw(page, () =>
+      page.evaluate(
+        async ({ background, tolerance, markColors }) => {
+          const shots = (globalThis as unknown as {
+            __takeShots: () => Record<string, {
+              buffer: GPUBuffer;
+              bytesPerRow: number;
+              width: number;
+              height: number;
+              format: string;
+            }>;
+          }).__takeShots();
+          const out: {
+            label: string;
+            pixels: number;
+            nonBackground: number;
+            black: number;
+            marks: { match: string; count: number; min: number }[];
+          }[] = [];
+          for (const [label, shot] of Object.entries(shots)) {
+            await shot.buffer.mapAsync(GPUMapMode.READ);
+            const bytes = new Uint8Array(shot.buffer.getMappedRange().slice(0));
+            shot.buffer.unmap();
+            const bgra = (shot.format || "").startsWith("bgra");
+            const wanted = markColors.filter((m) => label.includes(m.match));
+            const hits = wanted.map(() => 0);
+            let nonBackground = 0;
+            let black = 0;
+            for (let y = 0; y < shot.height; y++) {
+              for (let x = 0; x < shot.width; x++) {
+                const i = y * shot.bytesPerRow + x * 4;
+                const r = bgra ? bytes[i + 2] : bytes[i];
+                const g = bytes[i + 1];
+                const b = bgra ? bytes[i] : bytes[i + 2];
+                if (r === 0 && g === 0 && b === 0) black++;
                 if (
-                  Math.abs(r - c[0]) <= tolerance &&
-                  Math.abs(g - c[1]) <= tolerance &&
-                  Math.abs(b - c[2]) <= tolerance
-                ) hits[k]++;
+                  Math.abs(r - background[0]) > 6 ||
+                  Math.abs(g - background[1]) > 6 ||
+                  Math.abs(b - background[2]) > 6
+                ) nonBackground++;
+                for (let k = 0; k < wanted.length; k++) {
+                  const c = wanted[k].color;
+                  if (
+                    Math.abs(r - c[0]) <= tolerance &&
+                    Math.abs(g - c[1]) <= tolerance &&
+                    Math.abs(b - c[2]) <= tolerance
+                  ) hits[k]++;
+                }
               }
             }
+            out.push({
+              label,
+              pixels: shot.width * shot.height,
+              nonBackground,
+              black,
+              marks: wanted.map((m, k) => ({
+                match: m.match,
+                count: hits[k],
+                min: m.min,
+              })),
+            });
           }
-          out.push({
-            label,
-            pixels: shot.width * shot.height,
-            nonBackground,
-            black,
-            marks: wanted.map((m, k) => ({
-              match: m.match,
-              count: hits[k],
-              min: m.min,
-            })),
-          });
-        }
-        return out;
-      },
-      { background: BACKGROUND, tolerance: TOLERANCE, markColors: MARK_COLORS },
-    );
+          return out;
+        },
+        {
+          background: BACKGROUND,
+          tolerance: TOLERANCE,
+          markColors: MARK_COLORS,
+        },
+      ));
 
     if (!stats.length) {
       failures.push(
@@ -512,61 +531,66 @@ try {
           `guard is stale relative to docs/example_3d.ts.`,
       );
     } else {
-      const centroids = await page.evaluate(
-        ({ label, low, high, tolerance }) => {
-          const shots = (globalThis as unknown as {
-            __markShots: Record<string, {
-              buffer: GPUBuffer;
-              bytesPerRow: number;
-              width: number;
-              height: number;
-              format: string;
-            }>;
-          }).__markShots;
-          const shot = shots[label];
-          if (!shot) return null;
-          // The buffer was already read once for the stats pass and unmapped;
-          // re-mapping it is what the freeze flag protects.
-          return (async () => {
-            await shot.buffer.mapAsync(GPUMapMode.READ);
-            const bytes = new Uint8Array(shot.buffer.getMappedRange().slice(0));
-            shot.buffer.unmap();
-            const bgra = (shot.format || "").startsWith("bgra");
-            const near = (r: number, g: number, b: number, c: number[]) =>
-              Math.abs(r - c[0]) <= tolerance &&
-              Math.abs(g - c[1]) <= tolerance &&
-              Math.abs(b - c[2]) <= tolerance;
-            let lowSum = 0, lowN = 0, highSum = 0, highN = 0;
-            for (let y = 0; y < shot.height; y++) {
-              for (let x = 0; x < shot.width; x++) {
-                const i = y * shot.bytesPerRow + x * 4;
-                const r = bgra ? bytes[i + 2] : bytes[i];
-                const g = bytes[i + 1];
-                const b = bgra ? bytes[i] : bytes[i + 2];
-                if (near(r, g, b, low)) {
-                  lowSum += y;
-                  lowN++;
-                } else if (near(r, g, b, high)) {
-                  highSum += y;
-                  highN++;
+      const centroids = await readWithThaw(page, () =>
+        page.evaluate(
+          ({ label, low, high, tolerance }) => {
+            const shots = (globalThis as unknown as {
+              __takeShots: () => Record<string, {
+                buffer: GPUBuffer;
+                bytesPerRow: number;
+                width: number;
+                height: number;
+                format: string;
+              }>;
+            }).__takeShots();
+            const shot = shots[label];
+            if (!shot) return null;
+            // The buffer was already read once for the stats pass and unmapped.
+            // Re-mapping it is safe because __takeShots froze capture, so no
+            // submit can retire this buffer before the read finishes -- which is
+            // what this comment used to claim without it being true (vs7.15).
+            return (async () => {
+              await shot.buffer.mapAsync(GPUMapMode.READ);
+              const bytes = new Uint8Array(
+                shot.buffer.getMappedRange().slice(0),
+              );
+              shot.buffer.unmap();
+              const bgra = (shot.format || "").startsWith("bgra");
+              const near = (r: number, g: number, b: number, c: number[]) =>
+                Math.abs(r - c[0]) <= tolerance &&
+                Math.abs(g - c[1]) <= tolerance &&
+                Math.abs(b - c[2]) <= tolerance;
+              let lowSum = 0, lowN = 0, highSum = 0, highN = 0;
+              for (let y = 0; y < shot.height; y++) {
+                for (let x = 0; x < shot.width; x++) {
+                  const i = y * shot.bytesPerRow + x * 4;
+                  const r = bgra ? bytes[i + 2] : bytes[i];
+                  const g = bytes[i + 1];
+                  const b = bgra ? bytes[i] : bytes[i + 2];
+                  if (near(r, g, b, low)) {
+                    lowSum += y;
+                    lowN++;
+                  } else if (near(r, g, b, high)) {
+                    highSum += y;
+                    highN++;
+                  }
                 }
               }
-            }
-            return {
-              low: lowN ? lowSum / lowN : null,
-              high: highN ? highSum / highN : null,
-              lowN,
-              highN,
-            };
-          })();
-        },
-        {
-          label: oriented.label,
-          low: ORIENTATION.low,
-          high: ORIENTATION.high,
-          tolerance: TOLERANCE,
-        },
-      );
+              return {
+                low: lowN ? lowSum / lowN : null,
+                high: highN ? highSum / highN : null,
+                lowN,
+                highN,
+              };
+            })();
+          },
+          {
+            label: oriented.label,
+            low: ORIENTATION.low,
+            high: ORIENTATION.high,
+            tolerance: TOLERANCE,
+          },
+        ));
       const short = oriented.label.slice(0, 46);
       if (!centroids || centroids.low == null || centroids.high == null) {
         failures.push(
@@ -610,47 +634,51 @@ try {
           waitUntil: "networkidle",
         });
         await residentPage.waitForTimeout(9000);
-        const residentStats = await residentPage.evaluate(
-          async ({ background }) => {
-            const shots = (globalThis as unknown as {
-              __markShots: Record<string, {
-                buffer: GPUBuffer;
-                bytesPerRow: number;
-                width: number;
-                height: number;
-                format: string;
-              }>;
-            }).__markShots;
-            const out: { label: string; coverage: number }[] = [];
-            for (const [label, shot] of Object.entries(shots)) {
-              await shot.buffer.mapAsync(GPUMapMode.READ);
-              const bytes = new Uint8Array(
-                shot.buffer.getMappedRange().slice(0),
-              );
-              shot.buffer.unmap();
-              const bgra = (shot.format || "").startsWith("bgra");
-              let nonBackground = 0;
-              for (let y = 0; y < shot.height; y++) {
-                for (let x = 0; x < shot.width; x++) {
-                  const i = y * shot.bytesPerRow + x * 4;
-                  const r = bgra ? bytes[i + 2] : bytes[i];
-                  const g = bytes[i + 1];
-                  const b = bgra ? bytes[i] : bytes[i + 2];
-                  if (
-                    Math.abs(r - background[0]) > 6 ||
-                    Math.abs(g - background[1]) > 6 ||
-                    Math.abs(b - background[2]) > 6
-                  ) nonBackground++;
+        const residentStats = await readWithThaw(
+          residentPage,
+          () =>
+            residentPage.evaluate(
+              async ({ background }) => {
+                const shots = (globalThis as unknown as {
+                  __takeShots: () => Record<string, {
+                    buffer: GPUBuffer;
+                    bytesPerRow: number;
+                    width: number;
+                    height: number;
+                    format: string;
+                  }>;
+                }).__takeShots();
+                const out: { label: string; coverage: number }[] = [];
+                for (const [label, shot] of Object.entries(shots)) {
+                  await shot.buffer.mapAsync(GPUMapMode.READ);
+                  const bytes = new Uint8Array(
+                    shot.buffer.getMappedRange().slice(0),
+                  );
+                  shot.buffer.unmap();
+                  const bgra = (shot.format || "").startsWith("bgra");
+                  let nonBackground = 0;
+                  for (let y = 0; y < shot.height; y++) {
+                    for (let x = 0; x < shot.width; x++) {
+                      const i = y * shot.bytesPerRow + x * 4;
+                      const r = bgra ? bytes[i + 2] : bytes[i];
+                      const g = bytes[i + 1];
+                      const b = bgra ? bytes[i] : bytes[i + 2];
+                      if (
+                        Math.abs(r - background[0]) > 6 ||
+                        Math.abs(g - background[1]) > 6 ||
+                        Math.abs(b - background[2]) > 6
+                      ) nonBackground++;
+                    }
+                  }
+                  out.push({
+                    label,
+                    coverage: nonBackground / (shot.width * shot.height),
+                  });
                 }
-              }
-              out.push({
-                label,
-                coverage: nonBackground / (shot.width * shot.height),
-              });
-            }
-            return out;
-          },
-          { background: BACKGROUND },
+                return out;
+              },
+              { background: BACKGROUND },
+            ),
         );
         for (const wanted of RESIDENT_SURFACES) {
           const shot = residentStats.find((entry) =>
@@ -706,6 +734,41 @@ if (failures.length) {
   Deno.exit(1);
 }
 console.log("\nMark-visibility gate passed.");
+
+/**
+ * Runs one shot-reading evaluate and always releases the freeze it took.
+ *
+ * `__takeShots()` freezes capture synchronously and deliberately leaves it
+ * frozen for the whole read, so something on this side has to end it. Leaving a
+ * page frozen would silently pin it to one stale frame, and a throwing read
+ * would leave it frozen forever -- hence the finally.
+ */
+async function readWithThaw<T>(
+  target: { evaluate: (fn: () => void) => Promise<void> },
+  read: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await read();
+  } finally {
+    await thawCapture(target);
+  }
+}
+
+/**
+ * Releases the capture freeze that `__takeShots()` takes.
+ *
+ * The freeze deliberately outlives the page.evaluate that starts it -- holding
+ * it across the whole read is the point -- so something on this side has to end
+ * it. Every reader below is wrapped so this runs even when the read throws;
+ * leaving a page frozen would silently pin it to one stale frame.
+ */
+async function thawCapture(
+  target: { evaluate: (fn: () => void) => Promise<void> },
+) {
+  await target.evaluate(() => {
+    (globalThis as unknown as { __frozen: boolean }).__frozen = false;
+  });
+}
 
 async function waitForServer() {
   for (let i = 0; i < 120; i++) {
