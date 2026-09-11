@@ -15,21 +15,25 @@
 // below only consumes it. That puts the kernel somewhere a sibling <Compute>
 // can reach, which is the prerequisite for the <Kernel> port (gggplot-vs7.5).
 //
-// DISPATCH AND READBACK MOVE TOGETHER. The kernel's commands are now recorded,
-// not submitted, and handed to a sibling <Compute> as a `pre` call, so they join
+// DISPATCH AND READBACK MOVE TOGETHER. No hoisted node submits its own work any
+// more: stat_count dispatches as real <Kernel>s inside the sibling <Compute>
+// (resident_count_kernel_live.tsx), and stat_bin's grid still hands that
+// <Compute> a recorded command buffer as a `pre` call. Either way the work joins
 // the frame's single submit. That alone would break every summary-reading view:
 // useAwait fires during reconciliation, so readSummary's copyBufferToBuffer
 // would be submitted BEFORE the compute that fills the buffer, and the view
 // would read zeros (gggplot-vs7.1 attempt 2 — stackedMaximum 0 instead of 5000,
 // y-range collapsing from 5000 to 1, bars overflowing the plot). So the product
 // handed downward has its readSummary GATED: it waits until this version's
-// commands have actually been submitted. Queue order does the rest, since the
+// commands have actually been encoded. Queue order does the rest, since the
 // readback copy is then enqueued behind the compute on the same queue.
 
 import type { LiveElement } from "@use-gpu/live";
+import type { CountPosition } from "@gggplot/reductions";
 import type { RenderNode } from "../compile/rendertree.ts";
 import {
   RESIDENT_STAT_BIN_PRODUCT,
+  RESIDENT_STAT_BIN_TILES_PRODUCT,
   RESIDENT_STAT_COUNT_PRODUCT,
 } from "../compile/resident.ts";
 import { GPUDataProvider } from "./live.tsx";
@@ -37,6 +41,17 @@ import {
   type ResidentCountProduct,
   ResidentCountProvider,
 } from "./resident_count_live.tsx";
+import { CountKernels } from "./resident_count_kernel_live.tsx";
+import { awaitGridSummary } from "./resident_grid_pending.ts";
+import {
+  RESIDENT_ID_PROP,
+  type ResidentProducts,
+  ResidentProductsContext,
+} from "./resident_products.ts";
+import {
+  HistogramKernels,
+  type HistogramPosition,
+} from "./resident_histogram_kernel_live.tsx";
 import {
   awaitDomain,
   DOMAIN_ACCUMULATOR_LENGTH,
@@ -53,13 +68,10 @@ import {
   ComputeBuffer,
   createElement,
   Fragment,
-  makeContext,
   provide,
   useAwait,
-  useContext,
   useDeviceContext,
   useOne,
-  yeet,
 } from "./usegpu_compat.ts";
 
 /**
@@ -101,31 +113,6 @@ function createDispatchGate(): DispatchGate {
   };
 }
 
-/** Records one kernel's work into the frame's compute pass. */
-const ResidentCompute = (
-  { encode, version, gate }: {
-    encode: () => GPUCommandBuffer | null;
-    version: number;
-    gate: DispatchGate;
-  },
-): LiveElement => {
-  // `pre` runs every frame the pass runs, so the version guard is what keeps a
-  // steady-state plot from re-encoding.
-  const state = useOne(() => ({ encoded: -1 }), encode);
-  return yeet({
-    pre: () => {
-      if (state.encoded === version) return null;
-      state.encoded = version;
-      const command = encode();
-      // Opened after the command buffer is handed back: ComputePass pushes it
-      // into the same submit it is building, so anything awaiting this gate
-      // enqueues its copy behind the compute.
-      gate.open(version);
-      return command;
-    },
-  });
-};
-
 /**
  * What a hoisted node yields.
  *
@@ -141,26 +128,6 @@ export interface HoistedResult {
   computes: LiveElement[];
 }
 
-/** Products built above the plot, keyed by the id stamped on their node. */
-export type ResidentProducts = ReadonlyMap<number, unknown>;
-
-const EMPTY: ResidentProducts = new Map();
-
-export const ResidentProductsContext = makeContext<ResidentProducts>(
-  EMPTY,
-  "ResidentProductsContext",
-);
-
-/** Reads the product built for this node, or null when it was not hoisted. */
-export function useHoistedProduct<T>(residentId: unknown): T | null {
-  const products = useContext<ResidentProducts>(ResidentProductsContext);
-  if (typeof residentId !== "number") return null;
-  return (products.get(residentId) as T) ?? null;
-}
-
-/** The prop name stamped onto a hoisted node so the mark can find its product. */
-export const RESIDENT_ID_PROP = "residentId";
-
 interface HoistedNode {
   id: number;
   props: Record<string, unknown>;
@@ -170,13 +137,17 @@ interface HoistedNode {
  * Product ids whose construction is lifted above the plot.
  *
  * Deliberately a small allowlist rather than "everything resident": a product
- * is added here only once its mark can consume a hoisted product, so the two
- * halves of the migration never disagree. Anything absent keeps building its
- * own kernel in place, exactly as before.
+ * is added here only once BOTH of its consumers — the standalone view and the
+ * inline mark — can take a hoisted product, so the two halves of the migration
+ * never disagree. Anything absent keeps building its own kernel in place.
  */
 const HOISTED_PRODUCTS = new Set<string>([
   RESIDENT_STAT_COUNT_PRODUCT,
   RESIDENT_STAT_BIN_PRODUCT,
+  // The dense tile strip runs the SAME stat_bin kernel and the same auto-domain
+  // stage, differing only in which of its buffers the mark draws, so it hoists
+  // through HoistedHistogram unchanged (gggplot-vs7.12).
+  RESIDENT_STAT_BIN_TILES_PRODUCT,
 ]);
 
 /**
@@ -189,8 +160,11 @@ export function collectResidentNodes(
 ): { tree: RenderNode; nodes: HoistedNode[] } {
   const nodes: HoistedNode[] = [];
   const visit = (node: RenderNode): RenderNode => {
+    // Both forms hoist. The `view` flag used to gate this, back when only the
+    // view components could consume a hoisted product; now that grid.Mark can
+    // too (gggplot-vs7.1), an inline mark is hoistable on the same terms and
+    // the flag only selects which component renders the result.
     const hoistable = node.component === "ResidentProduct" &&
-      node.props.view === true &&
       HOISTED_PRODUCTS.has(node.props.product as string);
     const children = node.children.map(visit);
     if (!hoistable) {
@@ -243,12 +217,21 @@ const HoistedCount = (
         defer: true,
         children: (product: ResidentCountProduct) =>
           children({
-            product: gateSummary(product, gate),
+            product: gateGridSummary(product, gate),
+            // Real <Kernel>s rather than a recorded command buffer: this node's
+            // five passes are dispatched from the frame's compute pass by
+            // Use.GPU's own linker and dispatch gating (gggplot-vs7.7). The
+            // kernel object built by the provider above contributes only its
+            // buffers now — with `defer` set nothing ever calls its encode(),
+            // so its raw pipelines are never built.
             computes: [
-              createElement(ResidentCompute, {
-                encode: product.encode,
-                version: product.version,
-                gate,
+              createElement(CountKernels, {
+                product,
+                values: sources[x],
+                groups: group ? sources[group] : undefined,
+                position: (options as { position?: CountPosition }).position ??
+                  "stack",
+                onEncoded: (encoded: number) => gate.open(encoded),
               }),
             ],
           }),
@@ -257,19 +240,41 @@ const HoistedCount = (
 };
 
 /**
- * Wraps a product so its summary readback waits for this version's dispatch.
+ * A grid product's readback wait, which needs more than the dispatch gate.
  *
- * Everything else is passed through untouched, so the mark below cannot tell a
- * hoisted product from an in-place one.
+ * The gate only says the frame's compute pass reached this node's leaf, and for
+ * a <Kernel> that is not the same as the kernels having dispatched: their
+ * pipelines compile asynchronously and contribute nothing until they finish, so
+ * the pass can run with all five absent. Opening the gate then would hand the
+ * view an untouched summary, whose stackedMaximum of 0 collapses the y-range to
+ * 1 and overflows the bars out of the plot — the exact gggplot-vs7.1 attempt-2
+ * failure, and one a pixel floor cannot see because coverage goes UP. So the
+ * gate is only the first half; the second waits on the summary buffer's own
+ * pending marker.
  */
-function gateSummary<
-  T extends { version: number; readSummary(): Promise<unknown> },
+function gateGridSummary<
+  T extends {
+    version: number;
+    bins: number;
+    groupsCount: number;
+    rows: number;
+    alive(): boolean;
+    readSummary(): Promise<{ stackedMaximum: number }>;
+  },
 >(product: T, gate: DispatchGate): T {
   return {
     ...product,
     readSummary: async () => {
       await gate.wait(product.version);
-      return product.readSummary();
+      if (product.bins * product.groupsCount === 0) {
+        // No passes are mounted for an empty grid, so no marker was ever armed
+        // and there is nothing to wait for.
+        return product.readSummary();
+      }
+      return awaitGridSummary(() => product.readSummary(), {
+        expectNonEmpty: product.rows > 0,
+        alive: () => product.alive(),
+      });
     },
   };
 }
@@ -369,9 +374,16 @@ const AwaitHoistedBounds = (
   });
   // Waits for this version's passes to be encoded before copying the
   // accumulator, so the copy is enqueued behind the compute on the same queue.
-  const [bounds, error] = useAwait(async () => {
+  const [bounds, error] = useAwait(async (cancelled: () => boolean) => {
     await domainGate.wait(version);
-    return awaitDomain(device, (target as { buffer: GPUBuffer }).buffer);
+    // `cancelled` is Live's own liveness signal for this await: it flips on
+    // unmount or a dependency change, which is exactly when the <ComputeBuffer>
+    // above is destroyed out from under the poll. See awaitDomain.
+    return awaitDomain(
+      device,
+      (target as { buffer: GPUBuffer }).buffer,
+      () => !cancelled(),
+    );
   }, [version]);
   if (error) throw error;
   // Contribute the domain kernels even while their bounds are still in flight —
@@ -393,16 +405,25 @@ const AwaitHoistedBounds = (
     children: (product: ResidentHistogramProduct) =>
       children({
         product: {
-          ...gateSummary(product, gridGate),
+          ...gateGridSummary(product, gridGate),
           // The view needs the bounds it was sized against to set its x range.
           hoistedBounds: bounds,
         },
+        // Real <Kernel>s rather than a recorded command buffer: this node's
+        // seven passes are dispatched from the frame's compute pass by
+        // Use.GPU's own linker and dispatch gating (gggplot-vs7.8). The kernel
+        // object built by the provider above contributes only its buffers now
+        // — with `defer` set nothing ever calls its encode(), so its raw
+        // pipelines are never built.
         computes: [
           domainCompute,
-          createElement(ResidentCompute, {
-            encode: product.encode,
-            version: product.version,
-            gate: gridGate,
+          createElement(HistogramKernels, {
+            product,
+            values: xSource,
+            groups: groupSource,
+            position: (options as { position?: HistogramPosition }).position ??
+              "stack",
+            onEncoded: (encoded: number) => gridGate.open(encoded),
           }),
         ],
       }),
@@ -449,9 +470,11 @@ export const ResidentHost = (
       ) as LiveElement;
     }
     const node = nodes[index];
-    const Hoisted = node.props.product === RESIDENT_STAT_BIN_PRODUCT
-      ? HoistedHistogram
-      : HoistedCount;
+    // Both stat_bin products share HoistedHistogram: same kernel, same
+    // auto-domain stage. Only stat_count has its own node.
+    const Hoisted = node.props.product === RESIDENT_STAT_COUNT_PRODUCT
+      ? HoistedCount
+      : HoistedHistogram;
     return createElement(Hoisted, {
       props: node.props,
       children: (result: HoistedResult) =>

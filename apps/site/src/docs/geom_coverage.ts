@@ -101,7 +101,10 @@ export const geomExampleCoverage: Readonly<
   geomArea: { exampleIds: ["AreaAndRibbon"], mode: "comparison" },
   geomRibbon: { exampleIds: ["AreaAndRibbon"], mode: "comparison" },
   geomPolygon: { exampleIds: ["PolygonShapes"], mode: "dedicated" },
-  geomTile: { exampleIds: ["TileHeatmap"], mode: "dedicated" },
+  geomTile: {
+    exampleIds: ["TileHeatmap", "ResidentTileStrip"],
+    mode: "dedicated",
+  },
   geomRaster: { exampleIds: ["RasterGrid"], mode: "dedicated" },
   geomText: { exampleIds: ["ThemedChart"], mode: "comparison" },
   geomLabel: {

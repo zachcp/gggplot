@@ -21,11 +21,29 @@ export interface ResidentHistogram1D {
    * scalar `color` path with no extra allocation or dispatch.
    */
   readonly barColors: GPUBuffer | undefined;
+  /**
+   * The uploaded per-group RGBA palette; present only alongside `barColors`.
+   *
+   * Exposed because the MOUNTED path binds it itself: the <Kernel> port drives
+   * the colour pass from this buffer instead of through this object's own bind
+   * group (gggplot-vs7.8). The standalone executor still binds it internally.
+   */
+  readonly palette: GPUBuffer | undefined;
   /** Dense [group, bin] tile vertices for a grid mark. */
   readonly tileVertices: GPUBuffer;
   /** Compact [group totals..., stacked maximum] summary buffer. */
   readonly summary: GPUBuffer;
   readonly bins: number;
+  /**
+   * The RESOLVED bin geometry this grid was built for.
+   *
+   * `binwidth` is derived when the caller gave a bin count instead, so these
+   * are the only trustworthy source for it. The mounted <Kernel> path needs
+   * both as shader args and must use exactly the values packed into this
+   * object's params uniform, never a re-derivation.
+   */
+  readonly lo: number;
+  readonly binwidth: number;
   readonly groupsCount: number;
   /**
    * Records this kernel's passes into a command buffer WITHOUT submitting it.
@@ -196,115 +214,96 @@ export function createResidentHistogram1DFromSources(
     device,
     new Uint32Array([summaryLength, 0, 0, 0]).buffer,
   );
-  const clear = device.createComputePipeline({
-    layout: "auto",
-    compute: {
-      module: device.createShaderModule({ code: CLEAR_U32_WGSL }),
-      entryPoint: "main",
-    },
-  });
-  const histogram = device.createComputePipeline({
-    layout: "auto",
-    compute: {
-      module: device.createShaderModule({ code: GROUPED_HISTOGRAM_1D_WGSL }),
-      entryPoint: "main",
-    },
-  });
-  const bars = device.createComputePipeline({
-    layout: "auto",
-    compute: {
-      module: device.createShaderModule({ code: HISTOGRAM_BAR_VERTICES_WGSL }),
-      entryPoint: "main",
-    },
-  });
-  const tiles = device.createComputePipeline({
-    layout: "auto",
-    compute: {
-      module: device.createShaderModule({ code: HISTOGRAM_TILE_VERTICES_WGSL }),
-      entryPoint: "main",
-    },
-  });
-  const summarize = device.createComputePipeline({
-    layout: "auto",
-    compute: {
-      module: device.createShaderModule({ code: HISTOGRAM_SUMMARY_WGSL }),
-      entryPoint: "main",
-    },
-  });
-  const colorize = palette
-    ? device.createComputePipeline({
-      layout: "auto",
-      compute: {
-        module: device.createShaderModule({
-          code: GRID_BAR_VERTEX_COLORS_WGSL,
-        }),
-        entryPoint: "main",
-      },
-    })
-    : undefined;
-  const clearBind = device.createBindGroup({
-    layout: clear.getBindGroupLayout(0),
-    entries: [{ binding: 0, resource: { buffer: counts } }, {
-      binding: 1,
-      resource: { buffer: clearParams },
-    }],
-  });
-  const histogramBind = device.createBindGroup({
-    layout: histogram.getBindGroupLayout(0),
-    entries: [
+  /**
+   * The standalone executor's pipelines and bind groups, built ON FIRST
+   * `encode()` rather than at construction.
+   *
+   * The MOUNTED path no longer dispatches through them: it drives the same
+   * seven pass bodies as <Kernel>s bound by Use.GPU's linker (gggplot-vs7.8),
+   * and reaches into this object only for its buffers. So constructing seven
+   * pipelines here would be seven shader compiles that nothing ever runs — and
+   * `resident_grid.tsx` recreates the whole kernel on any option change, so it
+   * would pay them again on every one. Deferring makes the mounted path free
+   * while leaving the headless CPU/GPU parity harness bit-identical.
+   */
+  const buildPasses = () => {
+    const pipeline = (code: string) =>
+      device.createComputePipeline({
+        layout: "auto",
+        compute: {
+          module: device.createShaderModule({ code }),
+          entryPoint: "main",
+        },
+      });
+    const clear = pipeline(CLEAR_U32_WGSL);
+    const histogram = pipeline(GROUPED_HISTOGRAM_1D_WGSL);
+    const bars = pipeline(HISTOGRAM_BAR_VERTICES_WGSL);
+    const tiles = pipeline(HISTOGRAM_TILE_VERTICES_WGSL);
+    const summarize = pipeline(HISTOGRAM_SUMMARY_WGSL);
+    const colorize = palette
+      ? pipeline(GRID_BAR_VERTEX_COLORS_WGSL)
+      : undefined;
+    const bind = (p: GPUComputePipeline, entries: GPUBindGroupEntry[]) =>
+      device.createBindGroup({ layout: p.getBindGroupLayout(0), entries });
+    const clearBind = bind(clear, [
+      { binding: 0, resource: { buffer: counts } },
+      { binding: 1, resource: { buffer: clearParams } },
+    ]);
+    const histogramBind = bind(histogram, [
       { binding: 0, resource: { buffer: input.values } },
       { binding: 1, resource: { buffer: groups } },
       { binding: 2, resource: { buffer: counts } },
       { binding: 3, resource: { buffer: params } },
-    ],
-  });
-  const summaryClearBind = device.createBindGroup({
-    layout: clear.getBindGroupLayout(0),
-    entries: [{ binding: 0, resource: { buffer: summary } }, {
-      binding: 1,
-      resource: { buffer: summaryClearParams },
-    }],
-  });
-  const summarizeBind = device.createBindGroup({
-    layout: summarize.getBindGroupLayout(0),
-    entries: [
+    ]);
+    const summaryClearBind = bind(clear, [
+      { binding: 0, resource: { buffer: summary } },
+      { binding: 1, resource: { buffer: summaryClearParams } },
+    ]);
+    const summarizeBind = bind(summarize, [
       { binding: 0, resource: { buffer: counts } },
       { binding: 1, resource: { buffer: summary } },
       { binding: 2, resource: { buffer: params } },
-    ],
-  });
-  const barsBind = device.createBindGroup({
-    layout: bars.getBindGroupLayout(0),
-    entries: [
+    ]);
+    const barsBind = bind(bars, [
       { binding: 0, resource: { buffer: counts } },
       { binding: 1, resource: { buffer: barVertices } },
       { binding: 2, resource: { buffer: params } },
       // Dodge slotting reads per-group totals; the summary pass runs earlier
       // in the same encoder, so this pass observes the current totals.
       { binding: 3, resource: { buffer: summary } },
-    ],
-  });
-  const colorBind = colorize
-    ? device.createBindGroup({
-      layout: colorize.getBindGroupLayout(0),
-      entries: [
+    ]);
+    const colorBind = colorize
+      ? bind(colorize, [
         { binding: 0, resource: { buffer: palette! } },
         { binding: 1, resource: { buffer: barColors! } },
         { binding: 2, resource: { buffer: params } },
-      ],
-    })
-    : undefined;
-  const tilesBind = device.createBindGroup({
-    layout: tiles.getBindGroupLayout(0),
-    entries: [
-      // HISTOGRAM_TILE_VERTICES_WGSL derives a dense geometric grid and does
-      // not consume counts. Dawn consequently omits its declared-but-unused
-      // binding(0) from the auto layout; binding it here invalidates the whole
-      // command buffer on browser adapters.
-      { binding: 1, resource: { buffer: tileVertices } },
-      { binding: 2, resource: { buffer: params } },
-    ],
-  });
+      ])
+      : undefined;
+    // Two bindings, matching the tile preamble exactly: the pass derives its
+    // grid from bin geometry and reads no counts. It used to declare an unused
+    // count binding for symmetry, which Dawn dropped from the auto layout and
+    // which this bind group then had to omit by hand; both are gone.
+    const tilesBind = bind(tiles, [
+      { binding: 0, resource: { buffer: tileVertices } },
+      { binding: 1, resource: { buffer: params } },
+    ]);
+    return {
+      clear,
+      histogram,
+      bars,
+      tiles,
+      summarize,
+      colorize,
+      clearBind,
+      histogramBind,
+      summaryClearBind,
+      summarizeBind,
+      barsBind,
+      colorBind,
+      tilesBind,
+    };
+  };
+  let passes: ReturnType<typeof buildPasses> | undefined;
 
   const read = <T extends Uint32Array | Float32Array>(
     source: GPUBuffer,
@@ -313,6 +312,22 @@ export function createResidentHistogram1DFromSources(
   ): Promise<T> => readBuffer(device, source, bytes, create);
 
   const encode = (): GPUCommandBuffer | null => {
+    passes ??= buildPasses();
+    const {
+      clear,
+      histogram,
+      bars,
+      tiles,
+      summarize,
+      colorize,
+      clearBind,
+      histogramBind,
+      summaryClearBind,
+      summarizeBind,
+      barsBind,
+      colorBind,
+      tilesBind,
+    } = passes;
     const encoder = device.createCommandEncoder();
     const clearPass = encoder.beginComputePass();
     clearPass.setPipeline(clear);
@@ -362,9 +377,12 @@ export function createResidentHistogram1DFromSources(
     counts,
     barVertices,
     barColors,
+    palette,
     tileVertices,
     summary,
     bins: packed.bins,
+    lo: input.lo,
+    binwidth: packed.binwidth,
     groupsCount: packed.groupsCount,
     encode,
     dispatch() {

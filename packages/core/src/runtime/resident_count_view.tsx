@@ -4,21 +4,15 @@ import type { LiveElement } from "@use-gpu/live";
 import type { TypedDataFrame } from "../data/mod.ts";
 import type { Theme } from "../ir/types.ts";
 import type { MountedCountSourceOptions } from "./resident.ts";
-import { GPUDataProvider } from "./live.tsx";
-import {
-  type ResidentCountProduct,
-  ResidentCountProvider,
-} from "./resident_count_live.tsx";
-import { paletteToRgbaF32, ResidentHistogramBars } from "./resident_bar.tsx";
-import { useHoistedProduct } from "./resident_host.tsx";
-import type { GPUStorageSource } from "./types.ts";
+import type { ResidentCountProduct } from "./resident_count_live.tsx";
+import { ResidentHistogramBars } from "./resident_bar.tsx";
+import { useHoistedProduct } from "./resident_products.ts";
 import {
   Axis,
   Cartesian,
   createElement,
   Grid,
   useAwait,
-  useMemo,
 } from "./usegpu_compat.ts";
 
 export interface ResidentCountViewProps {
@@ -83,65 +77,29 @@ const AwaitCountSummary = (
   }, ...guides);
 };
 export const ResidentCountView = (
-  {
-    data,
-    x,
-    group,
+  { options, color, opacity, axes, theme, residentId }: ResidentCountViewProps,
+): LiveElement => {
+  // Runs unconditionally to keep hook order stable.
+  const hoisted = useHoistedProduct<ResidentCountProduct>(residentId);
+  if (typeof residentId !== "number") {
+    // Not hoisted, which for a resident product now means misconfigured: its id
+    // is missing from resident_host.tsx's HOISTED_PRODUCTS, so nothing built
+    // its kernel and nothing will dispatch it. This used to fall back to
+    // building the kernel in place; that path is gone with gggplot-vs7.1, and
+    // failing here beats rendering an empty chart — which is exactly how the
+    // tile product hid two bugs (gggplot-vs7.12).
+    throw new Error(
+      "[gggplot] a resident view was mounted without a hoisted product; " +
+        "add its product id to HOISTED_PRODUCTS in runtime/resident_host.tsx",
+    );
+  }
+  if (!hoisted) return null as never;
+  return createElement(AwaitCountSummary, {
+    product: hoisted,
     options,
     color,
     opacity,
-    paletteColors,
     axes,
     theme,
-    residentId,
-  }: ResidentCountViewProps,
-): LiveElement => {
-  // useHoistedProduct runs unconditionally to keep hook order stable; it
-  // returns null for a node the host did not hoist.
-  const hoisted = useHoistedProduct<ResidentCountProduct>(residentId);
-  const palette = useMemo(
-    () =>
-      paletteColors ? paletteToRgbaF32(paletteColors, opacity ?? 1) : undefined,
-    [paletteColors?.join(","), opacity],
-  );
-  const viewOptions = useMemo(
-    () => (palette ? { ...options, palette } : options),
-    [options, palette],
-  );
-  options = viewOptions;
-  const fields = [
-    { name: x, dtype: "u32", shape: "row", dimensions: ["row"] },
-    ...(group
-      ? [{ name: group, dtype: "u32", shape: "row", dimensions: ["row"] }]
-      : []),
-  ];
-  if (hoisted) {
-    return createElement(AwaitCountSummary, {
-      product: hoisted,
-      options,
-      color,
-      opacity,
-      axes,
-      theme,
-    });
-  }
-  return createElement(GPUDataProvider, {
-    data,
-    fields,
-    children: (sources: Record<string, GPUStorageSource>) =>
-      createElement(ResidentCountProvider, {
-        x: sources[x],
-        group: group ? sources[group] : undefined,
-        options,
-        children: (product: ResidentCountProduct) =>
-          createElement(AwaitCountSummary, {
-            product,
-            options,
-            color,
-            opacity,
-            axes,
-            theme,
-          }),
-      }),
   });
 };

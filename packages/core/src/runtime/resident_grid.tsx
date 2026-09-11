@@ -11,22 +11,15 @@
 // config object; everything else lives here once.
 
 import type { LiveElement } from "@use-gpu/live";
-import type { ResidentDomain1DResult } from "@gggplot/reductions";
 import type { TypedDataFrame } from "../data/mod.ts";
-import type { FieldSpec } from "../plan/mod.ts";
 import type { GPUStorageSource } from "./types.ts";
 import {
   createElement,
-  useAwait,
   useDeviceContext,
   useMemo,
   useResource,
 } from "./usegpu_compat.ts";
-import { GPUDataProvider } from "./live.tsx";
-import {
-  type ResidentDomainProduct,
-  ResidentDomainProvider,
-} from "./resident_domain_live.tsx";
+import { useHoistedProduct } from "./resident_products.ts";
 import type { LiveComponent } from "./usegpu_compat.ts";
 import { paletteToRgbaF32, ResidentHistogramBars } from "./resident_bar.tsx";
 
@@ -36,11 +29,14 @@ export interface ResidentGridKernel {
   readonly barVertices: GPUBuffer;
   /** Per-vertex RGBA bar colors; present only when a palette was supplied. */
   readonly barColors?: GPUBuffer;
+  /** The uploaded per-group RGBA palette; present only alongside barColors. */
+  readonly palette?: GPUBuffer;
   readonly summary: GPUBuffer;
   readonly groupsCount: number;
   dispatch(): void;
-  /** Records the kernel's passes without submitting; used by the deferred path. */
-  encode(): GPUCommandBuffer | null;
+  /** The resolved x-axis bin geometry, for a grid that has one. */
+  readonly lo?: number;
+  readonly binwidth?: number;
   destroy(): void;
 }
 
@@ -54,19 +50,50 @@ export interface ResidentGridProduct<S> {
    * fill color.
    */
   readonly barColors?: GPUStorageSource;
+  /**
+   * The uploaded per-group RGBA palette, present only alongside `barColors`.
+   *
+   * An INPUT, unlike everything else here: the colour pass reads it to fill
+   * `barColors`. It is exposed because the mounted <Kernel> path binds that
+   * pass itself rather than going through the kernel's own bind group
+   * (gggplot-vs7.7); marks have no use for it.
+   */
+  readonly palette?: GPUStorageSource;
   /** Dense [group, bin] tile-grid vertices; counts remain GPU-resident. */
   readonly tileVertices: GPUStorageSource;
   /** [group totals..., stacked maximum], for explicit bounded feedback only. */
   readonly summary: GPUStorageSource;
   readonly bins: number;
   readonly groupsCount: number;
-  readSummary(): Promise<S>;
   /**
-   * Records this kernel's work for a caller that owns submission. Present so a
-   * hoisted host can put the dispatch in the frame's compute pass; the in-place
-   * path ignores it and dispatches itself.
+   * Whether the kernel that owns these buffers is still mounted.
+   *
+   * A summary readback can span many frames while the kernel's pipelines
+   * compile, and a route change can dispose the kernel underneath it. Copying
+   * out of a destroyed buffer is a Dawn validation error, so anything that
+   * reads across frames must check this first.
    */
-  encode(): GPUCommandBuffer | null;
+  alive(): boolean;
+  /**
+   * Input rows this grid was built over.
+   *
+   * Not a rendering input — it is how a caller knows whether a summary of zero
+   * is a legitimate answer or a chain that has not finished dispatching. See
+   * resident_grid_pending.ts.
+   */
+  readonly rows: number;
+  /**
+   * The RESOLVED x-axis bin geometry this grid was built for, when it has one.
+   *
+   * Present for stat_bin, absent for stat_count — a categorical grid's cells
+   * ARE integer indices, so it has no lo/binwidth to speak of. `binwidth` is
+   * derived when the caller gave a bin count instead of a width, so this is the
+   * only trustworthy source for it; the mounted <Kernel> path passes both as
+   * shader args and must use exactly what the kernel packed, never a
+   * re-derivation.
+   */
+  readonly binGeometry?: { readonly lo: number; readonly binwidth: number };
+  readSummary(): Promise<S>;
   /** The input version this product was built for. */
   readonly version: number;
 }
@@ -76,12 +103,6 @@ export interface ResidentGridProviderProps<O, S> {
   group?: GPUStorageSource;
   options: O;
   children: (product: ResidentGridProduct<S>) => LiveElement;
-  /**
-   * Leave the dispatch to the caller. A hoisted host sets this so the kernel's
-   * commands go into the frame's compute pass instead of being submitted during
-   * reconciliation; it then owns sequencing the readback after them.
-   */
-  defer?: boolean;
 }
 
 export interface ResidentGridMarkProps<O> {
@@ -91,6 +112,12 @@ export interface ResidentGridMarkProps<O> {
   options: O;
   color: string;
   opacity?: number;
+  /**
+   * Set by GGPlot when this node's kernels were built above the plot
+   * (runtime/resident_host.tsx). When present the product comes from context
+   * and this component only renders its leaf.
+   */
+  residentId?: number;
   /**
    * Factor-level hex colors (level order) for a fill/color-mapped bar layer.
    * Converted once to an RGBA palette and expanded per-group on-GPU; absent
@@ -124,11 +151,6 @@ export interface ResidentGridConfig<K extends ResidentGridKernel, O, S> {
    * `colors` is the per-group palette source when the kernel carries one.
    */
   leaf?: LiveComponent;
-  /**
-   * When present, an `options.autoDomain` mark first resolves x bounds through
-   * ResidentDomainProvider, then maps resolved bounds into concrete options.
-   */
-  resolveAutoDomain?(options: O, bounds: ResidentDomain1DResult): O;
 }
 
 export interface ResidentGrid<O, S> {
@@ -149,6 +171,8 @@ export function createResidentGrid<K extends ResidentGridKernel, O, S>(
   const productFrom = (
     resident: K,
     version: number,
+    rows: number,
+    alive: () => boolean,
   ): ResidentGridProduct<S> => {
     const bins = config.binsOf(resident);
     const cells = bins * resident.groupsCount;
@@ -176,6 +200,15 @@ export function createResidentGrid<K extends ResidentGridKernel, O, S>(
           version,
         }
         : undefined,
+      palette: resident.palette
+        ? {
+          buffer: resident.palette,
+          format: "vec4<f32>",
+          length: resident.groupsCount,
+          size: [resident.groupsCount],
+          version,
+        }
+        : undefined,
       tileVertices: {
         buffer: config.tileVerticesOf(resident),
         format: "vec2<f32>",
@@ -192,63 +225,65 @@ export function createResidentGrid<K extends ResidentGridKernel, O, S>(
       },
       bins,
       groupsCount: resident.groupsCount,
+      alive,
+      rows,
+      binGeometry: resident.lo != null && resident.binwidth != null
+        ? { lo: resident.lo, binwidth: resident.binwidth }
+        : undefined,
       readSummary: () => config.readSummary(resident),
-      encode: () => resident.encode(),
       version,
     };
   };
 
+  /**
+   * Allocates the kernel's buffers and yields its product. It DOES NOT
+   * DISPATCH.
+   *
+   * Dispatch belongs to runtime/resident_host.tsx, which mounts this node's
+   * passes as <Kernel>s inside the frame's <Compute> (gggplot-vs7.1). This used
+   * to submit its own command buffer from the useMemo body below, guarded by a
+   * `defer` prop that the host set; every resident product is hoisted now, so
+   * the guard was always true and the branch it guarded was dead — verified by
+   * making it throw and running every route.
+   */
   const Provider = (
-    { x, group, options, children, defer }: ResidentGridProviderProps<O, S>,
+    { x, group, options, children }: ResidentGridProviderProps<O, S>,
   ): LiveElement => {
     const device = useDeviceContext();
-    const resident = useResource((dispose) => {
-      const result = config.create(device, x, group, options);
-      dispose(() => result.destroy());
-      return result;
+    // The resource tracks LIVENESS, not just cleanup: a reader that spans
+    // frames has to be able to tell that these buffers are gone. See
+    // ResidentGridProduct.alive.
+    const owned = useResource((dispose) => {
+      const kernel = config.create(device, x, group, options);
+      const state = { alive: true };
+      dispose(() => {
+        state.alive = false;
+        kernel.destroy();
+      });
+      return { kernel, state };
     }, [device, x.buffer, group?.buffer, ...config.optionKeys(options)]);
     const version = Math.max(x.version, group?.version ?? 0);
-    const product = useMemo(() => {
-      if (!defer) resident.dispatch();
-      return productFrom(resident, version);
-    }, [resident, version, defer]);
+    const product = useMemo(
+      () =>
+        productFrom(
+          owned.kernel,
+          version,
+          x.length,
+          () => owned.state.alive,
+        ),
+      [owned, version, x.length],
+    );
     return children(product);
   };
 
-  const AwaitDomainMark = (
-    { domain, x, group, options, color, opacity }: {
-      domain: ResidentDomainProduct;
-      x: GPUStorageSource;
-      group?: GPUStorageSource;
-      options: O;
-      color: string;
-      opacity?: number;
-    },
-  ): LiveElement => {
-    const [bounds, error] = useAwait(() => domain.readDomain(), [
-      domain.domain.version,
-    ]);
-    if (error) throw error;
-    if (!bounds || bounds.empty) return null as never;
-    const resolved = config.resolveAutoDomain!(options, bounds);
-    return createElement(Provider, {
-      x,
-      group,
-      options: resolved,
-      children: (product: ResidentGridProduct<S>) =>
-        createElement(leaf, {
-          product,
-          color,
-          opacity,
-          colors: product.barColors,
-        }),
-    });
-  };
-
   const Mark = (
-    { data, x, group, options, color, opacity, paletteColors }:
+    { options, color, opacity, paletteColors, residentId }:
       ResidentGridMarkProps<O>,
   ): LiveElement => {
+    // Runs unconditionally to keep hook order stable; null when not hoisted,
+    // and also null on the first frame of a hoisted stat_bin node, while its x
+    // bounds are still being read back off the GPU.
+    const hoisted = useHoistedProduct<ResidentGridProduct<S>>(residentId);
     // Convert factor-level hex colors to an RGBA palette once (opacity baked
     // into alpha) and fold it into options so the mounted kernel expands it
     // per-group; a palette change re-keys useResource via config.optionKeys.
@@ -264,48 +299,28 @@ export function createResidentGrid<K extends ResidentGridKernel, O, S>(
       [options, palette],
     );
     options = resolvedOptions;
-    const fields: FieldSpec[] = [
-      { name: x, dtype: config.xDtype, shape: "row", dimensions: ["row"] },
-      ...(group
-        ? [{
-          name: group,
-          dtype: "u32" as const,
-          shape: "row" as const,
-          dimensions: ["row"],
-        }]
-        : []),
-    ];
-    const wantsDomain = config.resolveAutoDomain != null &&
-      (options as { autoDomain?: boolean }).autoDomain === true;
-    return createElement(GPUDataProvider, {
-      data,
-      fields,
-      children: (sources: Record<string, GPUStorageSource>) =>
-        wantsDomain
-          ? createElement(ResidentDomainProvider, {
-            x: sources[x],
-            children: (domain: ResidentDomainProduct) =>
-              createElement(AwaitDomainMark, {
-                domain,
-                x: sources[x],
-                group: group ? sources[group] : undefined,
-                options,
-                color,
-                opacity,
-              }),
-          })
-          : createElement(Provider, {
-            x: sources[x],
-            group: group ? sources[group] : undefined,
-            options,
-            children: (product: ResidentGridProduct<S>) =>
-              createElement(leaf, {
-                product,
-                color,
-                opacity,
-                colors: product.barColors,
-              }),
-          }),
+    if (typeof residentId !== "number") {
+      // Not hoisted, which for a resident product now means misconfigured: its
+      // id is missing from resident_host.tsx's HOISTED_PRODUCTS, so nothing
+      // built its kernel and nothing will dispatch it. This used to fall back
+      // to building the kernel in place; that path is gone with gggplot-vs7.1,
+      // and failing here beats rendering an empty panel, which is exactly how
+      // the tile product hid two bugs for months (gggplot-vs7.12).
+      throw new Error(
+        "[gggplot] a resident mark was mounted without a hoisted product; " +
+          "add its product id to HOISTED_PRODUCTS in runtime/resident_host.tsx",
+      );
+    }
+    // Null while a hoisted stat_bin node is still resolving its x bounds.
+    if (!hoisted) return null as never;
+    // A mark renders INSIDE the panel, so it contributes its leaf and nothing
+    // else — the panel owns the range. That is the only structural difference
+    // from the standalone view forms, which also mount a <Cartesian>.
+    return createElement(leaf, {
+      product: hoisted,
+      color,
+      opacity,
+      colors: hoisted.barColors,
     });
   };
 

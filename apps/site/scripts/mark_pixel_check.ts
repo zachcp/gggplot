@@ -124,6 +124,33 @@ const RESIDENT_SURFACES: { match: string; min: number }[] = [
   // draw). It sits lower than the bar chart's figure simply because a 16-bin
   // histogram covers less of its canvas than four wide category bars.
   { match: "All 150 iris measurements", min: 0.15 },
+  // examples_stats.tsx :: residentTileStrip — the dense [group, bin] tile grid,
+  // the third and last resident product. It is the only one whose view reads
+  // NOTHING back: the strip's y range is the group-row count, so there is no
+  // summary round trip to race.
+  //
+  // MEASURED the same way as the two above: 62.9% with the tile kernel
+  // dispatching, 3.7% with it dead. The 3.7% is worth stating plainly, because
+  // this surface shipped at exactly that number — see resident_tile.tsx. The
+  // product was reachable but had never been mounted in a browser, and both of
+  // the bugs that made it invisible (the wrong Face component, and missing
+  // `side: "both"`) are silent: no console output, no page error, correct
+  // buffers on the GPU. Only a pixel floor sees them, which is the whole reason
+  // gggplot-vs7.12 asked for this entry.
+  { match: "Three stacked rows of tiles", min: 0.25 },
+  // examples_stats.tsx :: residentInlineBars — the same stat_count grid as the
+  // first entry, in its INLINE MARK form rather than its standalone view (an
+  // explicit y domain is what selects it). Until gggplot-vs7.1 this form had no
+  // example and no floor anywhere, so the only resident code path a gate could
+  // see was the view; that is the same blind spot the tile strip sat in, and
+  // that one turned out to be drawing nothing at all.
+  //
+  // MEASURED: 74.6% with the kernel dispatching, 1.4% with it dead. The live
+  // figure is a arithmetic check in itself — four 0.9-wide bars of 5000 against
+  // a pinned [0, 6000] range is 0.9 * 5/6 = 75% of the plot area. Because the
+  // range is PINNED, this surface is also the one entry here that a collapsed
+  // y-range cannot inflate.
+  { match: "Four equal blue bars", min: 0.25 },
 ];
 
 const host = "127.0.0.1";
