@@ -42,7 +42,6 @@ import {
   Stage,
   useDeviceContext,
   useMemo,
-  yeet,
 } from "./usegpu_compat.ts";
 
 /** A histogram position, as the shader args spell it. */
@@ -97,8 +96,6 @@ export interface HistogramKernelsProps {
   /** The mounted group column; absent collapses the grid to one group. */
   groups?: GPUStorageSource;
   position: HistogramPosition;
-  /** Opened once this version's passes have been encoded. */
-  onEncoded: (version: number) => void;
 }
 
 /**
@@ -120,7 +117,7 @@ export interface HistogramKernelsProps {
  * useInitialDispatch, whose guard re-arms only when `version` changes.
  */
 export const HistogramKernels = (
-  { product, values, groups, position, onEncoded }: HistogramKernelsProps,
+  { product, values, groups, position }: HistogramKernelsProps,
 ): LiveElement => {
   const version = product.version;
   const device = useDeviceContext();
@@ -206,9 +203,10 @@ export const HistogramKernels = (
   const binwidth = product.binGeometry?.binwidth ?? 1;
   // An empty grid has nothing to clear, accumulate or lay out, and the raw
   // executor's own passes would all no-op on it (each body guards on
-  // getSize().x). Skipping them keeps the two surfaces recording the same work
-  // — while the encoded signal still fires, so a gated summary readback
-  // resolves instead of hanging.
+  // getSize().x). Skipping them keeps the two surfaces recording the same work.
+  // The summary readback still resolves: an empty grid can only summarize to
+  // zero, and decideGridSummary accepts zero immediately when no nonzero answer
+  // is possible.
   const passes = bindings.cells === 0 ? [] : [
     createElement(
       Stage,
@@ -303,18 +301,5 @@ export const HistogramKernels = (
     Fragment,
     {},
     ...passes,
-    // Declared AFTER the passes on purpose: gathered in tree order, so this
-    // runs once they have been encoded into the frame's single submit. A
-    // readback awaiting the signal then enqueues its copy behind that submit.
-    createElement(HistogramEncoded, { version, onEncoded }),
   ) as LiveElement;
 };
-
-const HistogramEncoded = (
-  { version, onEncoded }: { version: number; onEncoded: (v: number) => void },
-): LiveElement =>
-  yeet({
-    compute: () => {
-      onEncoded(version);
-    },
-  });

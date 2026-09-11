@@ -38,7 +38,6 @@ import {
   Stage,
   useDeviceContext,
   useMemo,
-  yeet,
 } from "./usegpu_compat.ts";
 
 /**
@@ -90,8 +89,6 @@ export interface CountKernelsProps {
   /** The mounted group column; absent collapses the grid to one group. */
   groups?: GPUStorageSource;
   position: CountPosition;
-  /** Opened once this version's passes have been encoded. */
-  onEncoded: (version: number) => void;
 }
 
 /**
@@ -112,7 +109,7 @@ export interface CountKernelsProps {
  * useInitialDispatch, whose guard re-arms only when `version` changes.
  */
 export const CountKernels = (
-  { product, values, groups, position, onEncoded }: CountKernelsProps,
+  { product, values, groups, position }: CountKernelsProps,
 ): LiveElement => {
   const version = product.version;
   const device = useDeviceContext();
@@ -194,8 +191,9 @@ export const CountKernels = (
   // An empty grid has nothing to clear, accumulate or lay out, and the raw
   // executor records no commands at all for it. Every pass below would be a
   // no-op anyway (each body guards on getSize().x), but skipping them keeps the
-  // two surfaces recording the same work — while the encoded signal still
-  // fires, so a gated summary readback resolves instead of hanging.
+  // two surfaces recording the same work. The summary readback still resolves:
+  // an empty grid can only summarize to zero, and decideGridSummary accepts
+  // zero immediately when no nonzero answer is possible.
   const passes = bindings.cells === 0 ? [] : [
     createElement(
       Stage,
@@ -273,18 +271,5 @@ export const CountKernels = (
     Fragment,
     {},
     ...passes,
-    // Declared AFTER the passes on purpose: gathered in tree order, so this
-    // runs once they have been encoded into the frame's single submit. A
-    // readback awaiting the signal then enqueues its copy behind that submit.
-    createElement(CountEncoded, { version, onEncoded }),
   ) as LiveElement;
 };
-
-const CountEncoded = (
-  { version, onEncoded }: { version: number; onEncoded: (v: number) => void },
-): LiveElement =>
-  yeet({
-    compute: () => {
-      onEncoded(version);
-    },
-  });

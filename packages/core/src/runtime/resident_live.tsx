@@ -59,7 +59,6 @@ const grid: ResidentGrid<
     ),
   binsOf: (resident) => resident.bins,
   tileVerticesOf: (resident) => resident.tileVertices,
-  readSummary: (resident) => resident.readbackSummary(),
   optionKeys: (options) => [
     options.lo,
     options.hi,
