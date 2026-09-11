@@ -7,25 +7,15 @@ import type { ResidentDomain1DResult } from "@gggplot/reductions";
 import type { TypedDataFrame } from "../data/mod.ts";
 import type { Theme } from "../ir/types.ts";
 import type { ResidentHistogramOptions } from "../compile/resident.ts";
-import { GPUDataProvider } from "./live.tsx";
-import {
-  type ResidentDomainProduct,
-  ResidentDomainProvider,
-} from "./resident_domain_live.tsx";
-import { paletteToRgbaF32, ResidentHistogramBars } from "./resident_bar.tsx";
-import {
-  type ResidentHistogramProduct,
-  ResidentHistogramProvider,
-} from "./resident_live.tsx";
-import { useHoistedProduct } from "./resident_host.tsx";
-import type { GPUStorageSource } from "./types.ts";
+import { ResidentHistogramBars } from "./resident_bar.tsx";
+import type { ResidentHistogramProduct } from "./resident_live.tsx";
+import { useHoistedProduct } from "./resident_products.ts";
 import {
   Axis,
   Cartesian,
   createElement,
   Grid,
   useAwait,
-  useMemo,
 } from "./usegpu_compat.ts";
 
 export function histogramRange(min: number, max: number): [number, number] {
@@ -51,13 +41,7 @@ export interface ResidentHistogramViewProps {
   residentId?: number;
 }
 
-interface AwaitDomainProps extends Omit<ResidentHistogramViewProps, "data"> {
-  xSource: GPUStorageSource;
-  groupSource?: GPUStorageSource;
-  domain: ResidentDomainProduct;
-}
-
-interface AwaitSummaryProps extends Omit<AwaitDomainProps, "domain"> {
+interface AwaitSummaryProps extends Omit<ResidentHistogramViewProps, "data"> {
   product: ResidentHistogramProduct;
   xRange: [number, number];
 }
@@ -100,105 +84,37 @@ const AwaitSummaryView = (
   return createElement(Cartesian, { range: [xRange, yRange], axes }, ...guides);
 };
 
-const AwaitDomainView = (
-  { domain, xSource, groupSource, options, color, opacity, axes, theme }:
-    AwaitDomainProps,
-): LiveElement => {
-  const [bounds, error] = useAwait(() => domain.readDomain(), [
-    domain.domain.version,
-  ]);
-  if (error) throw error;
-  if (!bounds || bounds.empty) return null as never;
-  const resolved = {
-    ...options,
-    lo: bounds.min,
-    hi: bounds.max,
-    autoDomain: undefined,
-  } as never;
-  return createElement(ResidentHistogramProvider, {
-    x: xSource,
-    group: groupSource,
-    options: resolved,
-    children: (product: ResidentHistogramProduct) =>
-      createElement(AwaitSummaryView, {
-        product,
-        xRange: histogramRange(bounds.min, bounds.max),
-        color,
-        opacity,
-        axes,
-        theme,
-      }),
-  });
-};
-
 /** Awaits bounded domain/summary products before mounting Cartesian and guides. */
 export const ResidentHistogramView = (
-  {
-    data,
-    x,
-    group,
-    options,
-    color,
-    opacity,
-    paletteColors,
-    axes,
-    theme,
-    residentId,
-  }: ResidentHistogramViewProps,
+  { color, opacity, axes, theme, residentId }: ResidentHistogramViewProps,
 ): LiveElement => {
-  // Runs unconditionally to keep hook order stable; null when not hoisted, and
-  // also null on the first frame of a hoisted node, while its x bounds are
-  // still being read back off the GPU.
+  // Runs unconditionally to keep hook order stable; null on the first frame of
+  // a hoisted node, while its x bounds are still being read back off the GPU.
   const hoisted = useHoistedProduct<
     ResidentHistogramProduct & { hoistedBounds: ResidentDomain1DResult }
   >(residentId);
-  const palette = useMemo(
-    () =>
-      paletteColors ? paletteToRgbaF32(paletteColors, opacity ?? 1) : undefined,
-    [paletteColors?.join(","), opacity],
-  );
-  const viewOptions = useMemo(
-    () => (palette ? { ...options, palette } : options),
-    [options, palette],
-  );
-  options = viewOptions;
-  const fields = [
-    { name: x, dtype: "f32", shape: "row", dimensions: ["row"] },
-    ...(group
-      ? [{ name: group, dtype: "u32", shape: "row", dimensions: ["row"] }]
-      : []),
-  ];
-  if (typeof residentId === "number") {
-    if (!hoisted) return null as never;
-    return createElement(AwaitSummaryView, {
-      product: hoisted,
-      xRange: histogramRange(
-        hoisted.hoistedBounds.min,
-        hoisted.hoistedBounds.max,
-      ),
-      color,
-      opacity,
-      axes,
-      theme,
-    });
+  if (typeof residentId !== "number") {
+    // Not hoisted, which for a resident product now means misconfigured: its id
+    // is missing from resident_host.tsx's HOISTED_PRODUCTS, so nothing built
+    // its kernel and nothing will dispatch it. This used to fall back to
+    // building the kernel in place; that path is gone with gggplot-vs7.1, and
+    // failing here beats rendering an empty chart — which is exactly how the
+    // tile product hid two bugs (gggplot-vs7.12).
+    throw new Error(
+      "[gggplot] a resident view was mounted without a hoisted product; " +
+        "add its product id to HOISTED_PRODUCTS in runtime/resident_host.tsx",
+    );
   }
-  return createElement(GPUDataProvider, {
-    data,
-    fields,
-    children: (sources: Record<string, GPUStorageSource>) =>
-      createElement(ResidentDomainProvider, {
-        x: sources[x],
-        children: (domain: ResidentDomainProduct) =>
-          createElement(AwaitDomainView, {
-            domain,
-            xSource: sources[x],
-            groupSource: group ? sources[group] : undefined,
-            options,
-            color,
-            opacity,
-            axes,
-            theme,
-          }),
-      }),
+  if (!hoisted) return null as never;
+  return createElement(AwaitSummaryView, {
+    product: hoisted,
+    xRange: histogramRange(
+      hoisted.hoistedBounds.min,
+      hoisted.hoistedBounds.max,
+    ),
+    color,
+    opacity,
+    axes,
+    theme,
   });
 };

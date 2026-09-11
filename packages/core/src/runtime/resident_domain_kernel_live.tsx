@@ -17,6 +17,7 @@ import {
   DOMAIN_CLEAR_KERNEL,
   FINITE_DOMAIN_1D_KERNEL,
 } from "../render/resident_domain_kernel.ts";
+import { abandonedReadback } from "./resident_grid_pending.ts";
 import {
   createElement,
   Fragment,
@@ -88,14 +89,27 @@ export async function readDomainBuffer(
  * finishes, so the first pass after mount can run with the kernels absent. That
  * is invisible from outside — the pass ran, the callbacks fired, and the buffer
  * is simply still untouched. So poll the unambiguous all-zero sentinel instead
- * of trusting the pass, backing off a frame at a time.
+ * of trusting the pass, backing off a frame at a time. Unlike a grid summary
+ * this sentinel is free and exact: the clear pass SEEDS slot 0 with 0xffffffff,
+ * so all-zero can only mean "these kernels have not dispatched".
+ *
+ * `alive` is checked before EVERY read, and it is not optional. This poll spans
+ * frames by design, and the accumulator is a <ComputeBuffer> that Use.GPU
+ * destroys when the subtree unmounts — so a route change lands a
+ * copyBufferToBuffer on a destroyed buffer, which Dawn reports as "used in
+ * submit while destroyed". That is a console-level validation error rather than
+ * an exception, so it fails the visual gate and nothing else; the grid summary
+ * hit it for real in gggplot-vs7.8. Callers pass `useAwait`'s own `cancelled`
+ * predicate, which Live flips on unmount or a dependency change.
  */
 export async function awaitDomain(
   device: GPUDevice,
   buffer: GPUBuffer,
+  alive: () => boolean,
   frames = 600,
 ): Promise<ResidentDomain1DResult> {
   for (let attempt = 0; attempt < frames; attempt++) {
+    if (!alive()) return abandonedReadback<ResidentDomain1DResult>();
     const { result, pending } = await readDomainBuffer(device, buffer);
     if (!pending) return result;
     await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));

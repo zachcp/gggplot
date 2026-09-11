@@ -70,12 +70,6 @@ const grid: ResidentGrid<
     options.palette,
   ],
   xDtype: "f32",
-  resolveAutoDomain: (options, bounds) => ({
-    ...options,
-    lo: bounds.min,
-    hi: bounds.max,
-    autoDomain: undefined,
-  }),
 });
 
 /**

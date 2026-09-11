@@ -2,6 +2,7 @@ import {
   CLEAR_U32_WGSL,
   COUNT_BAR_VERTICES_WGSL,
   GRID_BAR_VERTEX_COLORS_WGSL,
+  gridPositionCode,
   GROUPED_COUNT_1D_WGSL,
   HISTOGRAM_SUMMARY_WGSL,
 } from "../wgsl.ts";
@@ -32,6 +33,14 @@ export interface ResidentCount1D {
   barVertices: GPUBuffer;
   /** Per-vertex RGBA bar colors; present only when created with a `palette`. */
   barColors: GPUBuffer | undefined;
+  /**
+   * The uploaded per-group RGBA palette; present only when created with one.
+   *
+   * Exposed because the MOUNTED path binds it itself: the <Kernel> port drives
+   * the colour pass from this buffer instead of through this object's own bind
+   * group (gggplot-vs7.7). The standalone executor still binds it internally.
+   */
+  palette: GPUBuffer | undefined;
   summary: GPUBuffer;
   valuesCount: number;
   groupsCount: number;
@@ -70,13 +79,7 @@ export function createResidentCount1DFromSources(
   paramsView.setUint32(4, valuesCount, true);
   paramsView.setUint32(8, groupsCount, true);
   paramsView.setUint32(12, input.groupIds ? 1 : 0, true);
-  paramsView.setUint32(
-    24,
-    ({ identity: 0, stack: 1, dodge: 2, fill: 3 } as const)[
-      input.position ?? "stack"
-    ],
-    true,
-  );
+  paramsView.setUint32(24, gridPositionCode(input.position), true);
   const params = uniform(device, paramsData);
   const clearParams = uniform(device, new Uint32Array([cells, 0, 0, 0]).buffer);
   const summaryClearParams = uniform(
@@ -105,61 +108,95 @@ export function createResidentCount1DFromSources(
     })
     : undefined;
   const groups = input.groupIds ?? input.valueIds;
-  const pipeline = (code: string) =>
-    device.createComputePipeline({
-      layout: "auto",
-      compute: {
-        module: device.createShaderModule({ code }),
-        entryPoint: "main",
-      },
-    });
-  const clear = pipeline(CLEAR_U32_WGSL);
-  const count = pipeline(GROUPED_COUNT_1D_WGSL);
-  const bars = pipeline(COUNT_BAR_VERTICES_WGSL);
-  const summarize = pipeline(HISTOGRAM_SUMMARY_WGSL);
-  const colorize = palette ? pipeline(GRID_BAR_VERTEX_COLORS_WGSL) : undefined;
-  const bind = (p: GPUComputePipeline, entries: GPUBindGroupEntry[]) =>
-    device.createBindGroup({ layout: p.getBindGroupLayout(0), entries });
-  const clearBind = bind(clear, [{ binding: 0, resource: { buffer: counts } }, {
-    binding: 1,
-    resource: { buffer: clearParams },
-  }]);
-  const countBind = bind(count, [
-    { binding: 0, resource: { buffer: input.valueIds } },
-    { binding: 1, resource: { buffer: groups } },
-    { binding: 2, resource: { buffer: counts } },
-    { binding: 3, resource: { buffer: params } },
-  ]);
-  const summaryClearBind = bind(clear, [{
-    binding: 0,
-    resource: { buffer: summary },
-  }, { binding: 1, resource: { buffer: summaryClearParams } }]);
-  const summaryBind = bind(summarize, [
-    { binding: 0, resource: { buffer: counts } },
-    { binding: 1, resource: { buffer: summary } },
-    { binding: 2, resource: { buffer: params } },
-  ]);
-  const barsBind = bind(bars, [
-    { binding: 0, resource: { buffer: counts } },
-    {
+
+  /**
+   * The standalone executor's pipelines and bind groups, built ON FIRST
+   * `encode()` rather than at construction.
+   *
+   * The MOUNTED path no longer dispatches through them: it drives the same five
+   * pass bodies as <Kernel>s bound by Use.GPU's linker (gggplot-vs7.7), and
+   * reaches into this object only for its buffers. So constructing five
+   * pipelines here would be five shader compiles that nothing ever runs — and
+   * `resident_grid.tsx` recreates the whole kernel on any option change, so it
+   * would pay them again on every one. Deferring makes the mounted path free
+   * while leaving the headless CPU/GPU parity harness bit-identical.
+   */
+  const buildPasses = () => {
+    const pipeline = (code: string) =>
+      device.createComputePipeline({
+        layout: "auto",
+        compute: {
+          module: device.createShaderModule({ code }),
+          entryPoint: "main",
+        },
+      });
+    const clear = pipeline(CLEAR_U32_WGSL);
+    const count = pipeline(GROUPED_COUNT_1D_WGSL);
+    const bars = pipeline(COUNT_BAR_VERTICES_WGSL);
+    const summarize = pipeline(HISTOGRAM_SUMMARY_WGSL);
+    const colorize = palette
+      ? pipeline(GRID_BAR_VERTEX_COLORS_WGSL)
+      : undefined;
+    const bind = (p: GPUComputePipeline, entries: GPUBindGroupEntry[]) =>
+      device.createBindGroup({ layout: p.getBindGroupLayout(0), entries });
+    const clearBind = bind(clear, [{
+      binding: 0,
+      resource: { buffer: counts },
+    }, {
       binding: 1,
-      resource: { buffer: barVertices },
-      // Dodge slotting reads per-group totals; the summarize pass runs earlier
-      // in the same encoder, so this pass observes the current totals.
-    },
-    { binding: 2, resource: { buffer: params } },
-    {
-      binding: 3,
+      resource: { buffer: clearParams },
+    }]);
+    const countBind = bind(count, [
+      { binding: 0, resource: { buffer: input.valueIds } },
+      { binding: 1, resource: { buffer: groups } },
+      { binding: 2, resource: { buffer: counts } },
+      { binding: 3, resource: { buffer: params } },
+    ]);
+    const summaryClearBind = bind(clear, [{
+      binding: 0,
       resource: { buffer: summary },
-    },
-  ]);
-  const colorBind = colorize && barColors && palette
-    ? bind(colorize, [
-      { binding: 0, resource: { buffer: palette } },
-      { binding: 1, resource: { buffer: barColors } },
+    }, { binding: 1, resource: { buffer: summaryClearParams } }]);
+    const summaryBind = bind(summarize, [
+      { binding: 0, resource: { buffer: counts } },
+      { binding: 1, resource: { buffer: summary } },
       { binding: 2, resource: { buffer: params } },
-    ])
-    : undefined;
+    ]);
+    const barsBind = bind(bars, [
+      { binding: 0, resource: { buffer: counts } },
+      {
+        binding: 1,
+        resource: { buffer: barVertices },
+        // Dodge slotting reads per-group totals; the summarize pass runs earlier
+        // in the same encoder, so this pass observes the current totals.
+      },
+      { binding: 2, resource: { buffer: params } },
+      {
+        binding: 3,
+        resource: { buffer: summary },
+      },
+    ]);
+    const colorBind = colorize && barColors && palette
+      ? bind(colorize, [
+        { binding: 0, resource: { buffer: palette } },
+        { binding: 1, resource: { buffer: barColors } },
+        { binding: 2, resource: { buffer: params } },
+      ])
+      : undefined;
+    return {
+      clear,
+      count,
+      bars,
+      summarize,
+      colorize,
+      clearBind,
+      countBind,
+      summaryClearBind,
+      summaryBind,
+      barsBind,
+      colorBind,
+    };
+  };
+  let passes: ReturnType<typeof buildPasses> | undefined;
 
   // A zero-length count grid never touches the GPU; every other read (always a
   // multiple of four bytes) is byte-identical to the shared staging helper.
@@ -173,6 +210,20 @@ export function createResidentCount1DFromSources(
       : readBuffer(device, source, bytes, create);
   const encode = (): GPUCommandBuffer | null => {
     if (cells === 0) return null;
+    passes ??= buildPasses();
+    const {
+      clear,
+      count,
+      bars,
+      summarize,
+      colorize,
+      clearBind,
+      countBind,
+      summaryClearBind,
+      summaryBind,
+      barsBind,
+      colorBind,
+    } = passes;
     const encoder = device.createCommandEncoder();
     const run = (p: GPUComputePipeline, b: GPUBindGroup, n: number) => {
       const pass = encoder.beginComputePass();
@@ -194,6 +245,7 @@ export function createResidentCount1DFromSources(
     counts,
     barVertices,
     barColors,
+    palette,
     summary,
     valuesCount,
     groupsCount,

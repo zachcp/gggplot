@@ -5,6 +5,29 @@ import type {
 } from "./types.ts";
 
 /**
+ * The `position` codes the grid bar/summary bodies compare against.
+ *
+ * Part of the WGSL contract, not a caller convenience: `GRID_SUMMARY_BODY` and
+ * `COUNT_BAR_VERTICES_BODY` branch on the literals `1u`/`2u`/`3u`, so the
+ * mapping belongs beside the bodies that read it. Both surfaces go through
+ * here — the standalone executor packs the code into its params uniform and
+ * <Kernel> passes the same number as an arg.
+ */
+export const GRID_POSITION_CODES = {
+  identity: 0,
+  stack: 1,
+  dodge: 2,
+  fill: 3,
+} as const;
+
+/** The code for a position, defaulting to `stack` as every grid pass does. */
+export function gridPositionCode(
+  position: keyof typeof GRID_POSITION_CODES | undefined,
+): number {
+  return GRID_POSITION_CODES[position ?? "stack"];
+}
+
+/**
  * Shared pass BODY for the u32 grid clear, with no bindings of its own.
  *
  * Dual surface, same rule as DOMAIN_CLEAR_BODY: reach the length through
@@ -569,16 +592,16 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /**
  * Hand-numbered preamble for the standalone executor.
  *
- * Binding 0 is declared but never read, which is deliberate and load-bearing:
- * it keeps this preamble identical to the other grid passes, and
- * resident_histogram.ts's tile bind group already compensates by OMITTING it,
- * because Dawn drops a declared-but-unused binding from an `auto` layout and
- * binding it anyway invalidates the whole command buffer.
+ * DELIBERATELY NARROWER than the other grid passes: this pass derives a purely
+ * geometric grid and reads no counts, so it declares no count binding at all.
  *
- * The linked form has no such problem — the shader linker generates bindings
- * from actual links, so an unused one cannot be emitted. Once the mounted
- * histogram runs on <Kernel> (gggplot-vs7.8) this declaration and that omission
- * can both go.
+ * It used to declare an unused `countsStorage` at binding 0 for symmetry with
+ * its siblings, and that cost real debugging time — Dawn drops a
+ * declared-but-unused binding from an `auto` layout, so binding it anyway
+ * invalidated the whole command buffer on browser adapters, and
+ * resident_histogram.ts carried a bind group that had to OMIT binding 0 to
+ * compensate. Both are gone (gggplot-vs7.8). Do not reintroduce the
+ * declaration for symmetry's sake.
  */
 export const HISTOGRAM_TILE_VERTICES_RAW_PREAMBLE: string = `
 struct HistogramParams {
@@ -591,9 +614,8 @@ struct HistogramParams {
   position: u32,
 };
 
-@group(0) @binding(0) var<storage, read> countsStorage: array<u32>;
-@group(0) @binding(1) var<storage, read_write> vertices: array<vec2<f32>>;
-@group(0) @binding(2) var<uniform> params: HistogramParams;
+@group(0) @binding(0) var<storage, read_write> vertices: array<vec2<f32>>;
+@group(0) @binding(1) var<uniform> params: HistogramParams;
 
 fn getSize() -> vec2<u32> {
   return vec2<u32>(params.groups * params.bins, 1u);

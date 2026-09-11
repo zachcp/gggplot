@@ -63,6 +63,6 @@ export type ResidentHistogramOptions =
   & {
     lo?: number;
     hi?: number;
-    /** Resolve x bounds through ResidentDomainProvider rather than CPU scanning. */
+    /** Resolve x bounds with the on-GPU domain kernels rather than CPU scanning. */
     autoDomain?: boolean;
   };

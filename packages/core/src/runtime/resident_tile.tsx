@@ -5,10 +5,18 @@
 import type { LiveElement } from "@use-gpu/live";
 import type { ResidentHistogramProduct } from "./resident_live.tsx";
 import type { GPUStorageSource } from "./types.ts";
+import { parseColorRGBA } from "../color/mod.ts";
 import { histogramBarChunks } from "./resident_bar.tsx";
 import {
   createElement,
-  Face,
+  // The WORKBENCH layer, not @use-gpu/plot's <Face>. They are different
+  // components with the same name: plot's parses its props through FaceTraits
+  // and quotes them into the plot layer tree, so handing it a `useSource`
+  // shader source (which is what a resident buffer is) draws NOTHING and
+  // reports nothing — this mark shipped that way until gggplot-vs7.12 put it on
+  // a page and the pixel floor measured 3.7%, i.e. axes only. resident_bar.tsx
+  // binds FaceLayer for the same reason.
+  FaceLayer as Face,
   useFaceSegmentsSource,
   useOne,
   useSource,
@@ -52,6 +60,14 @@ export const ResidentHistogramTiles = (
     segments,
     chunks,
     // Per-group palette when present; otherwise the single scalar fill color.
-    ...(colors ? { colors: colorSource } : { color, opacity }),
+    // The scalar form must be PARSED RGBA, not the hex string: FaceLayer draws
+    // an unparsed string as pure black, which is the sentinel mark_pixel_check
+    // watches for.
+    ...(colors
+      ? { colors: colorSource }
+      : { color: parseColorRGBA(color ?? "#3b82f6", opacity ?? 1) }),
+    // Draw both windings. Without this the quads are back-face culled and the
+    // strip is invisible — the same reason ResidentHistogramBars passes it.
+    side: "both",
   });
 };

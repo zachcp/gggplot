@@ -20,6 +20,7 @@ import {
   scaleSize,
   scaleXLog10,
   scaleXSqrt,
+  scaleYContinuous,
   theme,
   themeClassic,
   themeGrey,
@@ -85,6 +86,28 @@ export const residentCategoricalCount: DocExample = {
   .build();`,
   spec: ggplot(residentCountData, { x: "category" })
     .add(geomBar({ fill: "#2563eb" }))
+    .build(),
+};
+
+export const residentInlineBars: DocExample = {
+  id: "ResidentInlineBars",
+  title: "GPU-resident counts as an inline mark",
+  description:
+    "The same resident stat_count grid as above, but with the y domain pinned so the panel owns the scale instead of the product.",
+  visualSummary:
+    "Four equal blue bars, one per category, reaching five-sixths of the way up a y axis that runs to 6000.",
+  whatChanged:
+    "Pinning y with scaleYContinuous switches the resident product from its standalone VIEW form to its inline MARK form. The view resolves its own y range from a stacked-maximum summary read back off the GPU; the mark cannot, because the panel already has a trained y domain, so it contributes bar topology only and reads nothing back. Same kernel, same resident grid — the difference is who owns the scale.",
+  executionDetail:
+    "barResidentPlan sets standaloneView from autoYDomain, so an explicit y domain is exactly what selects the mark form. This is the form a multi-layer or faceted panel would use, which is why it is documented next to the view rather than left implicit.",
+  dslSource: `ggplot(data, { x: "category" })
+  .add(geomBar({ fill: "#2563eb" }), scaleYContinuous({ domain: [0, 6000] }))
+  .build();`,
+  spec: ggplot(residentCountData, { x: "category" })
+    .add(
+      geomBar({ fill: "#2563eb" }),
+      scaleYContinuous({ domain: [0, 6000] }),
+    )
     .build(),
 };
 
@@ -200,6 +223,28 @@ export const tileHeatmap: DocExample = {
   spec: ggplot(heatmapData, { x: "x", y: "y", fill: "value" })
     .add(geomTile())
     .build(),
+};
+
+export const residentTileStrip: DocExample = {
+  id: "ResidentTileStrip",
+  title: "GPU-resident binned tile strip",
+  description:
+    "The same iris sepal-length binning as the grouped histogram, laid out as a dense cell grid with one row per species.",
+  visualSummary:
+    "Three stacked rows of tiles, one row per iris species, each row a twenty-bin strip across sepal length.",
+  whatChanged:
+    'geomTile({ stat: "bin" }) with a numeric x, a factor fill and NO y mapping selects the dense [group, bin] tile product. The kernel writes every cell into its own tileVertices buffer, so no count crosses back to the CPU — and unlike the bar views this one reads nothing back at all, because the y range is simply the group-row count. Read this as grid GEOMETRY rather than as a heatmap: every cell in a row currently takes that row\'s palette color, so each species shows as one solid band. Shading a cell by its own count needs a fill scale the shader can evaluate, which does not exist yet; until then the grouped histogram above is the view that shows the distribution.',
+  executionDetail:
+    "The combination is an explicit opt-in: no DSL helper defaults a tile layer to stat \"bin\". It is offered only as a standalone view, because the strip's y range is the statically known [0, groups] and an inline panel mark would fight the panel's trained y domain. With execution({ resident: false }) the same spec routes through statBin into lowerTile and draws (bin center, count) cells instead of a per-group strip, so the resident path is the authoritative renderer for this spec rather than an optimization of it.",
+  dslSource: `const data = await loadStaticDataset("iris");
+ggplot(data, { x: "Sepal.Length", fill: "Species" })
+  .add(geomTile({ stat: "bin", bins: 20 }))
+  .build();`,
+  dataSource: { id: "iris" },
+  buildSpec: (data) =>
+    ggplot(data, { x: "Sepal.Length", fill: "Species" })
+      .add(geomTile({ stat: "bin", bins: 20 }))
+      .build(),
 };
 
 export const annotationComposite: DocExample = {
