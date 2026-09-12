@@ -5,7 +5,7 @@
 // The largest of the three ports, and structurally the count port plus a tile
 // pass: see resident_count_kernel_live.tsx for the pattern and
 // render/resident_grid_kernels.ts for the two binding preambles each body
-// compiles under. Three of these seven passes (the u32 clear, the summary and
+// compiles under. Three of these eight passes (the u32 clear, the summary and
 // the palette expansion) are the SAME bundles the count grid drives.
 //
 // As there, no <ComputeBuffer> is needed — every buffer already belongs to the
@@ -22,6 +22,7 @@ import { gridPositionCode } from "@gggplot/reductions";
 import {
   CLEAR_U32_KERNEL,
   GRID_BAR_VERTEX_COLORS_KERNEL,
+  GRID_HEATMAP_COLORS_KERNEL,
   GRID_SUMMARY_KERNEL,
   GROUPED_HISTOGRAM_1D_KERNEL,
   HISTOGRAM_BAR_VERTICES_KERNEL,
@@ -48,7 +49,7 @@ import {
 export type HistogramPosition = "identity" | "stack" | "dodge" | "fill";
 
 /**
- * Everything the seven passes bind, built once per buffer set.
+ * Everything the eight passes bind, built once per buffer set.
  *
  * Identity-stable on purpose: <Kernel> memoizes its linked shader on
  * `[shader, targets, source, sources, size, ...]` BY IDENTITY, so a freshly
@@ -76,7 +77,9 @@ interface HistogramKernelBindings {
   barVertices: StorageTarget;
   tileVertices: StorageTarget;
   barColors?: StorageTarget;
-  /** [counts, summary] for the bar-vertex pass, in its declared order. */
+  /** Per-cell heatmap colors; unconditional, unlike `barColors`. */
+  heatmapColors: StorageTarget;
+  /** [counts, summary] for the bar-vertex and heatmap-color passes. */
   gridSources: readonly GPUStorageSource[];
   /** The x column, then the group column (which falls back to x when absent). */
   binSources: readonly GPUStorageSource[];
@@ -99,16 +102,18 @@ export interface HistogramKernelsProps {
 }
 
 /**
- * Mounts the bin grid's seven passes against the kernel's own buffers.
+ * Mounts the bin grid's eight passes against the kernel's own buffers.
  *
  * ORDER IS THE SCHEDULE. ComputePass gathers every `compute` call below it and
  * runs them in TREE ORDER into one pass encoder, so declaration order here is
  * the dispatch order: clear the grid, accumulate it, clear the summary,
- * summarize, lay out the bars, lay out the tiles, expand the colours.
- * `summarize` must stay strictly before the bar-vertex pass — dodge layout
- * reads each group's total through getSummary to decide which groups are
- * present, and reading a half-cleared summary would slot the bars into the
- * wrong sub-bands. Intra-pass read-after-write visibility is what makes one
+ * summarize, lay out the bars, lay out the tiles, shade the heatmap, expand
+ * the per-group palette colours. `summarize` must stay strictly before the
+ * bar-vertex pass — dodge layout reads each group's total through getSummary
+ * to decide which groups are present, and reading a half-cleared summary
+ * would slot the bars into the wrong sub-bands — and strictly before the
+ * heatmap pass too, which reads the same summary's stacked-maximum slot as
+ * its normalizer. Intra-pass read-after-write visibility is what makes one
  * encoder sufficient, and it is pinned by
  * packages/core/tests/usegpu_kernel_link_test.ts.
  *
@@ -156,6 +161,9 @@ export const HistogramKernels = (
       barColors: product.barColors
         ? target(product.barColors, "vec4<f32>", cells * 4)
         : undefined,
+      // Unconditional — the histogram grid always produces one, unlike
+      // barColors which needs a palette.
+      heatmapColors: target(product.heatmapColors!, "vec4<f32>", cells * 4),
       gridSources: [counts, summary],
       // The accumulation always binds two columns. With no group column the raw
       // executor binds x twice and zeroes hasGroups, so the shader reads the
@@ -180,6 +188,7 @@ export const HistogramKernels = (
     product.barVertices.buffer,
     product.tileVertices.buffer,
     product.barColors?.buffer,
+    product.heatmapColors?.buffer,
     product.palette?.buffer,
     values.buffer,
     values.length,
@@ -276,6 +285,18 @@ export const HistogramKernels = (
       createElement(Kernel, {
         shader: HISTOGRAM_TILE_VERTICES_KERNEL,
         args: [bindings.bins, lo, binwidth],
+        size: bindings.cellsSize,
+        initial: true,
+        version,
+      }),
+    ),
+    createElement(
+      Stage,
+      { target: bindings.heatmapColors },
+      createElement(Kernel, {
+        shader: GRID_HEATMAP_COLORS_KERNEL,
+        args: [bindings.groupsCount],
+        sources: bindings.gridSources,
         size: bindings.cellsSize,
         initial: true,
         version,

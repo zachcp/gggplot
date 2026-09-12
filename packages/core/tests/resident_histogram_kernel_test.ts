@@ -1,5 +1,6 @@
-// The MOUNTED stat_bin grid: all seven passes of runtime/resident_histogram_kernel_live.tsx
-// linked and dispatched into ONE compute pass, exactly as <Kernel> does (gggplot-vs7.8).
+// The MOUNTED stat_bin grid: all eight passes of runtime/resident_histogram_kernel_live.tsx
+// linked and dispatched into ONE compute pass, exactly as <Kernel> does (gggplot-vs7.8,
+// gggplot-vs7.18).
 //
 // The histogram counterpart of resident_count_kernel_test.ts, and it exists for
 // the same two reasons that file does — see its header for why value order and
@@ -29,6 +30,7 @@ import { gridPositionCode } from "@gggplot/reductions";
 import {
   CLEAR_U32_KERNEL,
   GRID_BAR_VERTEX_COLORS_KERNEL,
+  GRID_HEATMAP_COLORS_KERNEL,
   GRID_SUMMARY_KERNEL,
   GROUPED_HISTOGRAM_1D_KERNEL,
   HISTOGRAM_BAR_VERTICES_KERNEL,
@@ -166,7 +168,7 @@ async function read<T extends Uint32Array | Float32Array>(
   return values;
 }
 
-Deno.test("the mounted bin grid's seven passes produce stacked bars and tiles in one compute pass", async () => {
+Deno.test("the mounted bin grid's eight passes produce stacked bars and tiles in one compute pass", async () => {
   const device = await requestTestDevice();
   if (!device) return;
 
@@ -205,6 +207,7 @@ Deno.test("the mounted bin grid's seven passes produce stacked bars and tiles in
   const tilesBuffer = upload(new Float32Array(vertexFloats).fill(-1));
   const colorFloats = cells * 4 * 4;
   const colorsBuffer = upload(new Float32Array(colorFloats).fill(-1));
+  const heatmapBuffer = upload(new Float32Array(colorFloats).fill(-1));
 
   const source = (buffer: GPUBuffer, format: string, length: number) => ({
     buffer,
@@ -265,6 +268,13 @@ Deno.test("the mounted bin grid's seven passes produce stacked bars and tiles in
       lo,
       binwidth,
       target(tilesBuffer, "vec2<f32>", cells * 4),
+    ], cells),
+    linkPass(device, GRID_HEATMAP_COLORS_KERNEL, [
+      () => [cells, 1],
+      groupsCount,
+      counts,
+      summary,
+      target(heatmapBuffer, "vec4<f32>", cells * 4),
     ], cells),
     linkPass(device, GRID_BAR_VERTEX_COLORS_KERNEL, [
       () => [cells, 1],
@@ -367,6 +377,46 @@ Deno.test("the mounted bin grid's seven passes produce stacked bars and tiles in
     ],
   );
 
+  // Heatmap: same fixed five-stop ramp as GRID_HEATMAP_COLORS_BODY, indexed by
+  // each cell's own count against the grid's stacked maximum (3, from the
+  // summary above) — proving this pass composes with the other seven in one
+  // encoder, reading the SAME finalized counts/summary the bar-vertex pass
+  // does. Independently pinned in isolation (with an "identity" grid, where
+  // this normalizer is the true per-cell maximum) by resident_grid_link_test.ts.
+  const RAMP: readonly (readonly [number, number, number, number])[] = [
+    [0.8039, 0.8863, 0.9843, 1.0],
+    [0.5255, 0.7137, 0.9373, 1.0],
+    [0.2235, 0.5294, 0.8980, 1.0],
+    [0.1098, 0.3608, 0.6706, 1.0],
+    [0.0510, 0.2118, 0.4196, 1.0],
+  ];
+  const heatmapColor = (count: number, max: number): number[] => {
+    const t = max > 0 ? Math.min(1, Math.max(0, count / max)) : 0;
+    const scaled = t * 4;
+    const i0 = Math.floor(scaled);
+    const i1 = Math.min(i0 + 1, 4);
+    const frac = scaled - i0;
+    const from = RAMP[i0];
+    const to = RAMP[i1];
+    return from.map((v, i) => v + (to[i] - v) * frac);
+  };
+  // counts is [2, 1, 1, 2] (group-major), stacked maximum is 3.
+  const expectedHeatmap = [2, 1, 1, 2].flatMap((count) =>
+    Array.from({ length: 4 }, () => heatmapColor(count, 3)).flat()
+  );
+  const heatmap = [
+    ...await read(
+      device,
+      heatmapBuffer,
+      colorFloats,
+      (d) => new Float32Array(d),
+    ),
+  ];
+  assertEquals(heatmap.length, expectedHeatmap.length);
+  for (const [i, want] of expectedHeatmap.entries()) {
+    assertAlmostEquals(heatmap[i], want, 1e-3, `heatmap float ${i}`);
+  }
+
   for (
     const buffer of [
       valuesBuffer,
@@ -377,6 +427,7 @@ Deno.test("the mounted bin grid's seven passes produce stacked bars and tiles in
       barsBuffer,
       tilesBuffer,
       colorsBuffer,
+      heatmapBuffer,
     ]
   ) buffer.destroy();
   device.destroy();

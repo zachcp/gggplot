@@ -20,6 +20,7 @@ import {
   CLEAR_U32_KERNEL,
   COUNT_BAR_VERTICES_KERNEL,
   GRID_BAR_VERTEX_COLORS_KERNEL,
+  GRID_HEATMAP_COLORS_KERNEL,
   GRID_SUMMARY_KERNEL,
   GROUPED_COUNT_1D_KERNEL,
   GROUPED_HISTOGRAM_1D_KERNEL,
@@ -324,6 +325,102 @@ Deno.test("the linked palette expansion fills four vertices per cell", async () 
     Array.from({ length: 8 }, () => green).flat(),
   );
   paletteBuffer.destroy();
+  colorsBuffer.destroy();
+  device.destroy();
+});
+
+Deno.test("the linked heatmap-color pass shades each cell by its own count", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+
+  // Four cells with counts hitting exact ramp stops (0, 1/4, 2/4, 4/4 of the
+  // maximum) so the assertion pins the ramp's five stop colors directly,
+  // rather than an interpolated blend that would also pass under a
+  // differently-ordered ramp.
+  const groups = 2;
+  const cells = 4;
+  const counts = Uint32Array.from([0, 1, 2, 4]);
+  const countsBuffer = device.createBuffer({
+    size: counts.byteLength,
+    usage: USAGE.STORAGE | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(countsBuffer, 0, counts);
+
+  // groups + 1 slots; index `groups` (2) is the maximum this pass normalizes
+  // against — the same slot GRID_SUMMARY_BODY writes for an "identity" grid.
+  const summary = Uint32Array.from([0, 0, 4]);
+  const summaryBuffer = device.createBuffer({
+    size: summary.byteLength,
+    usage: USAGE.STORAGE | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(summaryBuffer, 0, summary);
+
+  const colorFloats = cells * 4 * 4;
+  const colorsBuffer = device.createBuffer({
+    size: colorFloats * 4,
+    usage: USAGE.STORAGE | USAGE.COPY_SRC | USAGE.COPY_DST,
+  });
+  device.queue.writeBuffer(colorsBuffer, 0, new Float32Array(colorFloats));
+
+  runLinked(
+    device,
+    GRID_HEATMAP_COLORS_KERNEL,
+    [
+      () => [cells, 1],
+      groups,
+      {
+        buffer: countsBuffer,
+        format: "u32",
+        length: counts.length,
+        size: [counts.length],
+        version: 1,
+      },
+      {
+        buffer: summaryBuffer,
+        format: "u32",
+        length: summary.length,
+        size: [summary.length],
+        version: 1,
+      },
+      {
+        buffer: colorsBuffer,
+        format: "vec4<f32>",
+        length: cells * 4,
+        size: [cells * 4],
+        version: 1,
+        readWrite: true,
+      },
+    ],
+    1,
+  );
+
+  const colors = [...await readF32(device, colorsBuffer, colorFloats)];
+  const stops = [
+    [0.8039, 0.8863, 0.9843, 1.0],
+    [0.5255, 0.7137, 0.9373, 1.0],
+    [0.2235, 0.5294, 0.8980, 1.0],
+    [0.0510, 0.2118, 0.4196, 1.0],
+  ];
+  // count 0 -> stop 0, count 1 (t=0.25) -> stop 1, count 2 (t=0.5) -> stop 2,
+  // count 4 (t=1.0) -> the last stop, each written to all four cell vertices.
+  const expectedStops = [stops[0], stops[1], stops[2], stops[3]];
+  for (let cell = 0; cell < 4; cell++) {
+    for (let vertex = 0; vertex < 4; vertex++) {
+      const base = (cell * 4 + vertex) * 4;
+      const got = colors.slice(base, base + 4);
+      const want = expectedStops[cell];
+      for (let i = 0; i < 4; i++) {
+        assert(
+          Math.abs(got[i] - want[i]) < 1e-3,
+          `cell ${cell} vertex ${vertex} channel ${i}: got ${got[i]}, want ${
+            want[i]
+          }`,
+        );
+      }
+    }
+  }
+  countsBuffer.destroy();
+  summaryBuffer.destroy();
   colorsBuffer.destroy();
   device.destroy();
 });

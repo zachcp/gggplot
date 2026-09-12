@@ -1,4 +1,4 @@
-import { assertEquals, assertExists } from "@std/assert";
+import { assert, assertEquals, assertExists } from "@std/assert";
 import {
   benchmarkResidentHistogram,
   createResidentCount1DFromSources,
@@ -283,9 +283,13 @@ Deno.test("resident histogram keeps its grid on-GPU and clears before every disp
   assertEquals(summary.byteLength, 12);
   assertEquals(resident.metrics(), {
     inputUploadBytes: 48,
-    derivedAllocationBytes: 284,
+    // +256 bytes for the unconditional heatmapColors buffer (gggplot-vs7.18):
+    // cells(4) * 4 vertices * 4 f32 channels * 4 bytes, rounded up to the
+    // buffer's 16-byte minimum where it would otherwise undershoot.
+    derivedAllocationBytes: 540,
     dispatches: 2,
-    computePasses: 12,
+    // +1 per dispatch for the unconditional heatmap-color pass.
+    computePasses: 14,
     readbackBytes: 160,
     summaryReadbackBytes: 12,
   });
@@ -472,8 +476,13 @@ Deno.test("resident histogram expands a per-group palette into per-vertex bar co
       assertEquals([...colors.slice(base, base + 4)], expected);
     }
   }
+  // +1 for the unconditional heatmap-color pass (gggplot-vs7.18).
   const paletteMetrics = withPalette.metrics();
-  assertEquals(paletteMetrics.computePasses, 7);
+  assertEquals(paletteMetrics.computePasses, 8);
+  // Unconditional: every dispatch fills heatmapColors, palette or not.
+  const heatmap = await withPalette.readbackHeatmapColors();
+  assertEquals(heatmap.length, 64);
+  for (const channel of heatmap) assert(Number.isFinite(channel));
   withPalette.destroy();
 
   // No palette → no color buffer, no extra allocation, no extra pass.
@@ -489,8 +498,11 @@ Deno.test("resident histogram expands a per-group palette into per-vertex bar co
   noPalette.dispatch();
   assertEquals(noPalette.barColors, undefined);
   assertEquals((await noPalette.readbackBarColors()).length, 0);
+  // Unconditional even with no palette: it needs no palette, only counts and
+  // summary, which every grid already has.
+  assertEquals((await noPalette.readbackHeatmapColors()).length, 64);
   const baseline = noPalette.metrics();
-  assertEquals(baseline.computePasses, 6);
+  assertEquals(baseline.computePasses, 7);
   assertEquals(
     paletteMetrics.derivedAllocationBytes > baseline.derivedAllocationBytes,
     true,
@@ -555,7 +567,8 @@ Deno.test("resident histogram benchmark reports GPU-only dispatch and render pat
 
   assertEquals(report.compileAllocationBytes, report.derivedAllocationBytes);
   assertEquals(report.inputUploadBytes, 32);
-  assertEquals(report.computePasses, 6);
+  // +1 for the unconditional heatmap-color pass (gggplot-vs7.18).
+  assertEquals(report.computePasses, 7);
   assertEquals(report.readbackBytes, 0);
   assertEquals(report.summaryReadbackBytes, 0);
   assertEquals(report.drawCount, 1);

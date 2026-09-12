@@ -783,6 +783,95 @@ fn getPaletteColor(i: u32) -> vec4<f32> {
 export const GRID_BAR_VERTEX_COLORS_WGSL: string =
   `${GRID_BAR_VERTEX_COLORS_RAW_PREAMBLE}\n\n${GRID_BAR_VERTEX_COLORS_BODY}`;
 
+/**
+ * Shades each cell of a [group, bin] grid by its OWN count, through a fixed
+ * five-stop sequential ramp baked directly into the body — unlike the palette
+ * expansion above, this pass needs no uploaded buffer at all, since both the
+ * ramp and the normalizing maximum are already resident: `getSummary` reads
+ * the same compact [group totals..., stacked maximum] buffer GRID_SUMMARY_BODY
+ * already wrote, at index `groups` (its last slot). That slot is the GLOBAL
+ * maximum single-cell count whenever the grid's position is "identity" — the
+ * fixed layout the tile geom always requests — because GRID_SUMMARY_BODY's
+ * else-branch takes `atomicMax` over every individual cell rather than a
+ * stacked or filled total. A grid built with any other position would still
+ * compile and dispatch, just against a normalizer that means something else
+ * (a stacked or per-bin-presence maximum), so this pass is only meaningful
+ * where getSummary's slot IS the true per-cell maximum.
+ *
+ * No source is optional here, unlike the palette pass: every resident grid
+ * already has counts and a summary, so this dispatches unconditionally, the
+ * same way the bar- and tile-vertex passes do.
+ */
+export const GRID_HEATMAP_COLORS_BODY: string = `
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let cell = global_id.x;
+  if (cell >= getSize().x) {
+    return;
+  }
+  let count = getCount(cell);
+  let maxCount = getSummary(getGroups());
+  let ramp = array<vec4<f32>, 5>(
+    vec4<f32>(0.8039, 0.8863, 0.9843, 1.0),
+    vec4<f32>(0.5255, 0.7137, 0.9373, 1.0),
+    vec4<f32>(0.2235, 0.5294, 0.8980, 1.0),
+    vec4<f32>(0.1098, 0.3608, 0.6706, 1.0),
+    vec4<f32>(0.0510, 0.2118, 0.4196, 1.0),
+  );
+  var t = 0.0;
+  if (maxCount > 0u) {
+    t = clamp(f32(count) / f32(maxCount), 0.0, 1.0);
+  }
+  let scaled = t * 4.0;
+  let i0 = u32(floor(scaled));
+  let i1 = min(i0 + 1u, 4u);
+  let frac = scaled - f32(i0);
+  let color = mix(ramp[i0], ramp[i1], frac);
+  let offset = cell * 4u;
+  colors[offset] = color;
+  colors[offset + 1u] = color;
+  colors[offset + 2u] = color;
+  colors[offset + 3u] = color;
+}
+`.trim();
+
+/** Hand-numbered preamble for the standalone executor; bindings unchanged. */
+export const GRID_HEATMAP_COLORS_RAW_PREAMBLE: string = `
+struct HistogramParams {
+  rows: u32,
+  bins: u32,
+  groups: u32,
+  hasGroups: u32,
+  lo: f32,
+  binwidth: f32,
+  position: u32,
+};
+
+@group(0) @binding(0) var<storage, read> countsStorage: array<u32>;
+@group(0) @binding(1) var<storage, read> summaryStorage: array<u32>;
+@group(0) @binding(2) var<storage, read_write> colors: array<vec4<f32>>;
+@group(0) @binding(3) var<uniform> params: HistogramParams;
+
+fn getSize() -> vec2<u32> {
+  return vec2<u32>(params.bins * params.groups, 1u);
+}
+
+fn getGroups() -> u32 {
+  return params.groups;
+}
+
+fn getCount(i: u32) -> u32 {
+  return countsStorage[i];
+}
+
+fn getSummary(i: u32) -> u32 {
+  return summaryStorage[i];
+}
+`.trim();
+
+export const GRID_HEATMAP_COLORS_WGSL: string =
+  `${GRID_HEATMAP_COLORS_RAW_PREAMBLE}\n\n${GRID_HEATMAP_COLORS_BODY}`;
+
 export const GROUPED_HISTOGRAM_2D_WGSL: string = `
 struct Histogram2DParams {
   rows: u32,

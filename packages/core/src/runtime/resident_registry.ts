@@ -50,10 +50,10 @@ export const RESIDENT_PRODUCT_REGISTRY: Record<
   },
   // Dense [group, bin] heatmap strip over the same stat_bin grid; the tile
   // geom's residentPlan only emits the standalone view form (its y range is
-  // the group-row count, owned by the view). Per-count color shading (a
-  // continuous fill field from the resident counts buffer) is the natural
-  // follow-up once shader-accessible scales exist; today rows take their
-  // group's palette color or the single scalar fill.
+  // the group-row count, owned by the view). Each cell shades by its own
+  // count (gggplot-vs7.18): a fixed ramp baked into GRID_HEATMAP_COLORS_BODY,
+  // normalized against the resident summary's stacked-maximum slot, needing
+  // no CPU readback and no shader-accessible continuous scale.
   [RESIDENT_STAT_BIN_TILES_PRODUCT]: {
     mark: ResidentTileMark as unknown as LiveComponent,
     view: ResidentTileView as unknown as LiveComponent,

@@ -31,6 +31,12 @@ export interface ResidentGridKernel {
   readonly barColors?: GPUBuffer;
   /** The uploaded per-group RGBA palette; present only alongside barColors. */
   readonly palette?: GPUBuffer;
+  /**
+   * Per-vertex RGBA heatmap colors, shading each cell by its own count.
+   * Unconditional where the underlying kernel produces one (the histogram
+   * grid); absent for kernels with no such pass (the count grid).
+   */
+  readonly heatmapColors?: GPUBuffer;
   readonly summary: GPUBuffer;
   readonly groupsCount: number;
   dispatch(): void;
@@ -59,6 +65,14 @@ export interface ResidentGridProduct<S> {
    * (gggplot-vs7.7); marks have no use for it.
    */
   readonly palette?: GPUStorageSource;
+  /**
+   * Per-vertex RGBA heatmap colors (four per cell), shading each cell by its
+   * own count through a fixed ramp — present whenever the underlying kernel
+   * produces one (unconditionally, for the histogram grid). The tile mark
+   * binds this instead of `barColors`, which would otherwise flatten every
+   * cell in a row to the same group color.
+   */
+  readonly heatmapColors?: GPUStorageSource;
   /** Dense [group, bin] tile-grid vertices; counts remain GPU-resident. */
   readonly tileVertices: GPUStorageSource;
   /** [group totals..., stacked maximum], for explicit bounded feedback only. */
@@ -220,6 +234,15 @@ export function createResidentGrid<K extends ResidentGridKernel, O, S>(
           format: "vec4<f32>",
           length: resident.groupsCount,
           size: [resident.groupsCount],
+          version,
+        }
+        : undefined,
+      heatmapColors: resident.heatmapColors
+        ? {
+          buffer: resident.heatmapColors,
+          format: "vec4<f32>",
+          length: cells * 4,
+          size: [resident.groupsCount, bins, 4],
           version,
         }
         : undefined,
