@@ -137,6 +137,8 @@ interface Case {
   bytes: Uint8Array;
   count: number;
   read: (buffer: ArrayBuffer) => number[];
+  /** Defaults to [2, 4] (8 elements); the 64-bit rows use half that. */
+  shape?: number[];
 }
 
 function cases(): Case[] {
@@ -149,6 +151,13 @@ function cases(): Case[] {
   const u16 = new Uint16Array([0, 1, 65535, 7, 32768, 9, 10, 11]);
   const boolean = new Uint8Array([0, 1, 1, 0, 1, 0, 0, 1]);
   const halves = [1.5, -2.25, 0, 0.5, -7.125, 3, 4, 5];
+  // 64-bit narrowing cases (gggplot-vs7.14): magnitudes chosen to exercise the
+  // stated policy on both sides -- exact small values, an i64/u64 magnitude
+  // past i32/u32 range (truncates, does not saturate), and an f64 magnitude
+  // past f32 range (overflows to infinity) plus one that rounds.
+  const i64 = new BigInt64Array([-1n, 2n, 3n, -4294967297n]);
+  const u64 = new BigUint64Array([0n, 1n, 4294967296n, 42n]);
+  const f64 = new Float64Array([1.5, -2.25, 3.4028236e38, Math.PI]);
   const asF32 = (b: ArrayBuffer) => Array.from(new Float32Array(b));
   const asI32 = (b: ArrayBuffer) => Array.from(new Int32Array(b));
   const asU32 = (b: ArrayBuffer) => Array.from(new Uint32Array(b));
@@ -163,6 +172,27 @@ function cases(): Case[] {
     { dtype: "i16", bytes: new Uint8Array(i16.buffer), count: 8, read: asI32 },
     { dtype: "u16", bytes: new Uint8Array(u16.buffer), count: 8, read: asU32 },
     { dtype: "bool", bytes: boolean, count: 8, read: asU32 },
+    {
+      dtype: "i64",
+      bytes: new Uint8Array(i64.buffer),
+      count: 4,
+      read: asI32,
+      shape: [2, 2],
+    },
+    {
+      dtype: "u64",
+      bytes: new Uint8Array(u64.buffer),
+      count: 4,
+      read: asU32,
+      shape: [2, 2],
+    },
+    {
+      dtype: "f64",
+      bytes: new Uint8Array(f64.buffer),
+      count: 4,
+      read: asF32,
+      shape: [2, 2],
+    },
   ];
 }
 
@@ -182,7 +212,7 @@ Deno.test("every adapter pass reproduces the CPU decoder exactly", async () => {
       byteOffset: 0,
       byteLength: testCase.bytes.byteLength,
       dtype: testCase.dtype,
-      shape: [2, 4],
+      shape: testCase.shape ?? [2, 4],
     };
     const resident = await source.readRangeSource(request);
     assertEquals(resident.length, testCase.count, `${testCase.dtype} length`);
@@ -376,12 +406,10 @@ Deno.test("a downsample product built from a GPU source carries a gathered handl
   device.destroy();
 });
 
-Deno.test("an unsupported dtype leaves the product on the CPU values path", async () => {
+Deno.test("f64 now takes the GPU path too, narrowed under gggplot-vs7.14's stated policy", async () => {
   const device = await requestTestDevice();
   if (!device) return;
-  // f64 has a plan (narrow) but no adapter pass, so the loader declines it and
-  // buildTensorContentProduct falls back rather than failing.
-  assertEquals(supportsRangeSource("f64"), false);
+  assertEquals(supportsRangeSource("f64"), true);
   const values = new Float64Array([1.5, -2.5, 3.5, 4.5]);
   const bytes = new Uint8Array(values.buffer);
   const source = new ByteArrayGPUTensorSource(device, "payload", "v1", bytes);
@@ -390,8 +418,45 @@ Deno.test("an unsupported dtype leaves the product on the CPU values path", asyn
     source,
     { target: { kind: "tensor", tensorId: "weights" } },
   );
+  assertEquals(product.values, undefined);
+  assertExists(product.source);
+  assertEquals(product.source.format, "f32");
+  const expected = await cpuValues(bytes, {
+    sourceId: "payload",
+    sourceVersion: "v1",
+    byteOffset: 0,
+    byteLength: bytes.byteLength,
+    dtype: "f64",
+    shape: [2, 2],
+  });
+  assertEquals(
+    Array.from(
+      new Float32Array(await readback(device, product.source.buffer, 16)),
+    ),
+    expected,
+  );
+  product.source.destroy!();
+  device.destroy();
+});
+
+Deno.test("a dtype with no upload plan at all leaves the product metadata-only", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+  // Every numeric dtype TENSOR_UPLOAD_PLANS names now has a built adapter
+  // pass -- gggplot-vs7.14 closed the last gap, the 64-bit narrowings. The
+  // only dtype left with no GPU upload path is one with no plan at all:
+  // "string", which ModelDType admits as a format model-inspect has not
+  // taught the IR to decode numerically.
+  assertEquals(supportsRangeSource("string"), false);
+  const bytes = new Uint8Array(16);
+  const source = new ByteArrayGPUTensorSource(device, "payload", "v1", bytes);
+  const product = await buildTensorContentProduct(
+    model("string", [4], bytes.byteLength),
+    source,
+    { target: { kind: "tensor", tensorId: "weights" } },
+  );
+  assertEquals(product.representation, "metadata");
   assertEquals(product.source, undefined);
-  assertEquals(product.values, [1.5, -2.5, 3.5, 4.5]);
 
   await assertRejects(
     () =>
@@ -400,8 +465,8 @@ Deno.test("an unsupported dtype leaves the product on the CPU values path", asyn
         sourceVersion: "v1",
         byteOffset: 0,
         byteLength: bytes.byteLength,
-        dtype: "f64",
-        shape: [2, 2],
+        dtype: "string",
+        shape: [4],
       }),
     RangeError,
     "no GPU upload path",
@@ -464,8 +529,11 @@ Deno.test("adapter pipelines are compiled once per device, not per upload", asyn
   device.destroy();
 });
 
-Deno.test("the adapter registry covers exactly the bit-reinterpretation dtypes", () => {
+Deno.test("the adapter registry covers every numeric dtype, plan-narrowed or bit-reinterpreted", () => {
   assertEquals(Object.keys(TENSOR_ADAPTER_KERNELS).sort(), [
+    "narrow_f64",
+    "narrow_i64",
+    "narrow_u64",
     "unpack_bool",
     "unpack_i16",
     "unpack_i8",
@@ -486,12 +554,15 @@ Deno.test("the adapter registry covers exactly the bit-reinterpretation dtypes",
       "u8",
       "u16",
       "bool",
+      // Lossy, under gggplot-vs7.14's stated rounding/overflow policy -- but
+      // supported, unlike before that bead.
+      "f64",
+      "i64",
+      "u64",
     ]
   ) {
     assertEquals(supportsRangeSource(dtype), true, dtype);
   }
-  // Lossy 64-bit narrowing needs a stated rounding policy first (gggplot-vs7.14).
-  for (const dtype of ["f64", "i64", "u64", "string"]) {
-    assertEquals(supportsRangeSource(dtype), false, dtype);
-  }
+  // No plan at all, not even a lossy one.
+  assertEquals(supportsRangeSource("string"), false, "string");
 });

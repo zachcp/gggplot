@@ -4,7 +4,8 @@ Status: accepted\
 Decision bead: `gggplot-vs7.3`\
 Epic: `gggplot-vs7` (pure Use.GPU implementation)\
 Implemented by: `gggplot-vs7.9` (SafeTensors), `gggplot-vs7.10` (column loader),
-`gggplot-vs7.13` (tile stride contract, downsample gather kernel)
+`gggplot-vs7.13` (tile stride contract, downsample gather kernel),
+`gggplot-vs7.14` (64-bit narrowing policy and kernels)
 
 This ADR specifies a loader tier that returns Use.GPU-native source handles
 instead of CPU byte buffers and boxed `number[]`, so a model tensor reaches the
@@ -193,10 +194,27 @@ Notes that are decisions rather than description:
   (`core/src/runtime/resident.ts::requireStorage`) knows only `f32` and `u32`.
   The feature saves half the buffer bytes and costs a format fork across the
   whole source contract. Revisit only if a measured f16 tensor is buffer-bound.
-- **The 64-bit rows are lossy, with the same documented loss the CPU path
-  already has.** `decodeValue` narrows i64/u64 through `BigInt` to a JS number,
-  exact to 2^53. Moving the narrowing into a kernel changes where the loss
-  happens, not whether it does, so the existing diagnostics carry over verbatim.
+- **The 64-bit rows are lossy under a policy `gggplot-vs7.14` stated, then
+  implemented on both surfaces:**
+  - **`i64`/`u64` truncate to the low 32 bits** — the same bit-level narrowing a
+    C-style `(int32_t)`/`(uint32_t)` cast performs, not a saturating clamp.
+    `decodeValue`'s i64/u64 cases (`products.ts`) and the `narrow_i64`/
+    `narrow_u64` kernels (`dtype_wgsl.ts`) both just take the low word; nothing
+    about sign or magnitude is inspected. Exact for the shape, index, and
+    token-id tensors this dtype is actually used for — a magnitude past i32/u32
+    range wraps, the same way it would in C.
+  - **`f64` rounds to the nearest `f32`, ties to even**, with overflow to
+    +/-infinity and underflow **flushed to a signed zero** rather than produced
+    as an `f32` subnormal. `Math.fround` was rejected as the CPU reference
+    specifically because it performs full IEEE-754 gradual underflow (real
+    subnormal outputs); reproducing that in WGSL needs a variable-width mantissa
+    shift, where flush-to-zero needs only the fixed-width rounding the kernel
+    already does. `narrowF64ToF32` (`products.ts`) and the `narrow_f64` kernel
+    implement the identical bit-manipulation algorithm on both surfaces — not
+    two independently "equivalent" ones — and are checked against each other and
+    against `Math.fround` (everywhere outside the flush-to-zero sliver) in
+    `products_test.ts`, `gpu_loader_device_test.ts`, and
+    `dtype_adapter_link_test.ts` (the linked `<Kernel>` form).
 - **An unknown dtype answers `unsupported` rather than throwing.** `ModelDType`
   admits arbitrary strings — a quantized format the IR has not been taught yet —
   and the correct behavior for one is the CPU `values` path we already have, not

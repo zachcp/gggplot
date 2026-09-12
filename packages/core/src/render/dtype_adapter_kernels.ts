@@ -48,6 +48,15 @@ export const UNPACK_U8_KERNEL = linkedAdapter("unpack_u8");
 export const UNPACK_U16_KERNEL = linkedAdapter("unpack_u16");
 /** Packed bool bytes -> u32, matching decodeValue's plain getUint8. */
 export const UNPACK_BOOL_KERNEL = linkedAdapter("unpack_bool");
+/**
+ * f64 -> f32, i64 -> i32, u64 -> u32 (gggplot-vs7.14). Two words per element
+ * instead of the multiple-elements-per-word ratio the passes above have, but
+ * the SAME `getSize`/`getWord`/`values` binding contract, so `linkedAdapter`
+ * needs no changes to wrap them.
+ */
+export const NARROW_F64_KERNEL = linkedAdapter("narrow_f64");
+export const NARROW_I64_KERNEL = linkedAdapter("narrow_i64");
+export const NARROW_U64_KERNEL = linkedAdapter("narrow_u64");
 
 /** Keyed by the same names `TENSOR_UPLOAD_PLANS` gives each dtype. */
 export const DTYPE_ADAPTER_KERNELS: Readonly<Record<string, unknown>> = Object
@@ -59,4 +68,7 @@ export const DTYPE_ADAPTER_KERNELS: Readonly<Record<string, unknown>> = Object
     unpack_u8: UNPACK_U8_KERNEL,
     unpack_u16: UNPACK_U16_KERNEL,
     unpack_bool: UNPACK_BOOL_KERNEL,
+    narrow_f64: NARROW_F64_KERNEL,
+    narrow_i64: NARROW_I64_KERNEL,
+    narrow_u64: NARROW_U64_KERNEL,
   });

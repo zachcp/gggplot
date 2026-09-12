@@ -486,11 +486,10 @@ function numericWidth(dtype: ModelDType): number | undefined {
     u8: 1,
     u16: 2,
     u32: 4,
-    // 64-bit integers are inspectable. They are decoded through BigInt and
-    // narrowed to number, which is exact to 2^53 and loses low bits beyond it
-    // (see decodeValue). Omitting them here silently demoted every i64 tensor
-    // to a metadata-only product, which hides ONNX shape, index, and label
-    // tensors -- the dtype those are almost always stored in.
+    // 64-bit integers are inspectable. They narrow to the low 32 bits (see
+    // decodeValue and gggplot-vs7.14's stated policy), exact for the shape,
+    // index, and label tensors this dtype is actually used for. Omitting them
+    // here would silently demote every i64 tensor to a metadata-only product.
     i64: 8,
     u64: 8,
     bool: 1,
@@ -555,6 +554,66 @@ function sourceFor(
   return sources.get(sourceId);
 }
 
+/**
+ * f64 -> f32, bit for bit identical to `narrow_f64` (dtype_wgsl.ts):
+ * round-to-nearest-even, overflow to +/-infinity, and underflow (of either a
+ * genuine f64 subnormal or a normal f64 too small for a NORMAL f32) flushed to
+ * a signed zero rather than produced as an f32 subnormal.
+ *
+ * gggplot-vs7.14's stated policy. `Math.fround` was rejected as the CPU
+ * reference specifically because it does NOT flush f32-subnormal results to
+ * zero -- it performs full IEEE-754 gradual underflow -- and reproducing that
+ * in WGSL means shifting a variable number of mantissa bits depending on how
+ * far below the normal range the value sits. Flush-to-zero needs only the
+ * fixed-width rounding this function already does, and the bead's own wording
+ * ("underflow to subnormal OR ZERO") sanctions the simpler of the two. Tested
+ * against `Math.fround` for the entire range where the two policies agree
+ * (everywhere outside the f32-subnormal sliver) in products_test.ts.
+ */
+export function narrowF64ToF32(view: DataView, offset: number): number {
+  const lo = view.getUint32(offset, true);
+  const hi = view.getUint32(offset + 4, true);
+  const sign = (hi >>> 31) & 1;
+  const exponent64 = (hi >>> 20) & 0x7ff;
+  const mantissaHigh20 = hi & 0xfffff;
+  const mantissaLow32 = lo;
+
+  let bits: number;
+  if (exponent64 === 0) {
+    // f64 zero or subnormal: both are far below f32's representable range.
+    bits = sign << 31;
+  } else if (exponent64 === 0x7ff) {
+    bits = mantissaHigh20 === 0 && mantissaLow32 === 0
+      ? (sign << 31) | 0x7f800000 // infinity
+      : (sign << 31) | 0x7fc00000; // NaN (canonical quiet payload)
+  } else {
+    // Rebias: unbiased = exponent64 - 1023; f32 biased = unbiased + 127.
+    let exponent32 = exponent64 - 896;
+    // The f32 mantissa is the top 23 bits of the 52-bit f64 mantissa
+    // (mantissaHigh20's 20 bits, then the top 3 of mantissaLow32's 32).
+    let mantissa32 = ((mantissaHigh20 << 3) | (mantissaLow32 >>> 29)) >>> 0;
+    const guardBit = (mantissaLow32 >>> 28) & 1;
+    const stickyBits = (mantissaLow32 & 0x0fffffff) !== 0;
+    if (exponent32 >= 255) {
+      bits = (sign << 31) | 0x7f800000; // already past f32's max exponent
+    } else if (exponent32 <= 0) {
+      bits = sign << 31; // stated policy: flush to zero, not a subnormal
+    } else {
+      if (guardBit === 1 && (stickyBits || (mantissa32 & 1) === 1)) {
+        mantissa32 = (mantissa32 + 1) >>> 0;
+        if (mantissa32 === 0x800000) {
+          mantissa32 = 0;
+          exponent32 += 1;
+        }
+      }
+      bits = exponent32 >= 255
+        ? (sign << 31) | 0x7f800000 // rounded up into overflow
+        : (sign << 31) | (exponent32 << 23) | mantissa32;
+    }
+  }
+  return new Float32Array(new Uint32Array([bits >>> 0]).buffer)[0];
+}
+
 function decodeValue(
   view: DataView,
   offset: number,
@@ -564,7 +623,7 @@ function decodeValue(
     case "f32":
       return view.getFloat32(offset, true);
     case "f64":
-      return view.getFloat64(offset, true);
+      return narrowF64ToF32(view, offset);
     case "i8":
       return view.getInt8(offset);
     case "u8":
@@ -578,13 +637,18 @@ function decodeValue(
       return view.getInt32(offset, true);
     case "u32":
       return view.getUint32(offset, true);
-    // Exact for |v| <= Number.MAX_SAFE_INTEGER, which covers the shape, index,
-    // and token-id tensors this dtype is actually used for. Larger magnitudes
-    // round, and the product is a numeric view rather than a lossless copy.
+    // Truncating narrow to the low 32 bits -- the same bit-level narrowing a
+    // C-style `(int32_t)`/`(uint32_t)` cast performs, and the policy
+    // `narrow_i64`/`narrow_u64` (dtype_wgsl.ts) implement: no saturation, no
+    // range check, just the low word reinterpreted. Little-endian storage
+    // means the low word IS the first four bytes, so no offset adjustment is
+    // needed. Exact for the shape, index, and token-id tensors this dtype is
+    // actually used for; a magnitude past i32/u32 range wraps, same as it
+    // would in the kernel gggplot-vs7.14 decided against saturating.
     case "i64":
-      return Number(view.getBigInt64(offset, true));
+      return view.getInt32(offset, true);
     case "u64":
-      return Number(view.getBigUint64(offset, true));
+      return view.getUint32(offset, true);
     case "f16":
     case "bf16": {
       const bits = view.getUint16(offset, true);
