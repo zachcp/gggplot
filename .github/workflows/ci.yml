@@ -76,6 +76,18 @@ jobs:
         env:
           GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
         run: deno task --cwd apps/site test:rerender
+      # SwiftShader cannot draw WebGPU (see the job comment above), so this is
+      # expected to fail today. Running it anyway makes the resident coverage
+      # floors gggplot-vs7.11 set (70.4% residentCategoricalCount, 27.4%
+      # groupedHistogram) VISIBLE in CI logs instead of enforced only by a
+      # human remembering to run it locally (gggplot-vs7.16). Converts to a
+      # real, blocking gate alongside the two above once a GPU runner or
+      # SwiftShader parity exists.
+      - name: Pixel visibility
+        continue-on-error: true
+        env:
+          GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
+        run: deno task --cwd apps/site test:pixels
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
