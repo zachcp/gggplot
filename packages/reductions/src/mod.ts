@@ -2,6 +2,7 @@ export * from "./types.ts";
 export * from "./cpu.ts";
 export * from "./wgsl.ts";
 export * from "./dtype_wgsl.ts";
+export * from "./downsample_wgsl.ts";
 export * from "./gpu.ts";
 export * from "./gpu/resident_histogram.ts";
 export * from "./gpu/resident_count.ts";

@@ -15,12 +15,15 @@ import {
   ByteArrayTensorSource,
   type GPUTensorSource,
   residentUploadCeiling,
+  type TensorDownsampleRequest,
   type TensorRangeRequest,
   type TensorStorageSource,
   tensorUploadPlan,
   validateTensorRange,
 } from "./residency.ts";
 import {
+  DOWNSAMPLE_NEAREST_KERNEL,
+  type DownsampleKernel,
   type DTypeAdapterKernel,
   TENSOR_ADAPTER_KERNELS,
 } from "@gggplot/reductions";
@@ -66,10 +69,10 @@ interface AdapterPipeline {
 // exists to make cheap.
 const pipelineCache = new WeakMap<GPUDevice, Map<string, AdapterPipeline>>();
 
-function adapterPipeline(
+function compiledPipeline(
   device: GPUDevice,
   name: string,
-  kernel: DTypeAdapterKernel,
+  wgsl: string,
 ): AdapterPipeline {
   let perDevice = pipelineCache.get(device);
   if (!perDevice) {
@@ -83,7 +86,7 @@ function adapterPipeline(
     compute: {
       module: device.createShaderModule({
         label: `gggplot-dtype-${name}`,
-        code: kernel.wgsl,
+        code: wgsl,
       }),
       entryPoint: "main",
     },
@@ -91,6 +94,25 @@ function adapterPipeline(
   const built = { pipeline, layout: pipeline.getBindGroupLayout(0) };
   perDevice.set(name, built);
   return built;
+}
+
+function adapterPipeline(
+  device: GPUDevice,
+  name: string,
+  kernel: DTypeAdapterKernel,
+): AdapterPipeline {
+  return compiledPipeline(device, name, kernel.wgsl);
+}
+
+// One name: the gather body is dtype-agnostic (a raw word copy), so every
+// dtype shares the same compiled pipeline instead of one per source dtype.
+const DOWNSAMPLE_PIPELINE_NAME = "downsample_nearest";
+
+function downsamplePipeline(
+  device: GPUDevice,
+  kernel: DownsampleKernel,
+): AdapterPipeline {
+  return compiledPipeline(device, DOWNSAMPLE_PIPELINE_NAME, kernel.wgsl);
 }
 
 /**
@@ -191,6 +213,51 @@ export class ByteArrayGPUTensorSource extends ByteArrayTensorSource
   }
 
   /**
+   * Gathers a bounded overview grid on the GPU instead of reading the full
+   * range back to CPU: the range is uploaded and dtype-adapted exactly as
+   * `readRangeSource` would, then a second pass samples it down to
+   * `targetRows` x `targetColumns`. The full intermediate buffer dies with
+   * this call -- same "resident cost is the OUTPUT size" discipline as the
+   * widen/unpack path above -- so nothing survives longer than the gather
+   * that consumes it.
+   */
+  async readDownsampleSource(
+    request: TensorDownsampleRequest,
+  ): Promise<TensorStorageSource> {
+    if (
+      !Number.isSafeInteger(request.rows) || request.rows <= 0 ||
+      !Number.isSafeInteger(request.columns) || request.columns <= 0 ||
+      !Number.isSafeInteger(request.targetRows) || request.targetRows <= 0 ||
+      !Number.isSafeInteger(request.targetColumns) ||
+      request.targetColumns <= 0
+    ) {
+      throw new RangeError(
+        "Downsample rows/columns/targetRows/targetColumns must be positive safe integers",
+      );
+    }
+    const full = await this.readRangeSource(request);
+    const outputLength = request.targetRows * request.targetColumns;
+    const buffer = this.device.createBuffer({
+      label: `gggplot-tensor-downsample-${request.dtype}`,
+      size: Math.max(4, outputLength * 4),
+      usage: USAGE.STORAGE | USAGE.COPY_DST | USAGE.COPY_SRC,
+    });
+    try {
+      this.runDownsample(full.buffer, buffer, request);
+    } finally {
+      full.destroy?.();
+    }
+    return {
+      buffer,
+      format: full.format,
+      length: outputLength,
+      size: [request.targetRows, request.targetColumns],
+      version: ++this.uploadCount,
+      destroy: () => buffer.destroy(),
+    };
+  }
+
+  /**
    * THE one copy. `subarray` is a view, not a copy, so the only payload
    * movement is the queue's own staging write.
    */
@@ -246,5 +313,47 @@ export class ByteArrayGPUTensorSource extends ByteArrayTensorSource
     pass.end();
     this.device.queue.submit([encoder.finish()]);
     count.destroy();
+  }
+
+  private runDownsample(
+    source: GPUBuffer,
+    target: GPUBuffer,
+    request: TensorDownsampleRequest,
+  ): void {
+    const { pipeline, layout } = downsamplePipeline(
+      this.device,
+      DOWNSAMPLE_NEAREST_KERNEL,
+    );
+    const params = this.device.createBuffer({
+      size: 16,
+      usage: USAGE.UNIFORM | USAGE.COPY_DST,
+    });
+    this.device.queue.writeBuffer(
+      params,
+      0,
+      new Uint32Array([
+        request.rows,
+        request.columns,
+        request.targetRows,
+        request.targetColumns,
+      ]),
+    );
+    const bindGroup = this.device.createBindGroup({
+      layout,
+      entries: [
+        { binding: 0, resource: { buffer: source } },
+        { binding: 1, resource: { buffer: target } },
+        { binding: 2, resource: { buffer: params } },
+      ],
+    });
+    const encoder = this.device.createCommandEncoder();
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    const total = request.targetRows * request.targetColumns;
+    pass.dispatchWorkgroups(Math.ceil(total / 64));
+    pass.end();
+    this.device.queue.submit([encoder.finish()]);
+    params.destroy();
   }
 }

@@ -3,7 +3,8 @@
 Status: accepted\
 Decision bead: `gggplot-vs7.3`\
 Epic: `gggplot-vs7` (pure Use.GPU implementation)\
-Implemented by: `gggplot-vs7.9` (SafeTensors), `gggplot-vs7.10` (column loader)
+Implemented by: `gggplot-vs7.9` (SafeTensors), `gggplot-vs7.10` (column loader),
+`gggplot-vs7.13` (tile stride contract, downsample gather kernel)
 
 This ADR specifies a loader tier that returns Use.GPU-native source handles
 instead of CPU byte buffers and boxed `number[]`, so a model tensor reaches the

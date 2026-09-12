@@ -97,6 +97,20 @@ export interface TensorStorageSource {
 }
 
 /**
+ * A range to gather down to a bounded overview grid instead of uploading in
+ * full. `rows`/`columns` describe the 2-D shape of the (already dtype-adapted)
+ * source range; `targetRows`/`targetColumns` are the requested overview grid,
+ * already clamped to the caller's `maxOverviewCells` budget before the request
+ * is built.
+ */
+export interface TensorDownsampleRequest extends TensorRangeRequest {
+  readonly rows: number;
+  readonly columns: number;
+  readonly targetRows: number;
+  readonly targetColumns: number;
+}
+
+/**
  * A loader that yields a GPU handle instead of bytes.
  *
  * `readRange` is inherited and stays: it is the CPU/test/export path and the
@@ -116,6 +130,15 @@ export interface GPUTensorSource extends TensorSource {
   supports(dtype: ModelDType): boolean;
   /** Uploads a validated range straight to a storage buffer. No CPU decode. */
   readRangeSource(request: TensorRangeRequest): Promise<TensorStorageSource>;
+  /**
+   * Gathers a bounded overview grid straight to a storage buffer, without
+   * reading the full range back to CPU. `dtype` support is the same set
+   * `supports()` already answers: the gather runs as a second pass over
+   * whatever `readRangeSource` would have produced for the same range.
+   */
+  readDownsampleSource(
+    request: TensorDownsampleRequest,
+  ): Promise<TensorStorageSource>;
 }
 
 export function isGPUTensorSource(

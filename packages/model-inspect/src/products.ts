@@ -759,9 +759,15 @@ async function readValues(
  * Uploads a range when the source is a GPU loader that supports its dtype.
  *
  * Returns undefined -- not an error -- for a plain byte source or a dtype with
- * no adapter pass, which is what routes those to `readValues` unchanged. Only
- * the `exact` representation uses this: `tile` slices rows and `downsample`
- * samples a grid, and both do that arithmetic on the CPU today (gggplot-vs7.13).
+ * no adapter pass, which is what routes those to `readValues` unchanged.
+ *
+ * Used by both `exact` and `tile`: for `tile`, `layout.shape` is the PHYSICAL
+ * span shape (`[rowCount, columns]`, the full row width), not the requested
+ * `[rowCount, columnCount]` window -- that is the stride contract a mark
+ * reads a tile through. `columnStart` is already folded into `layout.byteOffset`
+ * (see the tile branch below), so a consumer indexes row-major with `columns`
+ * as the row pitch and stops at `columnCount`, exactly the way `gridShape`
+ * (narrower than `source.size` whenever `columnCount < columns`) already says.
  */
 function residentRange(
   source: TensorSource,
@@ -781,11 +787,42 @@ function residentRange(
 }
 
 /**
+ * Gathers a bounded overview grid on the GPU when the source supports it, so
+ * `downsample` never reads its full (potentially several-megabyte) payload
+ * back to a boxed CPU array just to keep a couple hundred thousand samples of
+ * it. Same undefined-means-fall-back contract as `residentRange`.
+ */
+function residentDownsample(
+  source: TensorSource,
+  layout: TensorViewLayout,
+  rows: number,
+  columns: number,
+  targetRows: number,
+  targetColumns: number,
+): Promise<TensorStorageSource | undefined> | undefined {
+  if (!isGPUTensorSource(source) || !source.supports(layout.dtype)) {
+    return undefined;
+  }
+  return source.readDownsampleSource({
+    sourceId: source.id,
+    sourceVersion: source.version,
+    byteOffset: layout.byteOffset,
+    byteLength: layout.byteLength,
+    dtype: layout.dtype,
+    shape: layout.shape,
+    rows,
+    columns,
+    targetRows,
+    targetColumns,
+  });
+}
+
+/**
  * Select bounded tensor data.
  *
  * A GPU resource is created only when `sources` is a `GPUTensorSource` and the
- * representation is `exact`; every other combination is the byte path it always
- * was.
+ * representation is `exact`, `tile`, or `downsample`, and only for a dtype the
+ * source `supports()`; every other combination is the byte path it always was.
  */
 export async function buildTensorContentProduct(
   document: ModelDocument,
@@ -965,15 +1002,40 @@ export async function buildTensorContentProduct(
         ],
       };
     }
+    // The layout's shape is the PHYSICAL span -- [rowCount, columns], the full
+    // row width -- not the requested [rowCount, columnCount] window. That is
+    // what the byte range at this offset/length actually contains (see the
+    // startElement/endElement comment above); columnStart is already folded
+    // into the byte offset, so nothing here loses it. `residentRange` and
+    // `gridShape` below are what turn this physical shape into a stride
+    // contract: `source.size` carries it, `gridShape` carries the narrower
+    // logical window a consumer stops at.
     const layout = viewLayout(
       descriptor,
       source!,
-      [tile.rowCount, columnCount],
+      [tile.rowCount, columns],
       axes,
       fixedIndices,
       payload.byteOffset + (selection.base + startElement) * width,
       spanBytes,
     );
+    // The GPU path (ADR 006, gggplot-vs7.13): the span uploads exactly as
+    // `exact` does -- readRangeSource does not care that the row width is
+    // wider than the requested window, only that the byte range is what it
+    // is asked to upload.
+    const resident = await residentRange(source!, layout);
+    if (resident) {
+      return {
+        kind: "matrix_content",
+        target: request.target,
+        representation,
+        descriptor,
+        layout,
+        source: resident,
+        gridShape: [tile.rowCount, columnCount],
+        diagnostics,
+      };
+    }
     const spanValues = await readValues(source!, layout);
     const values = Array.from(
       { length: tile.rowCount },
@@ -1016,7 +1078,6 @@ export async function buildTensorContentProduct(
       payload.byteOffset,
       payload.byteLength,
     );
-    const values = await readValues(source!, layout);
     const rows = shape![axes[0]];
     const columns = axes.length === 2 ? shape![axes[1]] : 1;
     const targetRows = Math.min(
@@ -1027,6 +1088,32 @@ export async function buildTensorContentProduct(
       columns,
       Math.max(1, Math.floor(budget.maxOverviewCells / targetRows)),
     );
+    // The GPU path (ADR 006, gggplot-vs7.13): a gather pass gets to the same
+    // `targetRows` x `targetColumns` samples without a full-payload CPU read
+    // -- the full range is uploaded and dtype-adapted, exactly as `exact`
+    // would, and the sampling that used to walk a boxed `number[]` below runs
+    // as a second GPU pass over it instead.
+    const resident = await residentDownsample(
+      source!,
+      layout,
+      rows,
+      columns,
+      targetRows,
+      targetColumns,
+    );
+    if (resident) {
+      return {
+        kind: "matrix_content",
+        target: request.target,
+        representation,
+        descriptor,
+        layout,
+        source: resident,
+        gridShape: [targetRows, targetColumns],
+        diagnostics,
+      };
+    }
+    const values = await readValues(source!, layout);
     const overview: number[] = [];
     for (let row = 0; row < targetRows; row++) {
       for (let column = 0; column < targetColumns; column++) {
