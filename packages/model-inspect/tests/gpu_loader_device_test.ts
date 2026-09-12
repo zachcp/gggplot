@@ -284,6 +284,98 @@ Deno.test("an exact product built from a GPU source carries a handle, not values
   device.destroy();
 });
 
+Deno.test("a tile product built from a GPU source carries a strided handle, not values", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+  const values = Array.from({ length: 12 }, (_, index) => index);
+  const bytes = new Uint8Array(new Float32Array(values).buffer);
+  const source = new ByteArrayGPUTensorSource(device, "payload", "v1", bytes);
+  const product = await buildTensorContentProduct(
+    model("f32", [3, 4], bytes.byteLength),
+    source,
+    {
+      target: { kind: "tensor", tensorId: "weights" },
+      axes: [0, 1],
+      mode: "tile",
+      tile: { rowStart: 1, rowCount: 2, columnStart: 1, columnCount: 2 },
+    },
+  );
+
+  assertEquals(product.representation, "tile");
+  assertEquals(product.values, undefined);
+  // gridShape (the logical window) stays narrower than source.size (the
+  // physical span) -- that gap IS the stride contract gggplot-vs7.13 asks
+  // for: a consumer strides by size[1], not gridShape[1].
+  assertEquals(product.gridShape, [2, 2]);
+  assertExists(product.source);
+  assertEquals(product.source.size, [2, 4]);
+
+  const columns = product.source.size[1];
+  const [rowCount, columnCount] = product.gridShape!;
+  const raw = Array.from(
+    new Float32Array(
+      await readback(
+        device,
+        product.source.buffer,
+        product.source.length * 4,
+      ),
+    ),
+  );
+  const strided: number[] = [];
+  for (let row = 0; row < rowCount; row++) {
+    for (let column = 0; column < columnCount; column++) {
+      strided.push(raw[row * columns + column]);
+    }
+  }
+  // Same values the CPU tile path returns for this request (see
+  // products_test.ts's "bounded tile" case) -- reading the strided span
+  // reproduces exactly what row-sliced CPU values would.
+  assertEquals(strided, [5, 6, 9, 10]);
+  product.source.destroy!();
+  device.destroy();
+});
+
+Deno.test("a downsample product built from a GPU source carries a gathered handle, not values", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+  const values = Array.from({ length: 16 }, (_, index) => index);
+  const bytes = new Uint8Array(new Float32Array(values).buffer);
+  const source = new ByteArrayGPUTensorSource(device, "payload", "v1", bytes);
+  const request = {
+    target: { kind: "tensor" as const, tensorId: "weights" },
+    budget: { maxExactBytes: 8, maxOverviewCells: 4 },
+  };
+  const product = await buildTensorContentProduct(
+    model("f32", [4, 4], bytes.byteLength),
+    source,
+    request,
+  );
+
+  assertEquals(product.representation, "downsample");
+  assertEquals(product.values, undefined);
+  assertEquals(product.gridShape, [2, 2]);
+  assertExists(product.source);
+
+  // The CPU path is still the reference: same request, byte-backed source.
+  const expected = await buildTensorContentProduct(
+    model("f32", [4, 4], bytes.byteLength),
+    new ByteArrayTensorSource("payload", "v1", bytes),
+    request,
+  );
+  const actual = Array.from(
+    new Float32Array(
+      await readback(
+        device,
+        product.source.buffer,
+        product.source.length * 4,
+      ),
+    ),
+  );
+  assertEquals(actual, expected.values);
+  product.source.destroy!();
+  device.destroy();
+});
+
 Deno.test("an unsupported dtype leaves the product on the CPU values path", async () => {
   const device = await requestTestDevice();
   if (!device) return;
