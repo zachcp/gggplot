@@ -3,7 +3,6 @@ import { ingest } from "../src/data/mod.ts";
 import {
   GPUDataProvider,
   GPUPlotRuntime,
-  GPUStreamingSourceAdapter,
   histogramBarChunks,
   histogramRange,
   histogramSourceInput,
@@ -54,67 +53,6 @@ Deno.test("RawData lowering caches typed columns and preserves GPU-friendly form
   assertEquals([...numeric], [1, Number.NaN, 3]);
   assertEquals(rawArrayForColumn(frame.x), numeric);
   assertEquals([...rawArrayForColumn(frame.group)], [0, 1]);
-});
-
-Deno.test("streaming sources write declared ranges, retain capacity, and rehydrate", () => {
-  const writes: { offset: number; bytes: number }[] = [];
-  const buffers: { destroyed: boolean }[] = [];
-  const device = {
-    createBuffer: () => {
-      const buffer = {
-        destroyed: false,
-        destroy() {
-          buffer.destroyed = true;
-        },
-      };
-      buffers.push(buffer);
-      return buffer;
-    },
-    queue: {
-      writeBuffer: (
-        _buffer: unknown,
-        offset: number,
-        data: ArrayBufferView,
-      ) => {
-        writes.push({ offset, bytes: data.byteLength });
-      },
-    },
-  } as unknown as GPUDevice;
-  const field = plan.outputs[0];
-  const adapter = new GPUStreamingSourceAdapter(device);
-
-  const initial = adapter.update(field, ingest({ x: [1, 2, 3] }).x);
-  const changed = adapter.update(field, ingest({ x: [1, 20, 3] }).x, {
-    start: 1,
-    length: 1,
-  });
-  const appended = adapter.update(field, ingest({ x: [1, 20, 3, 4] }).x, {
-    start: 3,
-    length: 1,
-  });
-  const grown = adapter.update(field, ingest({ x: [1, 20, 3, 4, 5] }).x, {
-    start: 4,
-    length: 1,
-  });
-
-  assertEquals(initial.capacity, 4);
-  assertEquals(changed.length, 3);
-  assertEquals(appended.length, 4);
-  assertEquals(grown.capacity, 8);
-  assertEquals(writes, [
-    { offset: 0, bytes: 12 },
-    { offset: 4, bytes: 4 },
-    { offset: 12, bytes: 4 },
-    { offset: 0, bytes: 20 },
-  ]);
-
-  adapter.deviceLost();
-  const rehydrated = adapter.rehydrate("x");
-  assertNotEquals(rehydrated.buffer, initial.buffer);
-  assertEquals(rehydrated.length, 5);
-  assertEquals(writes.at(-1), { offset: 0, bytes: 20 });
-  assertEquals(buffers[0].destroyed, true);
-  adapter.destroy();
 });
 
 Deno.test("GPUDataProvider reports incompatible semantic fields before mounting", () => {

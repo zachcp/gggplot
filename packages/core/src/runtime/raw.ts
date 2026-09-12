@@ -7,8 +7,7 @@ import { type Column, typedArrayForColumn } from "../data/mod.ts";
  *
  * This is a thin delegate over data/mod.ts's `typedArrayForColumn` — the
  * single, identity-cached typed view of a column (see its doc comment). The
- * export name is retained because runtime/mod.ts, streaming.ts, and live.tsx
- * import it.
+ * export name is retained because runtime/mod.ts and live.tsx import it.
  */
 export function rawArrayForColumn(column: Column): Float32Array | Uint32Array {
   return typedArrayForColumn(column);

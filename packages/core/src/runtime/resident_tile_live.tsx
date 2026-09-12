@@ -20,14 +20,9 @@ import {
   createResidentGrid,
   type ResidentGrid,
   type ResidentGridMarkProps,
-  type ResidentGridProviderProps,
 } from "./resident_grid.tsx";
 import type { ResidentHistogramMarkOptions } from "./resident_live.tsx";
 
-export type ResidentTileProviderProps = ResidentGridProviderProps<
-  ResidentHistogramMarkOptions,
-  ResidentHistogramSummary
->;
 export type ResidentTileMarkProps = ResidentGridMarkProps<
   ResidentHistogramMarkOptions
 >;
@@ -61,9 +56,6 @@ const grid: ResidentGrid<
   xDtype: "f32",
   leaf: ResidentHistogramTiles as unknown as LiveComponent,
 });
-
-/** Mounted stat_bin execution boundary shared by the tile mark and view. */
-export const ResidentTileProvider = grid.Provider;
 
 /** Direct composable lowering target for an eligible tile-grid layer. */
 export const ResidentTileMark = grid.Mark;
