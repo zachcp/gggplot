@@ -16,20 +16,25 @@
 // can reach, which is the prerequisite for the <Kernel> port (gggplot-vs7.5).
 //
 // DISPATCH AND READBACK MOVE TOGETHER. No hoisted node submits its own work any
-// more: stat_count dispatches as real <Kernel>s inside the sibling <Compute>
-// (resident_count_kernel_live.tsx), and stat_bin's grid still hands that
-// <Compute> a recorded command buffer as a `pre` call. Either way the work joins
-// the frame's single submit. That alone would break every summary-reading view:
-// useAwait fires during reconciliation, so readSummary's copyBufferToBuffer
-// would be submitted BEFORE the compute that fills the buffer, and the view
-// would read zeros (gggplot-vs7.1 attempt 2 — stackedMaximum 0 instead of 5000,
-// y-range collapsing from 5000 to 1, bars overflowing the plot). So the product
-// handed downward has its readSummary GATED: it waits until this version's
-// commands have actually been encoded. Queue order does the rest, since the
-// readback copy is then enqueued behind the compute on the same queue.
+// more: every resident pass dispatches as a real <Kernel> inside the sibling
+// <Compute>, and every resident read comes back through a <Readback> mounted in
+// that same <Compute> (gggplot-vs7.4). That pairing is the point. A readback
+// driven from a view's useAwait fires during RECONCILIATION, so its
+// copyBufferToBuffer was submitted BEFORE the compute that fills the buffer and
+// the view read zeros (gggplot-vs7.1 attempt 2 — stackedMaximum 0 instead of
+// 5000, y-range collapsing from 5000 to 1, bars overflowing the plot). That was
+// patched here with a per-version dispatch gate; the gate is gone, because
+// <Compute> mounts ReadbackPass AFTER ComputePass and the ordering is now
+// structural rather than arranged. What each node still owns is the CHANNEL the
+// readback publishes into — see runtime/resident_readback.tsx — because a
+// <Readback>'s result is mounted in the queue tree, not in the plot subtree
+// where the views that need it live.
 
 import type { LiveElement } from "@use-gpu/live";
-import type { CountPosition } from "@gggplot/reductions";
+import type {
+  CountPosition,
+  ResidentDomain1DResult,
+} from "@gggplot/reductions";
 import type { RenderNode } from "../compile/rendertree.ts";
 import {
   RESIDENT_STAT_BIN_PRODUCT,
@@ -42,7 +47,15 @@ import {
   ResidentCountProvider,
 } from "./resident_count_live.tsx";
 import { CountKernels } from "./resident_count_kernel_live.tsx";
-import { awaitGridSummary } from "./resident_grid_pending.ts";
+import {
+  decideGridSummary,
+  type GridSummary,
+} from "./resident_grid_pending.ts";
+import {
+  createReadbackChannel,
+  type ReadbackChannel,
+  ResidentReadback,
+} from "./resident_readback.tsx";
 import {
   RESIDENT_ID_PROP,
   type ResidentProducts,
@@ -53,9 +66,9 @@ import {
   type HistogramPosition,
 } from "./resident_histogram_kernel_live.tsx";
 import {
-  awaitDomain,
   DOMAIN_ACCUMULATOR_LENGTH,
   DomainKernels,
+  DomainReadback,
 } from "./resident_domain_kernel_live.tsx";
 import {
   type ResidentHistogramProduct,
@@ -70,48 +83,77 @@ import {
   Fragment,
   provide,
   useAwait,
-  useDeviceContext,
+  useMemo,
   useOne,
 } from "./usegpu_compat.ts";
 
 /**
- * A one-shot barrier per kernel version.
+ * One node's summary channel, created once per hoisted node.
  *
- * `wait()` resolves once `open()` has been called for that version, which the
- * compute leaf does immediately after submitting. A version that has already
- * been submitted resolves immediately, so a re-render does not stall.
+ * `read` is held alongside it because it is a useResource dependency of the
+ * product the provider builds: a fresh closure per render would rebuild the
+ * product, and through it every memo keyed on the product, on every frame.
  */
-interface DispatchGate {
-  wait(version: number): Promise<void>;
-  open(version: number): void;
+interface SummaryChannel {
+  channel: ReadbackChannel<GridSummary>;
+  read: (version: number) => Promise<GridSummary>;
 }
 
-function createDispatchGate(): DispatchGate {
-  let submitted = -1;
-  let pending: {
-    version: number;
-    resolve: () => void;
-    promise: Promise<void>;
-  } = { version: -1, resolve: () => {}, promise: Promise.resolve() };
-  const pendingFor = (version: number) => {
-    if (pending.version !== version) {
-      let resolve!: () => void;
-      const promise = new Promise<void>((r) => (resolve = r));
-      pending = { version, resolve, promise };
-    }
-    return pending;
-  };
-  return {
-    wait(version) {
-      if (submitted >= version) return Promise.resolve();
-      return pendingFor(version).promise;
-    },
-    open(version) {
-      submitted = version;
-      pendingFor(version).resolve();
-    },
-  };
+const makeSummaryChannel = (): SummaryChannel => {
+  const channel = createReadbackChannel<GridSummary>();
+  return { channel, read: (version: number) => channel.read(version) };
+};
+
+/** What {@link GridSummaryReadback} needs of a product to read its summary. */
+interface SummarizedProduct {
+  readonly summary: GPUStorageSource;
+  readonly bins: number;
+  readonly groupsCount: number;
+  readonly rows: number;
+  readonly version: number;
+  alive(): boolean;
 }
+
+/**
+ * Mounts the <Readback> that fills one grid product's summary channel.
+ *
+ * Nothing here waits on the compute having run — <Compute> sequences the copy
+ * behind it. What it does wait on is the compute having FINISHED PRODUCING,
+ * which is a different claim: a <Kernel> contributes no dispatch until its
+ * pipeline compiles, and each of a chain's kernels compiles on its own promise,
+ * so a pass can run with some of the chain absent and leave the summary buffer
+ * untouched. Opening a view on that hands it an untouched summary, whose
+ * stackedMaximum of 0 collapses the y-range to 1 and overflows the bars out of
+ * the plot — the exact gggplot-vs7.1 attempt-2 failure, and one a pixel floor
+ * cannot see because coverage goes UP. decideGridSummary is that predicate.
+ */
+const GridSummaryReadback = (
+  { product, channel }: {
+    product: SummarizedProduct;
+    channel: ReadbackChannel<GridSummary>;
+  },
+): LiveElement => {
+  const { groupsCount, bins, rows } = product;
+  // A grid with no cells mounts no passes at all, so nothing ever arms its
+  // pending marker and nothing can make its summary nonzero; a grid with no
+  // rows can only ever summarize to zero. Either way zero is the answer rather
+  // than something to wait for.
+  const expectNonEmpty = rows > 0 && bins * groupsCount > 0;
+  const decide = useMemo(
+    () => (data: Uint32Array, exhausted: boolean) =>
+      decideGridSummary(data, { groupsCount, expectNonEmpty }, exhausted),
+    [groupsCount, expectNonEmpty],
+  );
+  const alive = useMemo(() => () => product.alive(), [product]);
+  return createElement(ResidentReadback, {
+    source: product.summary,
+    version: product.version,
+    channel,
+    decide,
+    alive,
+    label: "resident grid summary",
+  }) as LiveElement;
+};
 
 /**
  * What a hoisted node yields.
@@ -204,7 +246,7 @@ const HoistedCount = (
       ? [{ name: group, dtype: "u32", shape: "row", dimensions: ["row"] }]
       : []),
   ];
-  const gate = useOne(() => createDispatchGate());
+  const summary = useOne(makeSummaryChannel);
   return createElement(GPUDataProvider, {
     data: props.data,
     fields,
@@ -215,15 +257,18 @@ const HoistedCount = (
         options,
         // The frame owns submission now; see the module doc.
         defer: true,
+        readSummary: summary.read,
         children: (product: ResidentCountProduct) =>
           children({
-            product: gateGridSummary(product, gate),
+            product,
             // Real <Kernel>s rather than a recorded command buffer: this node's
             // five passes are dispatched from the frame's compute pass by
             // Use.GPU's own linker and dispatch gating (gggplot-vs7.7). The
             // kernel object built by the provider above contributes only its
             // buffers now — with `defer` set nothing ever calls its encode(),
-            // so its raw pipelines are never built.
+            // so its raw pipelines are never built. The readback rides in the
+            // same pass; it is declared after the kernels only for reading, as
+            // ReadbackPass sequences it regardless of tree order.
             computes: [
               createElement(CountKernels, {
                 product,
@@ -231,53 +276,16 @@ const HoistedCount = (
                 groups: group ? sources[group] : undefined,
                 position: (options as { position?: CountPosition }).position ??
                   "stack",
-                onEncoded: (encoded: number) => gate.open(encoded),
+              }),
+              createElement(GridSummaryReadback, {
+                product,
+                channel: summary.channel,
               }),
             ],
           }),
       }),
   }) as LiveElement;
 };
-
-/**
- * A grid product's readback wait, which needs more than the dispatch gate.
- *
- * The gate only says the frame's compute pass reached this node's leaf, and for
- * a <Kernel> that is not the same as the kernels having dispatched: their
- * pipelines compile asynchronously and contribute nothing until they finish, so
- * the pass can run with all five absent. Opening the gate then would hand the
- * view an untouched summary, whose stackedMaximum of 0 collapses the y-range to
- * 1 and overflows the bars out of the plot — the exact gggplot-vs7.1 attempt-2
- * failure, and one a pixel floor cannot see because coverage goes UP. So the
- * gate is only the first half; the second waits on the summary buffer's own
- * pending marker.
- */
-function gateGridSummary<
-  T extends {
-    version: number;
-    bins: number;
-    groupsCount: number;
-    rows: number;
-    alive(): boolean;
-    readSummary(): Promise<{ stackedMaximum: number }>;
-  },
->(product: T, gate: DispatchGate): T {
-  return {
-    ...product,
-    readSummary: async () => {
-      await gate.wait(product.version);
-      if (product.bins * product.groupsCount === 0) {
-        // No passes are mounted for an empty grid, so no marker was ever armed
-        // and there is nothing to wait for.
-        return product.readSummary();
-      }
-      return awaitGridSummary(() => product.readSummary(), {
-        expectNonEmpty: product.rows > 0,
-        alive: () => product.alive(),
-      });
-    },
-  };
-}
 
 /**
  * Builds one stat_bin node's kernels and yields its product.
@@ -314,9 +322,8 @@ const HoistedHistogram = (
       ? [{ name: group, dtype: "u32", shape: "row", dimensions: ["row"] }]
       : []),
   ];
-  const device = useDeviceContext();
-  const domainGate = useOne(() => createDispatchGate());
-  const gridGate = useOne(() => createDispatchGate());
+  const domain = useOne(() => createReadbackChannel<ResidentDomain1DResult>());
+  const summary = useOne(makeSummaryChannel);
   return createElement(GPUDataProvider, {
     data: props.data,
     fields,
@@ -329,13 +336,12 @@ const HoistedHistogram = (
         label: "gggplot-domain",
         children: (target: unknown) =>
           createElement(AwaitHoistedBounds, {
-            device,
             target,
             xSource: sources[x],
             groupSource: group ? sources[group] : undefined,
             options,
-            domainGate,
-            gridGate,
+            domain,
+            summary,
             children,
           }),
       }),
@@ -345,51 +351,54 @@ const HoistedHistogram = (
 /** Resolves x bounds off the GPU, then mounts the bin grid sized to them. */
 const AwaitHoistedBounds = (
   {
-    device,
     target,
     xSource,
     groupSource,
     options,
-    domainGate,
-    gridGate,
+    domain,
+    summary,
     children,
   }: {
-    device: GPUDevice;
     target: unknown;
     xSource: GPUStorageSource;
     groupSource?: GPUStorageSource;
     options: Record<string, unknown>;
-    domainGate: DispatchGate;
-    gridGate: DispatchGate;
+    domain: ReadbackChannel<ResidentDomain1DResult>;
+    summary: SummaryChannel;
     children: (result: HoistedResult) => LiveElement;
   },
 ): LiveElement => {
   const version = xSource.version;
-  const domainCompute = createElement(DomainKernels, {
-    target,
-    source: xSource,
-    rows: xSource.length,
-    version,
-    onEncoded: (encoded: number) => domainGate.open(encoded),
-  });
-  // Waits for this version's passes to be encoded before copying the
-  // accumulator, so the copy is enqueued behind the compute on the same queue.
-  const [bounds, error] = useAwait(async (cancelled: () => boolean) => {
-    await domainGate.wait(version);
-    // `cancelled` is Live's own liveness signal for this await: it flips on
-    // unmount or a dependency change, which is exactly when the <ComputeBuffer>
-    // above is destroyed out from under the poll. See awaitDomain.
-    return awaitDomain(
-      device,
-      (target as { buffer: GPUBuffer }).buffer,
-      () => !cancelled(),
-    );
-  }, [version]);
+  // The accumulator's own `version` counts <ComputeBuffer> history swaps and
+  // never moves, so the readback is keyed on the COLUMN version instead — the
+  // version of the data whose bounds are in there.
+  const domainComputes = [
+    createElement(DomainKernels, {
+      target,
+      source: xSource,
+      rows: xSource.length,
+      version,
+    }),
+    createElement(DomainReadback, {
+      source: target as GPUStorageSource,
+      version,
+      rows: xSource.length,
+      channel: domain,
+      // Nothing to check: this leaf is mounted INSIDE the <ComputeBuffer> whose
+      // accumulator it copies (the host's fold nests every node's <Compute>
+      // within the nodes above it), so the buffer cannot outlive it and a
+      // dispatch cannot outlive the buffer. The grid summaries are the ones
+      // with a real answer here — their kernel object is disposed on an option
+      // change, not only on unmount.
+      alive: () => true,
+    }),
+  ];
+  const [bounds, error] = useAwait(() => domain.read(version), [version]);
   if (error) throw error;
   // Contribute the domain kernels even while their bounds are still in flight —
   // they are what produce them, so withholding them would deadlock.
   if (!bounds || bounds.empty) {
-    return children({ product: null, computes: [domainCompute] });
+    return children({ product: null, computes: domainComputes });
   }
   const resolved = {
     ...options,
@@ -402,10 +411,11 @@ const AwaitHoistedBounds = (
     group: groupSource,
     options: resolved,
     defer: true,
+    readSummary: summary.read,
     children: (product: ResidentHistogramProduct) =>
       children({
         product: {
-          ...gateGridSummary(product, gridGate),
+          ...product,
           // The view needs the bounds it was sized against to set its x range.
           hoistedBounds: bounds,
         },
@@ -416,14 +426,17 @@ const AwaitHoistedBounds = (
         // — with `defer` set nothing ever calls its encode(), so its raw
         // pipelines are never built.
         computes: [
-          domainCompute,
+          ...domainComputes,
           createElement(HistogramKernels, {
             product,
             values: xSource,
             groups: groupSource,
             position: (options as { position?: HistogramPosition }).position ??
               "stack",
-            onEncoded: (encoded: number) => gridGate.open(encoded),
+          }),
+          createElement(GridSummaryReadback, {
+            product,
+            channel: summary.channel,
           }),
         ],
       }),

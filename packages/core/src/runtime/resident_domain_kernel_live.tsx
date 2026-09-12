@@ -17,27 +17,23 @@ import {
   DOMAIN_CLEAR_KERNEL,
   FINITE_DOMAIN_1D_KERNEL,
 } from "../render/resident_domain_kernel.ts";
-import { abandonedReadback } from "./resident_grid_pending.ts";
+import {
+  type ReadbackChannel,
+  type ReadbackDecision,
+  ResidentReadback,
+} from "./resident_readback.tsx";
+import type { GPUStorageSource } from "./types.ts";
 import {
   createElement,
   Fragment,
   Kernel,
   Stage,
-  yeet,
+  useMemo,
 } from "./usegpu_compat.ts";
 
 /** The two-word ordered-bit accumulator both passes share. */
 export const DOMAIN_ACCUMULATOR_LENGTH = 2;
 
-const USAGE_MAP_READ = 0x0001;
-const USAGE_COPY_DST = 0x0008;
-
-/**
- * Copies the accumulator back and decodes it.
- *
- * The decode helpers come from @gggplot/reductions rather than being rewritten
- * here: they must stay in lockstep with `orderedBits` in the shared WGSL body.
- */
 /**
  * A domain result that may not have been computed yet.
  *
@@ -52,22 +48,13 @@ export interface PendingDomainResult {
   pending: boolean;
 }
 
-export async function readDomainBuffer(
-  device: GPUDevice,
-  buffer: GPUBuffer,
-): Promise<PendingDomainResult> {
-  const byteLength = DOMAIN_ACCUMULATOR_LENGTH * 4;
-  const staging = device.createBuffer({
-    size: byteLength,
-    usage: USAGE_COPY_DST | USAGE_MAP_READ,
-  });
-  const encoder = device.createCommandEncoder();
-  encoder.copyBufferToBuffer(buffer, 0, staging, 0, byteLength);
-  device.queue.submit([encoder.finish()]);
-  await staging.mapAsync(USAGE_MAP_READ);
-  const words = new Uint32Array(staging.getMappedRange().slice(0));
-  staging.unmap();
-  staging.destroy();
+/**
+ * Decodes one copy of the accumulator.
+ *
+ * The decode helpers come from @gggplot/reductions rather than being rewritten
+ * here: they must stay in lockstep with `orderedBits` in the shared WGSL body.
+ */
+export function decodeDomainWords(words: Uint32Array): PendingDomainResult {
   const empty = isEmptyDomain(words);
   return {
     pending: words[0] === 0 && words[1] === 0,
@@ -82,42 +69,87 @@ export async function readDomainBuffer(
 }
 
 /**
- * Reads the accumulator once the kernels have actually produced it.
+ * Decides whether one frame's copy of the accumulator is a real answer.
  *
- * Waiting for the compute PASS to run is not enough: <Kernel> compiles its
- * pipeline asynchronously and contributes no dispatch at all until that
- * finishes, so the first pass after mount can run with the kernels absent. That
- * is invisible from outside — the pass ran, the callbacks fired, and the buffer
- * is simply still untouched. So poll the unambiguous all-zero sentinel instead
- * of trusting the pass, backing off a frame at a time. Unlike a grid summary
- * this sentinel is free and exact: the clear pass SEEDS slot 0 with 0xffffffff,
- * so all-zero can only mean "these kernels have not dispatched".
+ * Two sentinels, and only the first one is free.
  *
- * `alive` is checked before EVERY read, and it is not optional. This poll spans
- * frames by design, and the accumulator is a <ComputeBuffer> that Use.GPU
- * destroys when the subtree unmounts — so a route change lands a
- * copyBufferToBuffer on a destroyed buffer, which Dawn reports as "used in
- * submit while destroyed". That is a console-level validation error rather than
- * an exception, so it fails the visual gate and nothing else; the grid summary
- * hit it for real in gggplot-vs7.8. Callers pass `useAwait`'s own `cancelled`
- * predicate, which Live flips on unmount or a dependency change.
+ * ALL-ZERO means nothing has dispatched. A fresh <ComputeBuffer> is allocated
+ * that way and the kernels can never leave it that way, because the clear pass
+ * seeds slot 0 with 0xffffffff before anything else runs. That test is exact.
+ *
+ * THE CLEARED SEED IS NOT. [0xffffffff, 0] is precisely what `isEmptyDomain`
+ * reads as an empty domain, so "the clear ran and the reduction did not" and
+ * "the reduction ran and found no finite value" are bit-identical. They cannot
+ * be told apart from the buffer, and they are not rare: each <Kernel> compiles
+ * its pipeline on its own promise, so the small clear is routinely ready frames
+ * before the reduction it precedes. Accepting that state cost the resident tile
+ * strip its whole chart — bounds came back empty, the bin grid was never sized,
+ * and the view mounted nothing at all (0.9% coverage against a 62.9% figure).
+ * Nothing was logged, because nothing went wrong: the copy succeeded and the
+ * bytes were real.
+ *
+ * So the empty answer waits while a non-empty one is still possible, on the
+ * same asymmetry the grid summaries use (resident_grid_pending.ts): the only
+ * harmful outcome is reporting empty when the truth is a real domain, so
+ * waiting costs nothing when the data really is all non-finite — that answer is
+ * still returned, just later, once `exhausted` says no better one is coming.
+ * `expectNonEmpty` is false when the column has no rows at all, which is the
+ * ordinary degenerate case and skips the wait entirely.
  */
-export async function awaitDomain(
-  device: GPUDevice,
-  buffer: GPUBuffer,
-  alive: () => boolean,
-  frames = 600,
-): Promise<ResidentDomain1DResult> {
-  for (let attempt = 0; attempt < frames; attempt++) {
-    if (!alive()) return abandonedReadback<ResidentDomain1DResult>();
-    const { result, pending } = await readDomainBuffer(device, buffer);
-    if (!pending) return result;
-    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+export function decideDomain(
+  words: Uint32Array,
+  { expectNonEmpty }: { expectNonEmpty: boolean },
+  exhausted: boolean,
+): ReadbackDecision<ResidentDomain1DResult> {
+  const { result, pending } = decodeDomainWords(words);
+  if (pending) {
+    return exhausted
+      ? {
+        status: "failed",
+        reason: "the resident domain kernels never produced bounds",
+      }
+      : { status: "wait" };
   }
-  throw new Error(
-    "[gggplot] the resident domain kernels never produced bounds",
-  );
+  if (result.empty && expectNonEmpty && !exhausted) return { status: "wait" };
+  return { status: "ready", value: result };
 }
+
+/**
+ * Frames to wait for the domain accumulator.
+ *
+ * Longer than a grid summary's budget because this reduction gates the bin grid
+ * that follows it: nothing downstream mounts until it resolves, so it is the
+ * one readback whose slowness is a blank chart rather than a late one.
+ */
+export const DOMAIN_FRAME_BUDGET = 600;
+
+/** Mounts the readback that fills a domain channel from inside <Compute>. */
+export const DomainReadback = (
+  { source, version, rows, channel, alive }: {
+    source: GPUStorageSource;
+    version: number;
+    /** Input rows; zero makes an empty domain the immediate right answer. */
+    rows: number;
+    channel: ReadbackChannel<ResidentDomain1DResult>;
+    alive: () => boolean;
+  },
+): LiveElement => {
+  const expectNonEmpty = rows > 0;
+  const decide = useMemo(
+    () => (words: Uint32Array, exhausted: boolean) =>
+      decideDomain(words, { expectNonEmpty }, exhausted),
+    [expectNonEmpty],
+  );
+  return createElement(ResidentReadback, {
+    source,
+    version,
+    channel,
+    decide,
+    alive,
+    frames: DOMAIN_FRAME_BUDGET,
+    label: "resident domain",
+  }) as LiveElement;
+};
 
 export interface DomainKernelsProps {
   /** The <ComputeBuffer> target, created by the caller outside <Compute>. */
@@ -126,8 +158,6 @@ export interface DomainKernelsProps {
   source: unknown;
   rows: number;
   version: number;
-  /** Opened once this version's passes have been encoded. */
-  onEncoded: (version: number) => void;
 }
 
 /**
@@ -139,7 +169,7 @@ export interface DomainKernelsProps {
  * every frame the pass runs.
  */
 export const DomainKernels = (
-  { target, source, rows, version, onEncoded }: DomainKernelsProps,
+  { target, source, rows, version }: DomainKernelsProps,
 ): LiveElement =>
   createElement(
     Fragment,
@@ -161,20 +191,4 @@ export const DomainKernels = (
         version,
       }),
     ),
-    // Declared AFTER the Stage on purpose. ComputePass runs every gathered
-    // `compute` callback in tree order into ONE pass encoder, so this runs
-    // after both kernels have been encoded; a readback awaiting this signal
-    // then enqueues its copy behind the whole submit. Intra-pass
-    // read-after-write visibility is what makes that sound, and it is pinned by
-    // packages/core/tests/usegpu_kernel_link_test.ts.
-    createElement(DomainEncoded, { version, onEncoded }),
   ) as LiveElement;
-
-const DomainEncoded = (
-  { version, onEncoded }: { version: number; onEncoded: (v: number) => void },
-): LiveElement =>
-  yeet({
-    compute: () => {
-      onEncoded(version);
-    },
-  });

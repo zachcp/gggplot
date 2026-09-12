@@ -137,6 +137,7 @@ const workbench = interop<{
   ComputeBuffer: LiveComponent;
   Stage: LiveComponent;
   Kernel: LiveComponent;
+  Readback: LiveComponent;
   RawData: RawDataComponent;
   FaceLayer: LiveComponent;
   useDeviceContext: UseDeviceContext;
@@ -196,6 +197,16 @@ export const ComputeBuffer = workbench.ComputeBuffer;
 export const Stage = workbench.Stage;
 /** Runs one linked compute shader against the enclosing <Stage>'s targets. */
 export const Kernel = workbench.Kernel;
+/**
+ * Copies a storage source back to the CPU from inside the frame's compute pass.
+ *
+ * Mounts as a `post`/`readback` pair that only ReadbackPass gathers, so it must
+ * sit inside <Compute> — which mounts ReadbackPass AFTER ComputePass, making
+ * "the copy is enqueued behind this frame's compute" structural rather than
+ * something a caller has to arrange. Its staging buffers are a rotating pool
+ * allocated once, not one per call. See runtime/resident_readback.tsx.
+ */
+export const Readback = workbench.Readback;
 export const RawData = workbench.RawData;
 export const FaceLayer = workbench.FaceLayer;
 export const useDeviceContext = workbench.useDeviceContext;

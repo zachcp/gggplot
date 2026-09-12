@@ -5,7 +5,7 @@
 // The largest of the three ports, and structurally the count port plus a tile
 // pass: see resident_count_kernel_live.tsx for the pattern and
 // render/resident_grid_kernels.ts for the two binding preambles each body
-// compiles under. Three of these seven passes (the u32 clear, the summary and
+// compiles under. Three of these eight passes (the u32 clear, the summary and
 // the palette expansion) are the SAME bundles the count grid drives.
 //
 // As there, no <ComputeBuffer> is needed — every buffer already belongs to the
@@ -22,6 +22,7 @@ import { gridPositionCode } from "@gggplot/reductions";
 import {
   CLEAR_U32_KERNEL,
   GRID_BAR_VERTEX_COLORS_KERNEL,
+  GRID_HEATMAP_COLORS_KERNEL,
   GRID_SUMMARY_KERNEL,
   GROUPED_HISTOGRAM_1D_KERNEL,
   HISTOGRAM_BAR_VERTICES_KERNEL,
@@ -42,14 +43,13 @@ import {
   Stage,
   useDeviceContext,
   useMemo,
-  yeet,
 } from "./usegpu_compat.ts";
 
 /** A histogram position, as the shader args spell it. */
 export type HistogramPosition = "identity" | "stack" | "dodge" | "fill";
 
 /**
- * Everything the seven passes bind, built once per buffer set.
+ * Everything the eight passes bind, built once per buffer set.
  *
  * Identity-stable on purpose: <Kernel> memoizes its linked shader on
  * `[shader, targets, source, sources, size, ...]` BY IDENTITY, so a freshly
@@ -77,7 +77,9 @@ interface HistogramKernelBindings {
   barVertices: StorageTarget;
   tileVertices: StorageTarget;
   barColors?: StorageTarget;
-  /** [counts, summary] for the bar-vertex pass, in its declared order. */
+  /** Per-cell heatmap colors; unconditional, unlike `barColors`. */
+  heatmapColors: StorageTarget;
+  /** [counts, summary] for the bar-vertex and heatmap-color passes. */
   gridSources: readonly GPUStorageSource[];
   /** The x column, then the group column (which falls back to x when absent). */
   binSources: readonly GPUStorageSource[];
@@ -97,21 +99,21 @@ export interface HistogramKernelsProps {
   /** The mounted group column; absent collapses the grid to one group. */
   groups?: GPUStorageSource;
   position: HistogramPosition;
-  /** Opened once this version's passes have been encoded. */
-  onEncoded: (version: number) => void;
 }
 
 /**
- * Mounts the bin grid's seven passes against the kernel's own buffers.
+ * Mounts the bin grid's eight passes against the kernel's own buffers.
  *
  * ORDER IS THE SCHEDULE. ComputePass gathers every `compute` call below it and
  * runs them in TREE ORDER into one pass encoder, so declaration order here is
  * the dispatch order: clear the grid, accumulate it, clear the summary,
- * summarize, lay out the bars, lay out the tiles, expand the colours.
- * `summarize` must stay strictly before the bar-vertex pass — dodge layout
- * reads each group's total through getSummary to decide which groups are
- * present, and reading a half-cleared summary would slot the bars into the
- * wrong sub-bands. Intra-pass read-after-write visibility is what makes one
+ * summarize, lay out the bars, lay out the tiles, shade the heatmap, expand
+ * the per-group palette colours. `summarize` must stay strictly before the
+ * bar-vertex pass — dodge layout reads each group's total through getSummary
+ * to decide which groups are present, and reading a half-cleared summary
+ * would slot the bars into the wrong sub-bands — and strictly before the
+ * heatmap pass too, which reads the same summary's stacked-maximum slot as
+ * its normalizer. Intra-pass read-after-write visibility is what makes one
  * encoder sufficient, and it is pinned by
  * packages/core/tests/usegpu_kernel_link_test.ts.
  *
@@ -120,7 +122,7 @@ export interface HistogramKernelsProps {
  * useInitialDispatch, whose guard re-arms only when `version` changes.
  */
 export const HistogramKernels = (
-  { product, values, groups, position, onEncoded }: HistogramKernelsProps,
+  { product, values, groups, position }: HistogramKernelsProps,
 ): LiveElement => {
   const version = product.version;
   const device = useDeviceContext();
@@ -159,6 +161,9 @@ export const HistogramKernels = (
       barColors: product.barColors
         ? target(product.barColors, "vec4<f32>", cells * 4)
         : undefined,
+      // Unconditional — the histogram grid always produces one, unlike
+      // barColors which needs a palette.
+      heatmapColors: target(product.heatmapColors!, "vec4<f32>", cells * 4),
       gridSources: [counts, summary],
       // The accumulation always binds two columns. With no group column the raw
       // executor binds x twice and zeroes hasGroups, so the shader reads the
@@ -183,6 +188,7 @@ export const HistogramKernels = (
     product.barVertices.buffer,
     product.tileVertices.buffer,
     product.barColors?.buffer,
+    product.heatmapColors?.buffer,
     product.palette?.buffer,
     values.buffer,
     values.length,
@@ -206,9 +212,10 @@ export const HistogramKernels = (
   const binwidth = product.binGeometry?.binwidth ?? 1;
   // An empty grid has nothing to clear, accumulate or lay out, and the raw
   // executor's own passes would all no-op on it (each body guards on
-  // getSize().x). Skipping them keeps the two surfaces recording the same work
-  // — while the encoded signal still fires, so a gated summary readback
-  // resolves instead of hanging.
+  // getSize().x). Skipping them keeps the two surfaces recording the same work.
+  // The summary readback still resolves: an empty grid can only summarize to
+  // zero, and decideGridSummary accepts zero immediately when no nonzero answer
+  // is possible.
   const passes = bindings.cells === 0 ? [] : [
     createElement(
       Stage,
@@ -283,6 +290,18 @@ export const HistogramKernels = (
         version,
       }),
     ),
+    createElement(
+      Stage,
+      { target: bindings.heatmapColors },
+      createElement(Kernel, {
+        shader: GRID_HEATMAP_COLORS_KERNEL,
+        args: [bindings.groupsCount],
+        sources: bindings.gridSources,
+        size: bindings.cellsSize,
+        initial: true,
+        version,
+      }),
+    ),
     ...(bindings.barColors && bindings.paletteSource
       ? [createElement(
         Stage,
@@ -303,18 +322,5 @@ export const HistogramKernels = (
     Fragment,
     {},
     ...passes,
-    // Declared AFTER the passes on purpose: gathered in tree order, so this
-    // runs once they have been encoded into the frame's single submit. A
-    // readback awaiting the signal then enqueues its copy behind that submit.
-    createElement(HistogramEncoded, { version, onEncoded }),
   ) as LiveElement;
 };
-
-const HistogramEncoded = (
-  { version, onEncoded }: { version: number; onEncoded: (v: number) => void },
-): LiveElement =>
-  yeet({
-    compute: () => {
-      onEncoded(version);
-    },
-  });

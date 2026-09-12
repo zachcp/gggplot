@@ -38,7 +38,6 @@ const grid = createResidentGrid<
     createMountedResidentCount1D(device, x, group, options),
   binsOf: (resident) => resident.valuesCount,
   tileVerticesOf: (resident) => resident.barVertices,
-  readSummary: (resident) => resident.readbackSummary(),
   optionKeys: (options) => [
     options.valuesCount,
     options.groupsCount,

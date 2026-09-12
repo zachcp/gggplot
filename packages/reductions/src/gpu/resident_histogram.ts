@@ -1,6 +1,7 @@
 import {
   CLEAR_U32_WGSL,
   GRID_BAR_VERTEX_COLORS_WGSL,
+  GRID_HEATMAP_COLORS_WGSL,
   GROUPED_HISTOGRAM_1D_WGSL,
   HISTOGRAM_BAR_VERTICES_WGSL,
   HISTOGRAM_SUMMARY_WGSL,
@@ -31,6 +32,13 @@ export interface ResidentHistogram1D {
   readonly palette: GPUBuffer | undefined;
   /** Dense [group, bin] tile vertices for a grid mark. */
   readonly tileVertices: GPUBuffer;
+  /**
+   * Per-vertex RGBA heatmap colors (four per cell), shading each cell by its
+   * own count through a fixed ramp. Unlike `barColors` this is unconditional —
+   * it needs no palette, only the counts and summary every grid already has —
+   * so the tile mark can bind it without forcing a palette to exist.
+   */
+  readonly heatmapColors: GPUBuffer;
   /** Compact [group totals..., stacked maximum] summary buffer. */
   readonly summary: GPUBuffer;
   readonly bins: number;
@@ -63,6 +71,8 @@ export interface ResidentHistogram1D {
   /** Per-vertex RGBA readback; empty when no palette was supplied. */
   readbackBarColors(): Promise<Float32Array>;
   readbackTileVertices(): Promise<Float32Array>;
+  /** Per-vertex RGBA heatmap-color readback; unconditional, unlike bar colors. */
+  readbackHeatmapColors(): Promise<Float32Array>;
   readbackSummary(): Promise<ResidentHistogramSummary>;
   metrics(): ResidentHistogramMetrics;
   destroy(): void;
@@ -181,6 +191,12 @@ export function createResidentHistogram1DFromSources(
     ),
     usage: USAGE.STORAGE | USAGE.COPY_SRC,
   });
+  const heatmapColorsByteLength = packed.countsLength * 4 *
+    4 * Float32Array.BYTES_PER_ELEMENT;
+  const heatmapColors = device.createBuffer({
+    size: Math.max(16, heatmapColorsByteLength),
+    usage: USAGE.STORAGE | USAGE.COPY_SRC,
+  });
   const summaryLength = packed.groupsCount + 1;
   const summary = device.createBuffer({
     size: Math.max(4, summaryLength * Uint32Array.BYTES_PER_ELEMENT),
@@ -202,9 +218,9 @@ export function createResidentHistogram1DFromSources(
   let readbackBytes = 0;
   let summaryReadbackBytes = 0;
   const derivedAllocationBytes = counts.size + barVertices.size +
-    tileVertices.size + summary.size +
+    tileVertices.size + heatmapColors.size + summary.size +
     (palette ? palette.size + barColors!.size : 0);
-  const passesPerDispatch = palette ? 7 : 6;
+  const passesPerDispatch = (palette ? 7 : 6) + 1;
   const params = uniform(device, packed.params);
   const clearParams = uniform(
     device,
@@ -240,6 +256,7 @@ export function createResidentHistogram1DFromSources(
     const bars = pipeline(HISTOGRAM_BAR_VERTICES_WGSL);
     const tiles = pipeline(HISTOGRAM_TILE_VERTICES_WGSL);
     const summarize = pipeline(HISTOGRAM_SUMMARY_WGSL);
+    const heatmap = pipeline(GRID_HEATMAP_COLORS_WGSL);
     const colorize = palette
       ? pipeline(GRID_BAR_VERTEX_COLORS_WGSL)
       : undefined;
@@ -279,6 +296,14 @@ export function createResidentHistogram1DFromSources(
         { binding: 2, resource: { buffer: params } },
       ])
       : undefined;
+    // Bindings match GRID_HEATMAP_COLORS_RAW_PREAMBLE exactly: counts and
+    // summary read-only, colors read-write, then the shared params uniform.
+    const heatmapBind = bind(heatmap, [
+      { binding: 0, resource: { buffer: counts } },
+      { binding: 1, resource: { buffer: summary } },
+      { binding: 2, resource: { buffer: heatmapColors } },
+      { binding: 3, resource: { buffer: params } },
+    ]);
     // Two bindings, matching the tile preamble exactly: the pass derives its
     // grid from bin geometry and reads no counts. It used to declare an unused
     // count binding for symmetry, which Dawn dropped from the auto layout and
@@ -293,12 +318,14 @@ export function createResidentHistogram1DFromSources(
       bars,
       tiles,
       summarize,
+      heatmap,
       colorize,
       clearBind,
       histogramBind,
       summaryClearBind,
       summarizeBind,
       barsBind,
+      heatmapBind,
       colorBind,
       tilesBind,
     };
@@ -319,12 +346,14 @@ export function createResidentHistogram1DFromSources(
       bars,
       tiles,
       summarize,
+      heatmap,
       colorize,
       clearBind,
       histogramBind,
       summaryClearBind,
       summarizeBind,
       barsBind,
+      heatmapBind,
       colorBind,
       tilesBind,
     } = passes;
@@ -359,6 +388,14 @@ export function createResidentHistogram1DFromSources(
     tilePass.setBindGroup(0, tilesBind);
     tilePass.dispatchWorkgroups(Math.ceil(packed.countsLength / 64));
     tilePass.end();
+    // Unconditional, after summarize (whose maximum it reads) and after the
+    // grid is fully accumulated — same ordering constraint as the bar-vertex
+    // pass, for the same reason.
+    const heatmapPass = encoder.beginComputePass();
+    heatmapPass.setPipeline(heatmap);
+    heatmapPass.setBindGroup(0, heatmapBind);
+    heatmapPass.dispatchWorkgroups(Math.ceil(packed.countsLength / 64));
+    heatmapPass.end();
     if (colorize && colorBind) {
       // One vertex-color invocation per cell, after the bar-vertex pass so it
       // shares the same encoder submission; reads only the params group/width
@@ -379,6 +416,7 @@ export function createResidentHistogram1DFromSources(
     barColors,
     palette,
     tileVertices,
+    heatmapColors,
     summary,
     bins: packed.bins,
     lo: input.lo,
@@ -432,6 +470,16 @@ export function createResidentHistogram1DFromSources(
       readbackBytes += bytes;
       return result;
     },
+    async readbackHeatmapColors() {
+      const bytes = heatmapColorsByteLength;
+      const result = await read(
+        heatmapColors,
+        bytes,
+        (buffer) => new Float32Array(buffer),
+      );
+      readbackBytes += bytes;
+      return result;
+    },
     async readbackSummary() {
       const values = await read(
         summary,
@@ -461,6 +509,7 @@ export function createResidentHistogram1DFromSources(
       barColors?.destroy();
       palette?.destroy();
       tileVertices.destroy();
+      heatmapColors.destroy();
       summary.destroy();
       params.destroy();
       clearParams.destroy();

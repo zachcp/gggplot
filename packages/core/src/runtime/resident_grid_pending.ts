@@ -1,12 +1,12 @@
-// Readiness and lifetime for the mounted grid kernels' readbacks
+// Readiness for the mounted grid kernels' readbacks
 // (gggplot-vs7.7/vs7.8/vs7.17).
 //
 // WHY THIS EXISTS. A pass having RUN is not the same as a <Kernel> having
 // dispatched: <Kernel> compiles its pipeline asynchronously and contributes no
 // dispatch at all until that finishes, so the frame's compute pass can run with
 // some or all of a chain's kernels simply absent and their buffers untouched.
-// Nothing about that is visible from outside — the pass ran, the callbacks
-// fired, and the dispatch gate in resident_host.tsx opens all the same.
+// Nothing about that is visible from outside — the pass ran, the copy that
+// <Readback> enqueues behind it succeeded, and the bytes are simply stale.
 //
 // For the count and histogram grids that is not a cosmetic timing issue, it is
 // a wrong chart: the view sizes its y-range from `Math.max(1, stackedMaximum)`,
@@ -27,6 +27,8 @@
 // chain can satisfy, and the marker's job is narrowed to ruling out a stale
 // answer from a previous version.
 
+import type { ReadbackDecision } from "./resident_readback.tsx";
+
 /**
  * The "no answer for this version yet" marker in the summary's last word.
  *
@@ -41,58 +43,11 @@
  */
 export const GRID_SUMMARY_PENDING = 0xffffffff;
 
-/**
- * How long to keep waiting for a nonzero summary before accepting a zero.
- *
- * Only reached by a grid that has rows but lands NONE of them in a cell — every
- * value non-finite or every group id out of range. At 60fps this is several
- * seconds, which is far longer than pipeline compilation takes and short enough
- * that a pathological grid is not a hang. The ordinary empty case (no rows at
- * all) never gets here; see `expectNonEmpty`.
- */
-const DEFAULT_FRAME_BUDGET = 300;
-
 /** The compact summary shape both grid kernels read back. */
 export interface GridSummary {
+  readonly groupTotals: Uint32Array;
   readonly stackedMaximum: number;
-}
-
-/** @see abandonedReadback */
-const NEVER: Promise<never> = new Promise(() => {});
-
-/**
- * A promise for a readback that will never happen.
- *
- * Returned when the buffers a reader was polling are gone — the product was
- * disposed, or its `useAwait` was cancelled — before it produced a value.
- * Resolving with a synthetic one would be worse: the view would render a chart
- * from a made-up number. Leaving the await pending means a view whose kernel no
- * longer exists renders nothing, which is what it does before its first read
- * arrives anyway, and Live drops the await along with the component.
- */
-export function abandonedReadback<T>(): Promise<T> {
-  return NEVER;
-}
-
-/** How to wait for one grid's summary. */
-export interface GridSummaryWait {
-  /**
-   * Whether a nonzero summary is still possible for this grid — false when it
-   * has no rows or no cells, which skips the wait entirely for the ordinary
-   * degenerate case.
-   */
-  readonly expectNonEmpty: boolean;
-  /**
-   * Whether the kernel that owns the summary buffer is still mounted.
-   *
-   * Checked before EVERY read, including the first: this wait can begin behind
-   * a dispatch gate that itself spans frames, and copying out of a destroyed
-   * buffer is a Dawn validation error ("used in submit while destroyed") that
-   * the visual gate reports as a console failure. Route changes make that a
-   * routine event, not a corner case.
-   */
-  alive(): boolean;
-  readonly frames?: number;
+  readonly byteLength: number;
 }
 
 /**
@@ -115,10 +70,10 @@ export function armGridSummary(
 }
 
 /**
- * Reads a summary once its whole kernel chain has actually produced it.
+ * Decides whether one frame's copy of a summary buffer is this version's answer.
  *
  * The predicate is "the stacked maximum is neither the pending marker nor
- * zero", which is what makes it sound against partial readiness rather than
+ * zero", which is what makes it sound against PARTIAL readiness rather than
  * merely against no readiness:
  *
  *  - marker intact  -> nothing has written the summary, or the clear has not
@@ -141,27 +96,45 @@ export function armGridSummary(
  *
  * `expectNonEmpty` is false when the grid cannot produce a nonzero summary at
  * all (no rows, or no cells), which skips the wait entirely for the ordinary
- * degenerate case. A caller whose grid mounts no passes at all must not call
- * this: the marker would never be cleared.
+ * degenerate case. Note that a grid with no cells mounts no passes and so never
+ * has its marker armed either, which is the other reason that case must not
+ * wait.
+ *
+ * `exhausted` is the frame budget running out. Only a grid that has rows but
+ * lands NONE of them in a cell — every value non-finite, or every group id out
+ * of range — gets there with a zero, and zero is then the answer. Getting there
+ * with the marker still intact means no chain ever ran, which is a bug rather
+ * than a slow frame, so it fails loudly instead.
  */
-export async function awaitGridSummary<S extends GridSummary>(
-  read: () => Promise<S>,
-  { expectNonEmpty, alive, frames = DEFAULT_FRAME_BUDGET }: GridSummaryWait,
-): Promise<S> {
-  let last: S | undefined;
-  for (let attempt = 0; attempt <= frames; attempt++) {
-    if (!alive()) return last ?? NEVER;
-    last = await read();
-    const pending = last.stackedMaximum === GRID_SUMMARY_PENDING ||
-      (expectNonEmpty && last.stackedMaximum === 0);
-    if (!pending) return last;
-    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+export function decideGridSummary(
+  data: Uint32Array,
+  { groupsCount, expectNonEmpty }: {
+    groupsCount: number;
+    expectNonEmpty: boolean;
+  },
+  exhausted: boolean,
+): ReadbackDecision<GridSummary> {
+  const stackedMaximum = data[groupsCount];
+  if (stackedMaximum === GRID_SUMMARY_PENDING) {
+    return exhausted
+      ? {
+        status: "failed",
+        reason: "a resident grid kernel never produced a summary",
+      }
+      : { status: "wait" };
   }
-  if (!last || last.stackedMaximum === GRID_SUMMARY_PENDING) {
-    throw new Error(
-      "[gggplot] a resident grid kernel never produced a summary",
-    );
+  if (stackedMaximum === 0 && expectNonEmpty && !exhausted) {
+    return { status: "wait" };
   }
-  // A grid with rows that lands none of them in a cell. Zero is the answer.
-  return last;
+  return {
+    status: "ready",
+    value: {
+      // The copy spans the readback pool's whole buffer, which is rounded up
+      // past the summary's own length, so the summary is taken by position and
+      // its byte length from the contract rather than from `data`.
+      groupTotals: data.slice(0, groupsCount),
+      stackedMaximum,
+      byteLength: (groupsCount + 1) * Uint32Array.BYTES_PER_ELEMENT,
+    },
+  };
 }

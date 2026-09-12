@@ -77,7 +77,7 @@ const TileStripView = (
       product,
       color,
       opacity,
-      colors: product.barColors,
+      colors: product.heatmapColors,
     }),
   ].filter(Boolean);
   return createElement(

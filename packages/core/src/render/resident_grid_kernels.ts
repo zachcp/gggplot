@@ -15,6 +15,7 @@ import {
   CLEAR_U32_BODY,
   COUNT_BAR_VERTICES_BODY,
   GRID_BAR_VERTEX_COLORS_BODY,
+  GRID_HEATMAP_COLORS_BODY,
   GRID_SUMMARY_BODY,
   GROUPED_COUNT_1D_BODY,
   GROUPED_HISTOGRAM_1D_BODY,
@@ -68,6 +69,24 @@ export const GRID_BAR_VERTEX_COLORS_KERNEL = wgsl`
 @link var<storage, read_write> colors: array<vec4<f32>>;
 
 ${GRID_BAR_VERTEX_COLORS_BODY}
+`;
+
+/**
+ * Shades each cell by its own count through a fixed ramp — see
+ * GRID_HEATMAP_COLORS_BODY. One arg, two sources (the SAME [counts, summary]
+ * pair `HistogramKernels` already builds as `gridSources` for the bar-vertex
+ * pass) and one target: [dataSize, groups, counts, summary, colors].
+ * Unconditional, unlike the palette expansion: no palette is needed, so this
+ * dispatches for every grid rather than only when one was supplied.
+ */
+export const GRID_HEATMAP_COLORS_KERNEL = wgsl`
+@link fn getSize() -> vec2<u32>;
+@link fn getGroups() -> u32;
+@link fn getCount(i: u32) -> u32;
+@link fn getSummary(i: u32) -> u32;
+@link var<storage, read_write> colors: array<vec4<f32>>;
+
+${GRID_HEATMAP_COLORS_BODY}
 `;
 
 /**

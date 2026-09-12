@@ -137,6 +137,15 @@ const RESIDENT_SURFACES: { match: string; min: number }[] = [
   // `side: "both"`) are silent: no console output, no page error, correct
   // buffers on the GPU. Only a pixel floor sees them, which is the whole reason
   // gggplot-vs7.12 asked for this entry.
+  //
+  // RE-MEASURED after gggplot-vs7.18 (per-cell heatmap shading, not a flat
+  // per-group color): still 62.9%. This gate is COVERAGE — the fraction of
+  // pixels differing from the background — which is blind to color, only
+  // geometry; shading changed cell colors, not the fill area, so an unchanged
+  // number here is the expected result, not a missed regression. Confirmed
+  // separately (by sampling swap-chain pixels directly) that a single row now
+  // shows ten distinct ramp shades across its bins rather than one solid
+  // color.
   { match: "Three stacked rows of tiles", min: 0.25 },
   // examples_stats.tsx :: residentInlineBars — the same stat_count grid as the
   // first entry, in its INLINE MARK form rather than its standalone view (an

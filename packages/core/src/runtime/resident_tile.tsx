@@ -27,9 +27,11 @@ export interface ResidentHistogramTilesProps {
   color?: string;
   opacity?: number;
   /**
-   * Per-vertex RGBA color source (the resident `barColors` product buffer, one
-   * palette color per group row). When present the Face binds it instead of the
-   * scalar `color`, giving each [group,bin] tile its group's palette color.
+   * Per-vertex RGBA color source (the resident `heatmapColors` product
+   * buffer, one color per CELL, shaded by that cell's own count through a
+   * fixed ramp). When present the Face binds it instead of the scalar
+   * `color`, giving each [group,bin] tile a heatmap shade rather than a flat
+   * per-group color.
    */
   colors?: GPUStorageSource;
 }

@@ -31,6 +31,12 @@ export interface ResidentGridKernel {
   readonly barColors?: GPUBuffer;
   /** The uploaded per-group RGBA palette; present only alongside barColors. */
   readonly palette?: GPUBuffer;
+  /**
+   * Per-vertex RGBA heatmap colors, shading each cell by its own count.
+   * Unconditional where the underlying kernel produces one (the histogram
+   * grid); absent for kernels with no such pass (the count grid).
+   */
+  readonly heatmapColors?: GPUBuffer;
   readonly summary: GPUBuffer;
   readonly groupsCount: number;
   dispatch(): void;
@@ -59,6 +65,14 @@ export interface ResidentGridProduct<S> {
    * (gggplot-vs7.7); marks have no use for it.
    */
   readonly palette?: GPUStorageSource;
+  /**
+   * Per-vertex RGBA heatmap colors (four per cell), shading each cell by its
+   * own count through a fixed ramp — present whenever the underlying kernel
+   * produces one (unconditionally, for the histogram grid). The tile mark
+   * binds this instead of `barColors`, which would otherwise flatten every
+   * cell in a row to the same group color.
+   */
+  readonly heatmapColors?: GPUStorageSource;
   /** Dense [group, bin] tile-grid vertices; counts remain GPU-resident. */
   readonly tileVertices: GPUStorageSource;
   /** [group totals..., stacked maximum], for explicit bounded feedback only. */
@@ -93,6 +107,15 @@ export interface ResidentGridProduct<S> {
    * re-derivation.
    */
   readonly binGeometry?: { readonly lo: number; readonly binwidth: number };
+  /**
+   * This version's compact summary, once a readback has produced one.
+   *
+   * Supplied by whoever mounted the kernels, not by the kernel object: the
+   * readback runs as a <Readback> inside the frame's compute pass, so the
+   * product cannot read its own summary buffer without re-introducing the
+   * out-of-band staging copy that gggplot-vs7.4 removed. See
+   * runtime/resident_readback.tsx.
+   */
   readSummary(): Promise<S>;
   /** The input version this product was built for. */
   readonly version: number;
@@ -102,6 +125,12 @@ export interface ResidentGridProviderProps<O, S> {
   x: GPUStorageSource;
   group?: GPUStorageSource;
   options: O;
+  /**
+   * How this product's summary is read back, keyed by the version it belongs
+   * to. The caller owns it because the caller owns the <Compute> the readback
+   * mounts in; see ResidentGridProduct.readSummary.
+   */
+  readSummary: (version: number) => Promise<S>;
   children: (product: ResidentGridProduct<S>) => LiveElement;
 }
 
@@ -139,8 +168,6 @@ export interface ResidentGridConfig<K extends ResidentGridKernel, O, S> {
   binsOf(resident: K): number;
   /** Buffer backing dense tile geometry (a distinct grid, or the bar grid). */
   tileVerticesOf(resident: K): GPUBuffer;
-  /** Compact summary readback. */
-  readSummary(resident: K): Promise<S>;
   /** The option-derived tail of the useResource dependency list. */
   optionKeys(options: O): readonly unknown[];
   /** Physical dtype of the mounted x field. */
@@ -173,6 +200,7 @@ export function createResidentGrid<K extends ResidentGridKernel, O, S>(
     version: number,
     rows: number,
     alive: () => boolean,
+    readSummary: (version: number) => Promise<S>,
   ): ResidentGridProduct<S> => {
     const bins = config.binsOf(resident);
     const cells = bins * resident.groupsCount;
@@ -209,6 +237,15 @@ export function createResidentGrid<K extends ResidentGridKernel, O, S>(
           version,
         }
         : undefined,
+      heatmapColors: resident.heatmapColors
+        ? {
+          buffer: resident.heatmapColors,
+          format: "vec4<f32>",
+          length: cells * 4,
+          size: [resident.groupsCount, bins, 4],
+          version,
+        }
+        : undefined,
       tileVertices: {
         buffer: config.tileVerticesOf(resident),
         format: "vec2<f32>",
@@ -230,7 +267,7 @@ export function createResidentGrid<K extends ResidentGridKernel, O, S>(
       binGeometry: resident.lo != null && resident.binwidth != null
         ? { lo: resident.lo, binwidth: resident.binwidth }
         : undefined,
-      readSummary: () => config.readSummary(resident),
+      readSummary: () => readSummary(version),
       version,
     };
   };
@@ -247,7 +284,10 @@ export function createResidentGrid<K extends ResidentGridKernel, O, S>(
    * making it throw and running every route.
    */
   const Provider = (
-    { x, group, options, children }: ResidentGridProviderProps<O, S>,
+    { x, group, options, readSummary, children }: ResidentGridProviderProps<
+      O,
+      S
+    >,
   ): LiveElement => {
     const device = useDeviceContext();
     // The resource tracks LIVENESS, not just cleanup: a reader that spans
@@ -270,8 +310,9 @@ export function createResidentGrid<K extends ResidentGridKernel, O, S>(
           version,
           x.length,
           () => owned.state.alive,
+          readSummary,
         ),
-      [owned, version, x.length],
+      [owned, version, x.length, readSummary],
     );
     return children(product);
   };
