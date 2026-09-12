@@ -203,10 +203,11 @@ const DIRECT_F32: TensorUploadPlan = {
  * the buffer bytes and costs a format fork; ADR 006 takes the fork off the
  * table and revisits it only if a measured f16 tensor is buffer-bound.
  *
- * The 64-bit rows are lossy in exactly the way `decodeValue` already is — it
- * narrows i64/u64 through BigInt to a JS number, exact to 2^53. Moving the
- * narrowing into a kernel changes where the loss happens, not whether it does,
- * so the diagnostics the CPU path emits carry over unchanged.
+ * The 64-bit rows are lossy under the policy gggplot-vs7.14 stated: i64/u64
+ * truncate to the low 32 bits (`decodeValue` and `narrow_i64`/`narrow_u64`
+ * agree bit for bit), and f64 rounds to the nearest f32, ties to even, with
+ * overflow to +/-infinity and underflow flushed to a signed zero
+ * (`decodeValue`'s `narrowF64ToF32` and `narrow_f64` agree the same way).
  */
 export const TENSOR_UPLOAD_PLANS: Readonly<
   Record<string, TensorUploadPlan>

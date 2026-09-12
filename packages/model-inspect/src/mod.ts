@@ -66,6 +66,7 @@ export {
   type GeometryNodeInstance,
   type GeometryPortInstance,
   type GeometryProduct,
+  narrowF64ToF32,
   type TensorContentProduct,
   type TensorContentRepresentation,
   type TensorTarget,

@@ -19,6 +19,9 @@ import {
 } from "@use-gpu/shader/wgsl";
 import * as CoreNamespace from "@use-gpu/core";
 import {
+  NARROW_F64_KERNEL,
+  NARROW_I64_KERNEL,
+  NARROW_U64_KERNEL,
   UNPACK_BOOL_KERNEL,
   UNPACK_I16_KERNEL,
   UNPACK_I8_KERNEL,
@@ -347,6 +350,63 @@ Deno.test("the linked bool unpack matches decodeValue's plain byte read", async 
       ),
     ),
     [0, 1, 255, 0, 1],
+  );
+});
+
+Deno.test("the linked i64/u64 narrowings truncate to the low word", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+
+  // -4294967297n is -1 - 2^32: its low word alone is -1 as i32, which a
+  // saturating policy would never produce -- this is truncation, not a clamp.
+  const i64 = new BigInt64Array([-1n, 2n, 3n, -4294967297n]);
+  assertEquals(
+    Array.from(
+      new Int32Array(
+        await runAdapter(
+          device,
+          NARROW_I64_KERNEL,
+          new Uint8Array(i64.buffer),
+          4,
+          "i32",
+        ),
+      ),
+    ),
+    [-1, 2, 3, -1],
+  );
+
+  const u64 = new BigUint64Array([0n, 1n, 4294967296n, 42n]);
+  assertEquals(
+    Array.from(
+      new Uint32Array(
+        await runAdapter(
+          device,
+          NARROW_U64_KERNEL,
+          new Uint8Array(u64.buffer),
+          4,
+          "u32",
+        ),
+      ),
+    ),
+    [0, 1, 0, 42],
+  );
+});
+
+Deno.test("the linked f64 narrowing rounds to nearest f32, ties to even, and overflows to infinity", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+
+  const values = [1.5, -2.25, 3.4028236e38, Math.PI];
+  const out = await runAdapter(
+    device,
+    NARROW_F64_KERNEL,
+    new Uint8Array(new Float64Array(values).buffer),
+    values.length,
+    "f32",
+  );
+  assertEquals(
+    Array.from(new Float32Array(out)),
+    values.map((value) => Math.fround(value)),
   );
 });
 

@@ -4,6 +4,7 @@ import {
   buildTensorContentProduct,
   ByteArrayTensorSource,
   type ModelDocument,
+  narrowF64ToF32,
   type TensorSource,
 } from "../src/mod.ts";
 
@@ -257,4 +258,77 @@ Deno.test("forced content modes remain metadata-only without content prerequisit
     });
     assertEquals(product.representation, "metadata", mode);
   }
+});
+
+function narrow(value: number): number {
+  const buffer = new ArrayBuffer(8);
+  new DataView(buffer).setFloat64(0, value, true);
+  return narrowF64ToF32(new DataView(buffer), 0);
+}
+
+Deno.test("narrowF64ToF32 matches Math.fround everywhere outside the f32-subnormal underflow sliver", () => {
+  // gggplot-vs7.14's stated policy: round-to-nearest-even and overflow are
+  // identical to native f32 rounding, but underflow flushes to zero instead
+  // of producing an f32 subnormal (Math.fround performs gradual underflow;
+  // this function deliberately does not -- see narrowF64ToF32's doc comment).
+  const f32SubnormalBoundary = 1.1754943508222875e-38; // smallest normal f32
+  const cases = [
+    0,
+    -0,
+    1,
+    -1,
+    1.5,
+    -2.25,
+    3.125,
+    4,
+    100,
+    -200,
+    Math.PI,
+    Math.E,
+    1 / 3,
+    -0.1,
+    123456789.123456,
+    Number.MAX_VALUE,
+    -Number.MAX_VALUE,
+    3.4028234663852886e38, // just at the f32 max
+    3.4028236e38, // just past it -- exercises overflow-to-infinity
+    Infinity,
+    -Infinity,
+    NaN,
+  ];
+  for (const value of cases) {
+    const actual = narrow(value);
+    const expected = Math.fround(value);
+    if (Number.isNaN(expected)) {
+      assertEquals(Number.isNaN(actual), true, `${value}`);
+    } else {
+      assertEquals(Object.is(actual, expected), true, `${value}`);
+    }
+  }
+  // A wide pseudo-random sweep of magnitudes and signs, skipping the sliver
+  // where the two policies are expected to diverge (underflow-to-subnormal).
+  let seed = 42;
+  const random = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  for (let i = 0; i < 5000; i++) {
+    const exponent = (random() - 0.5) * 80;
+    const value = (random() * 2 - 1) * 10 ** exponent;
+    if (Math.abs(value) > 0 && Math.abs(value) < f32SubnormalBoundary) continue;
+    assertEquals(
+      Object.is(narrow(value), Math.fround(value)),
+      true,
+      `${value}`,
+    );
+  }
+});
+
+Deno.test("narrowF64ToF32 flushes an f32-subnormal result to a signed zero", () => {
+  assertEquals(Object.is(narrow(1e-40), 0), true);
+  assertEquals(Object.is(narrow(-1e-40), -0), true);
+  assertEquals(Object.is(narrow(5e-324), 0), true);
+  // Confirms the two policies really do diverge here, so the test above isn't
+  // vacuously skipping a range where they'd have agreed anyway.
+  assertEquals(Math.fround(1e-40) === 0, false);
 });
