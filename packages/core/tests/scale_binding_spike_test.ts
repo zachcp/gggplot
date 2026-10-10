@@ -1,4 +1,9 @@
-import { assertEquals, assertStrictEquals, assertThrows } from "@std/assert";
+import {
+  assert,
+  assertEquals,
+  assertStrictEquals,
+  assertThrows,
+} from "@std/assert";
 import * as Live from "@use-gpu/live";
 import {
   cpuAudit,
@@ -12,6 +17,13 @@ import {
   provide,
   useContext,
 } from "../src/runtime/usegpu_compat.ts";
+import {
+  NA_COLOR,
+  scaleAlphaValue,
+  scaleColorValue,
+  scaleSizeValue,
+} from "../src/scale/mapping.ts";
+import type { TrainedScale } from "../src/scale/types.ts";
 
 Deno.test("scale spike keeps GPU refs stable across a domain commit", () => {
   const refs = scaleParameters(spikeScales());
@@ -65,4 +77,32 @@ Deno.test("stable shader refs need a separate context revision to notify CPU gui
   );
   render(provide(context, { refs, revision: 2 }, guide), fiber);
   assertEquals(seen, [[1, 7], [1, 13]]);
+});
+
+Deno.test("missing aesthetic values follow the NA contract on the CPU", () => {
+  const scales = spikeScales();
+  for (const missing of [Number.NaN, Infinity, undefined]) {
+    assertEquals(scaleColorValue(scales.color, missing), NA_COLOR);
+    assert(Number.isNaN(scaleSizeValue(scales.size, missing)));
+    assert(Number.isNaN(scaleAlphaValue(scales.alpha, missing)));
+  }
+  const discrete: TrainedScale = {
+    aes: "color",
+    kind: "discrete",
+    domain: ["a", "b"],
+  };
+  assertEquals(scaleColorValue(discrete, "z"), NA_COLOR);
+  // The drawn encoding of a missing row: grey50, zero radius, zero alpha.
+  const sample = cpuAudit(scales, Uint32Array.of(1), 3);
+  assertEquals(
+    [...sample.slice(0, 6)],
+    [
+      127 / 255,
+      127 / 255,
+      127 / 255,
+      0,
+      0,
+      0,
+    ].map(Math.fround),
+  );
 });

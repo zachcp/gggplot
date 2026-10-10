@@ -53,15 +53,23 @@ export function ScaleBindingProbe() {
           shaderModuleBuilds: scaleProbe.shaderModuleBuilds,
         };
         const phases = [];
-        // Last update changes only the fixed color, with the domain held still.
+        // Fixed color changes only in the green phases; the domain is held
+        // still by the phase after each change.
+        const red = "#e34948";
+        const green = "#1baf7a";
+        // The last phase is the pixel capture. It sits at [1,13], not the
+        // initial [1,7], so pixels also prove domain updates reach the draw.
         const changes = [
-          { max: 13, kind: "grow-domain" },
-          { max: 5, kind: "shrink-domain" },
-          { max: 1, kind: "constant-domain" },
-          { max: 7, kind: "restore-domain" },
-          { max: 7, kind: "fixed-color-only" },
+          { min: 1, max: 13, fixed: red, kind: "grow-domain" },
+          { min: 1, max: 5, fixed: red, kind: "shrink-domain" },
+          { min: 1, max: 1, fixed: red, kind: "constant-domain" },
+          { min: 1, max: 7, fixed: red, kind: "restore-domain" },
+          { min: 1, max: 7, fixed: green, kind: "fixed-color-only" },
+          // Reversed domain: CPU and GPU must both map every value to t=0.
+          { min: 13, max: 1, fixed: green, kind: "reversed-domain" },
+          { min: 1, max: 13, fixed: green, kind: "pixel-domain" },
         ];
-        for (const [index, { max, kind }] of changes.entries()) {
+        for (const [index, { min, max, fixed, kind }] of changes.entries()) {
           const revision = index + 2;
           scaleProbe.reset();
           const before = {
@@ -72,10 +80,7 @@ export function ScaleBindingProbe() {
             shaderModuleBuilds: scaleProbe.shaderModuleBuilds,
           };
           setState({
-            scales: spikeScales(
-              max,
-              kind === "fixed-color-only" ? "#1baf7a" : "#e34948",
-            ),
+            scales: spikeScales(max, fixed, min),
             revision,
             cpu: false,
           });
@@ -83,7 +88,7 @@ export function ScaleBindingProbe() {
           phases.push({
             revision,
             kind,
-            domain: [1, max],
+            domain: [min, max],
             counters: scaleProbe.getCounters(),
             newMounts: scaleProbe.mounts - before.mounts,
             newScaleBundles: scaleProbe.bundleBuilds - before.bundleBuilds,

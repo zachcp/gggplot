@@ -4,6 +4,7 @@ import { wgsl } from "@use-gpu/shader/wgsl";
 import type { TrainedScale } from "../src/scale/types.ts";
 import { parseColorRGBA } from "../src/color/mod.ts";
 import {
+  NA_COLOR,
   scaleAlphaValue,
   scaleColorValue,
   scaleSizeValue,
@@ -17,19 +18,22 @@ export interface SpikeScales {
   fixed: string;
 }
 
-export function spikeScales(max = 7, fixed = "#e34948"): SpikeScales {
+// `min` above `max` builds a reversed domain; CPU and GPU must both map every
+// value to t=0 there.
+export function spikeScales(max = 7, fixed = "#e34948", min = 1): SpikeScales {
+  const domain: [number, number] = [min, max];
   return {
     color: {
       aes: "color",
       kind: "continuous",
-      domain: [1, max],
+      domain,
       range: [...SEQUENTIAL_RAMP],
     },
-    size: { aes: "size", kind: "continuous", domain: [1, max], range: [8, 24] },
+    size: { aes: "size", kind: "continuous", domain, range: [8, 24] },
     alpha: {
       aes: "alpha",
       kind: "continuous",
-      domain: [1, max],
+      domain,
       range: [0.4, 1],
     },
     fixed,
@@ -50,6 +54,7 @@ export function scaleParameters(scales: SpikeScales) {
     sizeRange: { current: scales.size.range },
     alphaRange: { current: scales.alpha.range },
     fixed: { current: parseColorRGBA(scales.fixed) },
+    naColor: { current: parseColorRGBA(NA_COLOR) },
   };
 }
 
@@ -64,6 +69,13 @@ export function updateParameters(
   }
 }
 
+// WGSL may fold `v != v`, so non-finite is tested on the exponent bits.
+// NaN and +/-Inf are both missing, matching Number.isFinite on the CPU.
+const IS_MISSING = `
+fn isMissing(v: f32) -> bool {
+  return (bitcast<u32>(v) & 0x7f800000u) == 0x7f800000u;
+}`;
+
 export const COLOR_BINDING = wgsl`
 @link fn getValue(i: u32) -> f32;
 @link fn getOwner(i: u32) -> u32;
@@ -71,9 +83,13 @@ export const COLOR_BINDING = wgsl`
 @link fn getPalette(i: u32) -> vec4<f32>;
 @link fn getPaletteLength() -> u32;
 @link fn getAlpha(i: u32) -> f32;
+@link fn getNaColor() -> vec4<f32>;
+${IS_MISSING}
 @export fn getColor(i: u32) -> vec4<f32> {
   let domain = getDomain();
   let value = getValue(getOwner(i));
+  let alpha = clamp(getAlpha(i), 0.0, 1.0);
+  if (isMissing(value)) { return vec4<f32>(getNaColor().rgb, alpha); }
   var t = 0.0;
   if (domain.y > domain.x) { t = (value - domain.x) / (domain.y - domain.x); }
   let last = getPaletteLength() - 1u;
@@ -81,7 +97,7 @@ export const COLOR_BINDING = wgsl`
   let low = u32(floor(x));
   let rgb = mix(getPalette(low).rgb, getPalette(min(low + 1u, last)).rgb, fract(x));
   // Existing CPU mapping quantizes interpolated RGB to an 8-bit hex color.
-  return vec4<f32>(floor(rgb * 255.0 + 0.5) / 255.0, clamp(getAlpha(i), 0.0, 1.0));
+  return vec4<f32>(floor(rgb * 255.0 + 0.5) / 255.0, alpha);
 }`;
 
 export const SIZE_BINDING = wgsl`
@@ -89,11 +105,15 @@ export const SIZE_BINDING = wgsl`
 @link fn getOwner(i: u32) -> u32;
 @link fn getDomain() -> vec2<f32>;
 @link fn getRange() -> vec2<f32>;
+${IS_MISSING}
 @export fn getRadius(i: u32) -> f32 {
   let domain = getDomain();
   let range = getRange();
+  let value = getValue(getOwner(i));
+  // A missing size means the row is not drawn.
+  if (isMissing(value)) { return 0.0; }
   var t = 0.0;
-  if (domain.y > domain.x) { t = clamp((getValue(getOwner(i)) - domain.x) / (domain.y - domain.x), 0.0, 1.0); }
+  if (domain.y > domain.x) { t = clamp((value - domain.x) / (domain.y - domain.x), 0.0, 1.0); }
   return range.x + sqrt(t) * (range.y - range.x);
 }`;
 
@@ -102,11 +122,15 @@ export const ALPHA_BINDING = wgsl`
 @link fn getOwner(i: u32) -> u32;
 @link fn getDomain() -> vec2<f32>;
 @link fn getRange() -> vec2<f32>;
+${IS_MISSING}
 @export fn getAlpha(i: u32) -> f32 {
   let domain = getDomain();
   let range = getRange();
+  let value = getValue(getOwner(i));
+  // A missing alpha means the row is not drawn.
+  if (isMissing(value)) { return 0.0; }
   var t = 0.0;
-  if (domain.y > domain.x) { t = (getValue(getOwner(i)) - domain.x) / (domain.y - domain.x); }
+  if (domain.y > domain.x) { t = (value - domain.x) / (domain.y - domain.x); }
   return range.x + t * (range.y - range.x);
 }`;
 
@@ -136,13 +160,14 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 
 // Raw rows include a missing row and unsorted x values. Indices preserve raw
 // row identity after filtering/sorting and one-row-to-many-vertices expansion.
+// The points case binds the missing row (owner 1) so NaN reaches the shader.
 export const VALUES = Float32Array.of(7, Number.NaN, 1, 5, 3);
 export const CASES = [
   {
     name: "filtered-sorted-points",
     kind: "points",
-    owners: Uint32Array.of(2, 4, 3, 0),
-    positions: Float32Array.of(60, 60, 140, 60, 220, 60, 300, 60),
+    owners: Uint32Array.of(2, 4, 3, 0, 1),
+    positions: Float32Array.of(60, 60, 140, 60, 220, 60, 300, 60, 380, 60),
   },
   {
     name: "expanded-step-line",
@@ -211,12 +236,15 @@ export function cpuAudit(
   owners: Uint32Array,
   revision: number,
 ): Float32Array {
+  // The CPU's missing size/alpha is NaN ("not drawn"); the drawn encoding of
+  // that is zero, which is what the GPU writes.
+  const drawn = (v: number) => Number.isNaN(v) ? 0 : v;
   return Float32Array.from([...owners].flatMap((owner) => {
     const value = VALUES[owner];
-    const alpha = scaleAlphaValue(scales.alpha, value);
+    const alpha = drawn(scaleAlphaValue(scales.alpha, value));
     return [
       ...parseColorRGBA(scaleColorValue(scales.color, value), alpha),
-      scaleSizeValue(scales.size, value),
+      drawn(scaleSizeValue(scales.size, value)),
       alpha,
       revision,
       0,
