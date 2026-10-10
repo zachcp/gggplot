@@ -167,3 +167,22 @@ Deno.test("a failed readback reaches its reader as a rejection", async () => {
   channel.fail(1, new Error("[gggplot] resident grid summary: never produced"));
   await assertRejects(() => pending, Error, "never produced");
 });
+
+Deno.test("a channel tells its readback when a reader starts waiting", () => {
+  // The frame loop is on-demand: a reader that starts waiting after the last
+  // frame gets no copy unless the readback is told to request one (5ie9).
+  const channel = createReadbackChannel<number>();
+  let wants = 0;
+  const stop = channel.onWant(() => wants++);
+  channel.read(3);
+  channel.read(3); // the same waiter: no new notification
+  assertEquals(wants, 1);
+  channel.publish(3, 30);
+  channel.read(3); // already answered
+  assertEquals(wants, 1);
+  channel.read(4);
+  assertEquals(wants, 2);
+  stop();
+  channel.read(5);
+  assertEquals(wants, 2);
+});

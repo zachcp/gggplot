@@ -95,6 +95,8 @@ const MARK_COLORS: {
  * The floor is coverage of the surface's own canvas, not of the page.
  */
 const RESIDENT_ROUTE = "internals";
+/** Longest the resident surfaces get to settle before the floors are judged. */
+const RESIDENT_SETTLE_MS = 30_000;
 const RESIDENT_SURFACES: { match: string; min: number }[] = [
   // examples_stats.tsx :: residentCategoricalCount — stat_count keeps its u32
   // grid on the GPU and bar topology consumes it directly.
@@ -177,7 +179,6 @@ const INSTRUMENT = `
   const errors = [];
   globalThis.__markShotErrors = errors;
   const ctxCanvas = new WeakMap();
-  const queueDevice = new WeakMap();
   const canvasIds = new WeakMap();
   const latest = new Map();
   let seq = 0;
@@ -199,14 +200,6 @@ const INSTRUMENT = `
       return ctx;
     };
 
-    const origRequestDevice = GPUAdapter.prototype.requestDevice;
-    GPUAdapter.prototype.requestDevice = function (...args) {
-      return origRequestDevice.apply(this, args).then((device) => {
-        if (device) queueDevice.set(device.queue, device);
-        return device;
-      });
-    };
-
     // COPY_SRC is what makes the swap-chain texture readable at all; without it
     // copyTextureToBuffer is a validation error.
     const origConfigure = GPUCanvasContext.prototype.configure;
@@ -215,6 +208,7 @@ const INSTRUMENT = `
       if (canvas) {
         const entry = latest.get(idFor(canvas)) || {};
         entry.format = config.format;
+        entry.device = config.device;
         latest.set(idFor(canvas), entry);
       }
       return origConfigure.call(this, Object.assign({}, config, {
@@ -227,46 +221,65 @@ const INSTRUMENT = `
       const texture = origGetCurrentTexture.call(this);
       const canvas = ctxCanvas.get(this) || this.canvas;
       if (canvas && texture) {
-        const entry = latest.get(idFor(canvas)) || {};
+        const id = idFor(canvas);
+        const entry = latest.get(id) || {};
         entry.texture = texture;
         entry.width = texture.width;
         entry.height = texture.height;
-        latest.set(idFor(canvas), entry);
+        latest.set(id, entry);
+        // Copy at the END of the task, after every submit this frame makes.
+        // Copying after the first submit that followed getCurrentTexture could
+        // catch a compute-only submit and an undrawn texture (read as 100%).
+        if (!entry.scheduled) {
+          entry.scheduled = true;
+          queueMicrotask(() => {
+            entry.scheduled = false;
+            capture(id, entry);
+          });
+        }
       }
       return texture;
     };
 
-    const origSubmit = GPUQueue.prototype.submit;
-    GPUQueue.prototype.submit = function (buffers) {
-      const out = origSubmit.call(this, buffers);
-      if (globalThis.__frozen) return out;
-      const device = queueDevice.get(this);
-      if (!device) return out;
-      for (const [id, entry] of latest) {
-        if (!entry.texture) continue;
-        try {
-          const bytesPerRow = Math.ceil(entry.width * 4 / 256) * 256;
-          const buffer = device.createBuffer({
-            size: bytesPerRow * entry.height,
-            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-          });
-          const encoder = device.createCommandEncoder();
-          encoder.copyTextureToBuffer(
-            { texture: entry.texture },
-            { buffer, bytesPerRow },
-            { width: entry.width, height: entry.height },
-          );
-          origSubmit.call(this, [encoder.finish()]);
-          // Keep only the newest frame: early frames are legitimately empty
-          // while fonts and layout are still resolving.
-          if (shots[id]) shots[id].buffer.destroy();
-          shots[id] = { buffer, bytesPerRow, width: entry.width, height: entry.height, format: entry.format };
-          entry.texture = null;
-        } catch (e) {
-          errors.push(id + ": " + String(e));
-        }
+    // Frames captured while a read holds the freeze are parked here and
+    // promoted on thaw. Dropping them instead pinned a surface to whatever it
+    // showed before its last frame: rendering is on-demand, so a missed final
+    // frame is never drawn again.
+    const pending = {};
+    const capture = (id, entry) => {
+      const { device, texture } = entry;
+      if (!device || !texture) return;
+      try {
+        const bytesPerRow = Math.ceil(entry.width * 4 / 256) * 256;
+        const buffer = device.createBuffer({
+          size: bytesPerRow * entry.height,
+          usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+        });
+        const encoder = device.createCommandEncoder();
+        encoder.copyTextureToBuffer(
+          { texture },
+          { buffer, bytesPerRow },
+          { width: entry.width, height: entry.height },
+        );
+        device.queue.submit([encoder.finish()]);
+        const shot = { buffer, bytesPerRow, width: entry.width, height: entry.height, format: entry.format };
+        // Keep only the newest frame: early frames are legitimately empty
+        // while fonts and layout are still resolving.
+        const into = globalThis.__frozen ? pending : shots;
+        if (into[id]) into[id].buffer.destroy();
+        into[id] = shot;
+        entry.texture = null;
+      } catch (e) {
+        errors.push(id + ": " + String(e));
       }
-      return out;
+    };
+    globalThis.__thaw = () => {
+      globalThis.__frozen = false;
+      for (const id of Object.keys(pending)) {
+        if (shots[id]) shots[id].buffer.destroy();
+        shots[id] = pending[id];
+        delete pending[id];
+      }
     };
     /**
      * Hand out the shot map with capture FROZEN, so submit() cannot destroy a
@@ -305,7 +318,7 @@ const INSTRUMENT = `
         slots[slot] = { packed, width: shot.width, height: shot.height };
         return { width: shot.width, height: shot.height };
       } finally {
-        globalThis.__frozen = false;
+        globalThis.__thaw();
       }
     };
 
@@ -669,53 +682,80 @@ try {
         await residentPage.goto(`${baseUrl}/#${RESIDENT_ROUTE}`, {
           waitUntil: "networkidle",
         });
-        await residentPage.waitForTimeout(9000);
-        const residentStats = await readWithThaw(
-          residentPage,
-          () =>
-            residentPage.evaluate(
-              async ({ background }) => {
-                const shots = (globalThis as unknown as {
-                  __takeShots: () => Record<string, {
-                    buffer: GPUBuffer;
-                    bytesPerRow: number;
-                    width: number;
-                    height: number;
-                    format: string;
-                  }>;
-                }).__takeShots();
-                const out: { label: string; coverage: number }[] = [];
-                for (const [label, shot] of Object.entries(shots)) {
-                  await shot.buffer.mapAsync(GPUMapMode.READ);
-                  const bytes = new Uint8Array(
-                    shot.buffer.getMappedRange().slice(0),
-                  );
-                  shot.buffer.unmap();
-                  const bgra = (shot.format || "").startsWith("bgra");
-                  let nonBackground = 0;
-                  for (let y = 0; y < shot.height; y++) {
-                    for (let x = 0; x < shot.width; x++) {
-                      const i = y * shot.bytesPerRow + x * 4;
-                      const r = bgra ? bytes[i + 2] : bytes[i];
-                      const g = bytes[i + 1];
-                      const b = bgra ? bytes[i] : bytes[i + 2];
-                      if (
-                        Math.abs(r - background[0]) > 6 ||
-                        Math.abs(g - background[1]) > 6 ||
-                        Math.abs(b - background[2]) > 6
-                      ) nonBackground++;
+        // Poll rather than sleep. The resident chain is several async stages
+        // (domain kernels compile, domain readback, bin grid kernels compile,
+        // summary readback), and on a slow run the chart is not drawn yet at
+        // any fixed time: a single read at 9s flaked blank on an UNCHANGED
+        // tree in 1 of 3 runs (gggplot-vnh.17). Settled means every surface
+        // has met its floor and reads the same twice in a row.
+        const readResidentStats = () =>
+          readWithThaw(
+            residentPage,
+            () =>
+              residentPage.evaluate(
+                async ({ background }) => {
+                  const shots = (globalThis as unknown as {
+                    __takeShots: () => Record<string, {
+                      buffer: GPUBuffer;
+                      bytesPerRow: number;
+                      width: number;
+                      height: number;
+                      format: string;
+                    }>;
+                  }).__takeShots();
+                  const out: { label: string; coverage: number }[] = [];
+                  for (const [label, shot] of Object.entries(shots)) {
+                    await shot.buffer.mapAsync(GPUMapMode.READ);
+                    const bytes = new Uint8Array(
+                      shot.buffer.getMappedRange().slice(0),
+                    );
+                    shot.buffer.unmap();
+                    const bgra = (shot.format || "").startsWith("bgra");
+                    let nonBackground = 0;
+                    for (let y = 0; y < shot.height; y++) {
+                      for (let x = 0; x < shot.width; x++) {
+                        const i = y * shot.bytesPerRow + x * 4;
+                        const r = bgra ? bytes[i + 2] : bytes[i];
+                        const g = bytes[i + 1];
+                        const b = bgra ? bytes[i] : bytes[i + 2];
+                        if (
+                          Math.abs(r - background[0]) > 6 ||
+                          Math.abs(g - background[1]) > 6 ||
+                          Math.abs(b - background[2]) > 6
+                        ) nonBackground++;
+                      }
                     }
+                    out.push({
+                      label,
+                      coverage: nonBackground / (shot.width * shot.height),
+                    });
                   }
-                  out.push({
-                    label,
-                    coverage: nonBackground / (shot.width * shot.height),
-                  });
-                }
-                return out;
-              },
-              { background: BACKGROUND },
-            ),
-        );
+                  return out;
+                },
+                { background: BACKGROUND },
+              ),
+          );
+        const settled = (
+          stats: { label: string; coverage: number }[],
+          previous: { label: string; coverage: number }[] | null,
+        ) =>
+          RESIDENT_SURFACES.every((wanted) => {
+            const shot = stats.find((e) => e.label.includes(wanted.match));
+            const before = previous?.find((e) =>
+              e.label.includes(wanted.match)
+            );
+            return shot && shot.coverage >= wanted.min &&
+              before?.coverage === shot.coverage;
+          });
+        await residentPage.waitForTimeout(3000);
+        let residentStats = await readResidentStats();
+        for (let waited = 3000; waited < RESIDENT_SETTLE_MS; waited += 1500) {
+          await residentPage.waitForTimeout(1500);
+          const next = await readResidentStats();
+          const done = settled(next, residentStats);
+          residentStats = next;
+          if (done) break;
+        }
         for (const wanted of RESIDENT_SURFACES) {
           const shot = residentStats.find((entry) =>
             entry.label.includes(wanted.match)
@@ -802,7 +842,7 @@ async function thawCapture(
   target: { evaluate: (fn: () => void) => Promise<void> },
 ) {
   await target.evaluate(() => {
-    (globalThis as unknown as { __frozen: boolean }).__frozen = false;
+    (globalThis as unknown as { __thaw: () => void }).__thaw();
   });
 }
 

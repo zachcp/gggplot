@@ -168,6 +168,7 @@ const workbench = interop<{
   useLineSegmentsSource: UseLineSegmentsSource;
   useRawTensorSource: UseRawTensorSource;
   useNoRawTensorSource: UseNoRawTensorSource;
+  LoopContext: unknown;
   useShader: UseShader;
   useShaderRef: UseShaderRef;
   useMaterialContext: UseMaterialContext;
@@ -243,6 +244,12 @@ export const LineLayer = workbench.LineLayer;
 export const useLineSegmentsSource = workbench.useLineSegmentsSource;
 export const useRawTensorSource = workbench.useRawTensorSource;
 export const useNoRawTensorSource = workbench.useNoRawTensorSource;
+/**
+ * SyncLoop's frame request, `(fiber?) => time`. Called with no fiber it just
+ * enqueues one animation frame, and it is safe to call outside render. The
+ * default (no SyncLoop above) is a no-op.
+ */
+export const LoopContext = workbench.LoopContext;
 export const useShader = workbench.useShader;
 export const useShaderRef = workbench.useShaderRef;
 export const useMaterialContext = workbench.useMaterialContext;
