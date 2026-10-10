@@ -12,6 +12,12 @@ const PerformanceProbe = lazy(() =>
   }))
 );
 
+const ScaleBindingProbe = lazy(() =>
+  import("./ScaleBindingProbe.tsx").then((module) => ({
+    default: module.ScaleBindingProbe,
+  }))
+);
+
 // Declared as a global `var` rather than on `interface Window`: the probe is
 // reached through `globalThis`, and only a var declaration types that. An
 // interface member types `window.` alone.
@@ -92,7 +98,13 @@ if (exportProbeMode) {
 const root = document.getElementById("root")!;
 const query = new URLSearchParams(location.search);
 createRoot(root).render(
-  query.has("instrument")
+  query.has("scale-binding")
+    ? (
+      <Suspense fallback={<p>Loading scale-binding spike…</p>}>
+        <ScaleBindingProbe />
+      </Suspense>
+    )
+    : query.has("instrument")
     ? <InstrumentProbe />
     : query.has("performance")
     ? (

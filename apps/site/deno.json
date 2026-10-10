@@ -6,6 +6,7 @@
     "preview": "deno run -A npm:vite preview",
     "test:visual": "deno run -A scripts/visual_smoke.ts",
     "test:gpu-instrument": "deno run -A scripts/gpu_instrument_check.ts",
+    "spike:scale-binding": "deno run -A scripts/scale_binding_check.ts",
     "test:draw-calls": "deno run -A scripts/draw_call_check.ts",
     "test:pixels": "deno run -A scripts/mark_pixel_check.ts",
     "test:rerender": "deno run -A scripts/rerender_check.ts",
