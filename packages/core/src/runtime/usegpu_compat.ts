@@ -40,6 +40,20 @@ export type UseMemo = <T>(
 export type Yeet = (value: unknown) => LiveElement;
 /** Creates a Live context; supplied with provide(), read with useContext(). */
 export type MakeContext = <T>(initial: T, displayName?: string) => unknown;
+/** Creates a Live capture; children report to it with useCapture(). */
+export type MakeCapture = (displayName?: string) => unknown;
+/**
+ * Renders `calls` inline, then mounts `then(values)` after them with every
+ * value its descendants reported through useCapture, in tree order.
+ */
+export type Capture = <T>(
+  context: unknown,
+  calls: unknown,
+  then: (values: T[]) => LiveElement,
+  key?: string,
+) => LiveElement;
+/** Reports a value to the nearest enclosing capture of `context`. */
+export type UseCapture = (context: unknown, value: unknown) => void;
 export type UseContext = <T>(context: unknown) => T;
 export type UseOne = <T>(create: () => T, dependency?: unknown) => T;
 export type UseResource = <T>(
@@ -130,6 +144,10 @@ const live = interop<{
   useAwait: UseAwait;
   makeContext: MakeContext;
   useContext: UseContext;
+  makeCapture: MakeCapture;
+  capture: Capture;
+  useCapture: UseCapture;
+  useFiberId: () => number;
 }>(Live, "useMemo");
 
 const workbench = interop<{
@@ -174,6 +192,10 @@ export const useResource = live.useResource;
 export const useAwait = live.useAwait;
 export const makeContext = live.makeContext;
 export const useContext = live.useContext;
+export const makeCapture = live.makeCapture;
+export const capture = live.capture;
+export const useCapture = live.useCapture;
+export const useFiberId = live.useFiberId;
 
 // @use-gpu/workbench
 /**
