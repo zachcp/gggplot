@@ -407,6 +407,14 @@ export interface ContentBudget {
   maxReadbackBytes: number;
 }
 
+/**
+ * Summary sampling reads at most this many bytes in one call, so a small
+ * payload costs one round trip instead of one per sampled value.
+ */
+const SUMMARY_BLOCK_BYTES = 1024 * 1024;
+/** In-flight scalar reads for payloads larger than SUMMARY_BLOCK_BYTES. */
+const SUMMARY_READ_CONCURRENCY = 16;
+
 export const DEFAULT_CONTENT_BUDGET: ContentBudget = {
   maxResidentBytes: 16 * 1024 * 1024,
   maxExactBytes: 4 * 1024 * 1024,
@@ -1208,18 +1216,51 @@ export async function buildTensorContentProduct(
   const width = numericWidth(descriptor.dtype)!;
   const elementCount = Math.floor(payload.byteLength / width);
   const sampleCount = Math.min(elementCount, budget.maxSummarySamples);
-  const samples: number[] = [];
-  for (let index = 0; index < sampleCount; index++) {
-    const element = Math.floor(index * elementCount / sampleCount);
+  const elementAt = (index: number) =>
+    Math.floor(index * elementCount / sampleCount);
+  const samples: number[] = new Array(sampleCount);
+  if (sampleCount > 0 && elementCount * width <= SUMMARY_BLOCK_BYTES) {
+    // A payload this small is one read, and the samples are decoded locally.
     const bytes = await source!.readRange({
       sourceId: source!.id,
       sourceVersion: source!.version,
-      byteOffset: payload.byteOffset + element * width,
-      byteLength: width,
+      byteOffset: payload.byteOffset,
+      byteLength: elementCount * width,
       dtype: descriptor.dtype,
-      shape: [1],
+      shape: [elementCount],
     });
-    samples.push(decodeValue(new DataView(bytes), 0, descriptor.dtype));
+    const view = new DataView(bytes);
+    for (let index = 0; index < sampleCount; index++) {
+      samples[index] = decodeValue(
+        view,
+        elementAt(index) * width,
+        descriptor.dtype,
+      );
+    }
+  } else {
+    // Larger payloads keep one scalar read per sample, with a fixed number in
+    // flight. Each result lands at its index, so the order is the serial order.
+    let next = 0;
+    const worker = async () => {
+      while (next < sampleCount) {
+        const index = next++;
+        const bytes = await source!.readRange({
+          sourceId: source!.id,
+          sourceVersion: source!.version,
+          byteOffset: payload.byteOffset + elementAt(index) * width,
+          byteLength: width,
+          dtype: descriptor.dtype,
+          shape: [1],
+        });
+        samples[index] = decodeValue(new DataView(bytes), 0, descriptor.dtype);
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(SUMMARY_READ_CONCURRENCY, sampleCount) },
+        worker,
+      ),
+    );
   }
   return {
     kind: "matrix_content",
