@@ -166,13 +166,13 @@ export class ByteArrayGPUTensorSource extends ByteArrayTensorSource
         `${request.dtype} has no GPU upload path; use readRange and the CPU values path`,
       );
     }
-    const ceiling = residentUploadCeiling(this.device, this.maxResidentBytes);
-    if (request.byteLength > ceiling) {
-      throw new RangeError(
-        `Tensor range of ${request.byteLength} bytes exceeds the ${ceiling}-byte resident ceiling`,
-      );
-    }
     const length = rangeElementCount(request);
+    // Check both allocations before creating either buffer. The widen/unpack
+    // output is 4 bytes per element, so f16/i8 ranges can be 2x-4x the input.
+    const staging = Math.max(4, alignedUploadBytes(request.byteLength));
+    const output = plan.path === "direct" ? staging : Math.max(4, length * 4);
+    this.assertResidentFits(staging, "staging");
+    this.assertResidentFits(output, "output");
     const version = ++this.uploadCount;
 
     if (plan.path === "direct") {
@@ -235,8 +235,9 @@ export class ByteArrayGPUTensorSource extends ByteArrayTensorSource
         "Downsample rows/columns/targetRows/targetColumns must be positive safe integers",
       );
     }
-    const full = await this.readRangeSource(request);
     const outputLength = request.targetRows * request.targetColumns;
+    this.assertResidentFits(Math.max(4, outputLength * 4), "downsample output");
+    const full = await this.readRangeSource(request);
     const buffer = this.device.createBuffer({
       label: `gggplot-tensor-downsample-${request.dtype}`,
       size: Math.max(4, outputLength * 4),
@@ -255,6 +256,16 @@ export class ByteArrayGPUTensorSource extends ByteArrayTensorSource
       version: ++this.uploadCount,
       destroy: () => buffer.destroy(),
     };
+  }
+
+  /** Refuses an allocation over the resident ceiling before the device sees it. */
+  private assertResidentFits(bytes: number, label: string): void {
+    const ceiling = residentUploadCeiling(this.device, this.maxResidentBytes);
+    if (bytes > ceiling) {
+      throw new RangeError(
+        `Tensor range ${label} of ${bytes} bytes exceeds the ${ceiling}-byte resident ceiling`,
+      );
+    }
   }
 
   /**

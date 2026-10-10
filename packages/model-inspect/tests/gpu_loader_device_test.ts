@@ -501,6 +501,34 @@ Deno.test("a range past the resident ceiling is refused before it reaches the de
   device.destroy();
 });
 
+Deno.test("widened output is checked against the resident ceiling before allocation", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+  // Four f16 elements: the 8 input bytes fit a 12-byte ceiling, but the 16-byte
+  // f32 output the widen pass writes does not. Before the fix this allocated.
+  const source = new ByteArrayGPUTensorSource(
+    device,
+    "payload",
+    "v1",
+    new Uint8Array(8),
+    12,
+  );
+  await assertRejects(
+    () =>
+      source.readRangeSource({
+        sourceId: "payload",
+        sourceVersion: "v1",
+        byteOffset: 0,
+        byteLength: 8,
+        dtype: "f16",
+        shape: [4],
+      }),
+    RangeError,
+    "output of 16 bytes",
+  );
+  device.destroy();
+});
+
 Deno.test("adapter pipelines are compiled once per device, not per upload", async () => {
   const device = await requestTestDevice();
   if (!device) return;
