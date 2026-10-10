@@ -224,6 +224,37 @@ Deno.test("large content summaries use only a bounded number of source reads", a
   assertEquals(reads, 7);
 });
 
+Deno.test("small content summaries read the payload once and sample the same values", async () => {
+  // 4096 f32 values 0..4095 fit one 1 MiB block, so 2048 samples need one read.
+  const values = Float32Array.from({ length: 4096 }, (_, index) => index);
+  const bytes = new ByteArrayTensorSource(
+    "payload",
+    "v1",
+    new Uint8Array(values.buffer),
+  );
+  let reads = 0;
+  const source: TensorSource = {
+    id: bytes.id,
+    version: bytes.version,
+    byteLength: bytes.byteLength,
+    readRange: (request) => {
+      reads++;
+      return bytes.readRange(request);
+    },
+  };
+  const product = await buildTensorContentProduct(model([4096]), source, {
+    target: { kind: "tensor", tensorId: "weights" },
+    mode: "summary",
+    budget: { maxSummarySamples: 2048 },
+  });
+  assertEquals(reads, 1);
+  assertEquals(product.summary?.count, 2048);
+  // Evenly spaced samples are the even indices: 0, 2, ..., 4094.
+  assertEquals(product.summary?.min, 0);
+  assertEquals(product.summary?.max, 4094);
+  assertEquals(product.summary?.mean, 2047);
+});
+
 Deno.test("forced exact and downsample modes still respect content budgets", async () => {
   const source: TensorSource = {
     id: "payload",
