@@ -113,6 +113,12 @@ export interface RenderNode {
   component: ComponentName;
   props: Record<string, unknown>;
   children: RenderNode[];
+  /**
+   * Live reconciliation key (gggplot-vnh.3). Live reconciles siblings by
+   * position, so the component path keys each layer's marks to keep a layer's
+   * mounted sources when a sibling is added or removed before it.
+   */
+  key?: string;
 }
 
 /**

@@ -599,7 +599,9 @@ export function renderTree(n: RenderNode): unknown {
     return null;
   }
   const children = n.children.map(renderTree);
-  return createElement(Component, n.props, ...children);
+  // Live's createElement clears props.key in place, so a key goes on a copy.
+  const props = n.key === undefined ? n.props : { ...n.props, key: n.key };
+  return createElement(Component, props, ...children);
 }
 
 export interface GGPlotProps {

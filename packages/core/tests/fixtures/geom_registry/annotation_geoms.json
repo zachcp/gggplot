@@ -54,7 +54,8 @@
                   "width": 1,
                   "zBias": -1
                 },
-                "children": []
+                "children": [],
+                "key": "grid-x-2"
               },
               {
                 "component": "Grid",
@@ -78,7 +79,8 @@
                   "width": 1,
                   "zBias": -1
                 },
-                "children": []
+                "children": [],
+                "key": "grid-y-2"
               },
               {
                 "component": "Axis",
@@ -576,7 +578,8 @@
                   "width": 1,
                   "zBias": -1
                 },
-                "children": []
+                "children": [],
+                "key": "grid-x-5"
               },
               {
                 "component": "Grid",
@@ -600,7 +603,8 @@
                   "width": 1,
                   "zBias": -1
                 },
-                "children": []
+                "children": [],
+                "key": "grid-y-5"
               },
               {
                 "component": "Axis",

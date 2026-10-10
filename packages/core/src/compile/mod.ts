@@ -625,27 +625,37 @@ export function compile(
       } else {
         const xFirst = axes[0] === "x";
         const yFirst = axes[0] === "y";
+        // Keyed by line count. @use-gpu/plot's Grid memoizes its LineLayer on
+        // the shader binding alone, so when a resize changes how many lines
+        // there are, the old count keeps drawing (the axis labels update, the
+        // grid does not). A new key remounts the Grid with the new count.
         if (xGrid) {
-          guides.push(node("Grid", {
-            axes,
-            range: xFirst
-              ? [xGrid.range, panelYDomain]
-              : [panelYDomain, xGrid.range],
-            first: xFirst ? xGrid.props : null,
-            second: xFirst ? null : xGrid.props,
-            ...gridStyle,
-          }));
+          guides.push({
+            ...node("Grid", {
+              axes,
+              range: xFirst
+                ? [xGrid.range, panelYDomain]
+                : [panelYDomain, xGrid.range],
+              first: xFirst ? xGrid.props : null,
+              second: xFirst ? null : xGrid.props,
+              ...gridStyle,
+            }),
+            key: `grid-x-${xGrid.props.divide}`,
+          });
         }
         if (yGrid) {
-          guides.push(node("Grid", {
-            axes,
-            range: yFirst
-              ? [yGrid.range, panelXDomain]
-              : [panelXDomain, yGrid.range],
-            first: yFirst ? yGrid.props : null,
-            second: yFirst ? null : yGrid.props,
-            ...gridStyle,
-          }));
+          guides.push({
+            ...node("Grid", {
+              axes,
+              range: yFirst
+                ? [yGrid.range, panelXDomain]
+                : [panelXDomain, yGrid.range],
+              first: yFirst ? yGrid.props : null,
+              second: yFirst ? null : yGrid.props,
+              ...gridStyle,
+            }),
+            key: `grid-y-${yGrid.props.divide}`,
+          });
         }
         if (explicitGridPositions.length) {
           guides.push(node("GuideLines", {
