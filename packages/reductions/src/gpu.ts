@@ -189,11 +189,10 @@ export function packHistogram2dParams(
 function createStorageBuffer(
   device: GPUDevice,
   data: Uint32Array | Float32Array,
-  usage: GPUBufferUsageFlags,
 ): GPUBuffer {
   const buffer = device.createBuffer({
     size: Math.max(4, data.byteLength),
-    usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST | usage,
+    usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
   });
   if (data.byteLength > 0) device.queue.writeBuffer(buffer, 0, data);
   return buffer;
@@ -217,6 +216,8 @@ async function readU32Buffer(
     size: Math.max(4, count * Uint32Array.BYTES_PER_ELEMENT),
     usage: GPU_BUFFER_USAGE.COPY_DST | GPU_BUFFER_USAGE.MAP_READ,
   });
+  // The staging copy is queued after the dispatch that filled `source`, and
+  // queue work runs in submission order, so mapAsync needs no queue-wide wait.
   const encoder = device.createCommandEncoder();
   encoder.copyBufferToBuffer(source, 0, readback, 0, readback.size);
   device.queue.submit([encoder.finish()]);
@@ -305,13 +306,11 @@ export async function groupedHistogram1dGpu(
   const valuesBuffer = createStorageBuffer(
     device,
     input.values,
-    GPU_BUFFER_USAGE.COPY_SRC,
   );
   const groupIds = input.groupIds ?? new Uint32Array(input.values.length);
   const groupBuffer = createStorageBuffer(
     device,
     groupIds,
-    GPU_BUFFER_USAGE.COPY_SRC,
   );
   const countsBuffer = device.createBuffer({
     size: Math.max(4, packed.countsLength * Uint32Array.BYTES_PER_ELEMENT),
@@ -346,7 +345,6 @@ export async function groupedHistogram1dGpu(
   pass.dispatchWorkgroups(Math.ceil(input.values.length / 64));
   pass.end();
   device.queue.submit([encoder.finish()]);
-  await device.queue.onSubmittedWorkDone();
   const dispatchEnd = now();
 
   const counts = await readU32Buffer(device, countsBuffer, packed.countsLength);
@@ -383,13 +381,11 @@ export async function groupedCount1dGpu(
   const valuesBuffer = createStorageBuffer(
     device,
     input.valueIds,
-    GPU_BUFFER_USAGE.COPY_SRC,
   );
   const groupIds = input.groupIds ?? new Uint32Array(input.valueIds.length);
   const groupBuffer = createStorageBuffer(
     device,
     groupIds,
-    GPU_BUFFER_USAGE.COPY_SRC,
   );
   const countsBuffer = device.createBuffer({
     size: Math.max(4, packed.countsLength * Uint32Array.BYTES_PER_ELEMENT),
@@ -424,7 +420,6 @@ export async function groupedCount1dGpu(
     pass.dispatchWorkgroups(Math.ceil(input.valueIds.length / 64));
     pass.end();
     device.queue.submit([encoder.finish()]);
-    await device.queue.onSubmittedWorkDone();
   }
   const dispatchEnd = now();
   const counts = packed.countsLength > 0
@@ -459,18 +454,15 @@ export async function groupedHistogram2dGpu(
   const xBuffer = createStorageBuffer(
     device,
     input.x,
-    GPU_BUFFER_USAGE.COPY_SRC,
   );
   const yBuffer = createStorageBuffer(
     device,
     input.y,
-    GPU_BUFFER_USAGE.COPY_SRC,
   );
   const groupIds = input.groupIds ?? new Uint32Array(input.x.length);
   const groupBuffer = createStorageBuffer(
     device,
     groupIds,
-    GPU_BUFFER_USAGE.COPY_SRC,
   );
   const countsBuffer = device.createBuffer({
     size: Math.max(4, packed.countsLength * Uint32Array.BYTES_PER_ELEMENT),
@@ -506,7 +498,6 @@ export async function groupedHistogram2dGpu(
   pass.dispatchWorkgroups(Math.ceil(input.x.length / 64));
   pass.end();
   device.queue.submit([encoder.finish()]);
-  await device.queue.onSubmittedWorkDone();
   const dispatchEnd = now();
 
   const counts = await readU32Buffer(device, countsBuffer, packed.countsLength);

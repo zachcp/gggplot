@@ -13,7 +13,7 @@ export interface ResidentDomain1D {
   /**
    * Records this kernel's passes into a command buffer WITHOUT submitting it.
    *
-   * The mounted Use.GPU backend yeets the result into the frame's compute pass
+   * The mounted Use.GPU backend emits the result into the frame's compute pass
    * so every kernel in a plot lands in ONE `device.queue.submit` (see
    * workbench's RenderComputePass). `dispatch()` is the standalone form for the
    * headless executor and tests, and is defined in terms of this.
