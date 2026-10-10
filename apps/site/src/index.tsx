@@ -12,6 +12,12 @@ const PerformanceProbe = lazy(() =>
   }))
 );
 
+const CaptureProbe = lazy(() =>
+  import("./CaptureProbe.tsx").then((module) => ({
+    default: module.CaptureProbe,
+  }))
+);
+
 const ComponentRootProbe = lazy(() =>
   import("./ComponentRootProbe.tsx").then((module) => ({
     default: module.ComponentRootProbe,
@@ -104,7 +110,13 @@ if (exportProbeMode) {
 const root = document.getElementById("root")!;
 const query = new URLSearchParams(location.search);
 createRoot(root).render(
-  query.has("component-root")
+  query.has("capture")
+    ? (
+      <Suspense fallback={<p>Loading…</p>}>
+        <CaptureProbe id={query.get("capture")!} />
+      </Suspense>
+    )
+    : query.has("component-root")
     ? (
       <Suspense fallback={<p>Loading component-root spike…</p>}>
         <ComponentRootProbe />

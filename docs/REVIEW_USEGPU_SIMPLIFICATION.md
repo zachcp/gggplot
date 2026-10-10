@@ -174,7 +174,34 @@ drop needs vnh.
 
 ## 6. Spike results (vnh.17)
 
-_Pending; filled from the bead notes._
+All three changes were **kept**. Net **−328 hand-written lines** (src −299,
+tests −29), plus −6,170 lines of a regenerated `polar_bar` fixture. They were
+measured against base `0bf034a`, cumulatively (C1, then C1+C2, then C1+C2+C3).
+Landing is `gggplot-wwu`.
+
+| Change                                                                                                                                                     | Net LOC | Notable finding                                                                                                                                                                                                                                                                                          |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **C1** flat `useRawTensorSource` data mount; `HoldLevel`, the `RawData` export and `GPUPlotRuntime` deleted                                                |    −182 | `useRawSource` has no minimum allocation, and a zero-byte storage binding is a WebGPU validation error. An empty column now uploads one placeholder element but still reports length 0. The hook also does not signal a frame on a version change the way `RawData` did; gate tracked in `gggplot-eudx`. |
+| **C2** `<Transform>` replaces hand-built `PanelViewport`/`RadialViewport` matrices (live and emitted); the never-mounted `FacetPanel` component is deleted |    −116 | `Transform` is translation × rotation × scale composed through the same `useCombinedMatrixTransform`, so it is an exact drop-in, negative y included. Its trait props parse by identity, so they **must be memoized**. Removing the `FacetPanel` export is a public-API change and needs sign-off.       |
+| **C3** `<Grid divide nice:false detail>` replaces CPU ring/spoke geometry for the polar grid                                                               |     −30 | The old grid **never followed scale breaks**: 4 even rings and 12 spokes, confirmed at `0bf034a`. Grid reproduces it pixel-identically. Following ggplot breaks is a pre-existing bug, now `gggplot-f8sq`.                                                                                               |
+
+Gates:
+
+- `deno task test`: 642 pass (−2 `GPUPlotRuntime` tests, +1 empty-column test).
+- `check`, `lint`, `test:rerender` and `test:gpu-instrument` pass. Mark
+  creations/writes stay 0/0.
+- Every pixel floor that drew matched its recorded figure exactly (70.4%, 27.4%,
+  62.9%, 74.6%), with no draw rate worse than baseline.
+- Per-surface captures are identical to baseline outside a known noise set,
+  including facets, `coord_flip`, both polar charts and all 11 3D surfaces.
+
+The pixel and visual gates were flaky at baseline. That was the readback stall,
+since fixed by `gggplot-5ie9` (349ed90). Re-run them on the rebased tree when
+landing.
+
+**What this confirms about §5:** the "deletable now" estimate (300–400 lines)
+held. The measured deletion was 328 lines, with no new abstractions and no pixel
+change.
 
 ## 7. Recommendations
 
