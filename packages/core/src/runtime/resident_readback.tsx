@@ -34,7 +34,15 @@
 
 import type { LiveElement } from "@use-gpu/live";
 import type { GPUStorageSource } from "./types.ts";
-import { createElement, Readback, useMemo, useOne } from "./usegpu_compat.ts";
+import {
+  createElement,
+  LoopContext,
+  Readback,
+  useContext,
+  useMemo,
+  useOne,
+  useResource,
+} from "./usegpu_compat.ts";
 
 /**
  * One frame's verdict on a copy that came back off the GPU.
@@ -75,6 +83,13 @@ export interface ReadbackChannel<T> {
   wanted(version: number): boolean;
   publish(version: number, value: T): void;
   fail(version: number, error: Error): void;
+  /**
+   * Calls `listener` whenever a reader starts waiting on a version. Returns an
+   * unsubscribe. The readback uses it to request a frame: the frame loop is
+   * on-demand, so a reader that starts waiting after the last frame would
+   * otherwise wait forever (gggplot-5ie9).
+   */
+  onWant(listener: () => void): () => void;
 }
 
 export function createReadbackChannel<T>(): ReadbackChannel<T> {
@@ -85,6 +100,7 @@ export function createReadbackChannel<T>(): ReadbackChannel<T> {
     resolve: (value: T) => void;
     reject: (error: Error) => void;
   } | null = null;
+  const listeners = new Set<() => void>();
   const waiterFor = (version: number) => {
     if (!waiter || waiter.version !== version) {
       let resolve!: (value: T) => void;
@@ -98,6 +114,7 @@ export function createReadbackChannel<T>(): ReadbackChannel<T> {
       // unhandled rejection. Awaiters still see it.
       promise.catch(() => {});
       waiter = { version, promise, resolve, reject };
+      for (const listener of listeners) listener();
     }
     return waiter;
   };
@@ -118,6 +135,10 @@ export function createReadbackChannel<T>(): ReadbackChannel<T> {
     },
     fail(version, error) {
       if (waiter?.version === version) waiter.reject(error);
+    },
+    onWant(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
   };
 }
@@ -181,6 +202,16 @@ export function ResidentReadback<T>(
   // budget is per answer, so a new version gets a fresh one.
   const state = useOne(() => ({ version: -1, attempts: 0, dispatched: -1 }));
   const budget = frames ?? DEFAULT_FRAME_BUDGET;
+  // <Readback> copies only on frames that happen anyway, and the loop is
+  // on-demand. So while a reader waits, keep asking for frames: once when it
+  // starts waiting, and again after every copy that was not yet the answer.
+  const requestFrame = useContext<() => unknown>(LoopContext);
+  useResource((dispose) => {
+    const stop = channel.onWant(() => requestFrame());
+    // A reader may already be waiting from before this leaf (re)mounted.
+    if (channel.wanted(version)) requestFrame();
+    dispose(stop);
+  }, [channel, version, requestFrame]);
   const props = useMemo(() => ({
     source,
     // `then` runs a frame's-worth later than `post`, so the version the data
@@ -204,10 +235,23 @@ export function ResidentReadback<T>(
           dispatched,
           new Error(`[gggplot] ${label}: ${decision.reason}`),
         );
+      } else if (alive() && channel.wanted(version)) {
+        // Not finished yet: nothing else may schedule the next attempt.
+        requestFrame();
       }
       // Nothing to mount: this leaf's output is the channel, not an element.
       return null;
     },
-  }), [source, version, channel, decide, alive, budget, label, state]);
+  }), [
+    source,
+    version,
+    channel,
+    decide,
+    alive,
+    budget,
+    label,
+    state,
+    requestFrame,
+  ]);
   return createElement(Readback, props) as LiveElement;
 }
