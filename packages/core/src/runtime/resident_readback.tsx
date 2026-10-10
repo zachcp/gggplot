@@ -188,6 +188,9 @@ export interface ResidentReadbackProps<T> {
  */
 const DEFAULT_FRAME_BUDGET = 300;
 
+/** Frames a copy may stay in flight before another is allowed anyway. */
+const IN_FLIGHT_FRAMES = 30;
+
 /**
  * Copies one resident buffer back per frame until its answer is ready.
  *
@@ -200,7 +203,13 @@ export function ResidentReadback<T>(
 ): LiveElement {
   // Retained across frames, and re-armed per version rather than per mount: the
   // budget is per answer, so a new version gets a fresh one.
-  const state = useOne(() => ({ version: -1, attempts: 0, dispatched: -1 }));
+  const state = useOne(() => ({
+    version: -1,
+    attempts: 0,
+    dispatched: -1,
+    // Frames since the copy in flight was enqueued; -1 when none is.
+    inFlight: -1,
+  }));
   const budget = frames ?? DEFAULT_FRAME_BUDGET;
   // <Readback> copies only on frames that happen anyway, and the loop is
   // on-demand. So while a reader waits, keep asking for frames: once when it
@@ -218,9 +227,21 @@ export function ResidentReadback<T>(
     // belongs to is captured when the copy is enqueued, not when it lands.
     onDispatch: () => {
       state.dispatched = version;
+      state.inFlight = 0;
     },
-    shouldDispatch: () => alive() && channel.wanted(version),
+    // One copy in flight at a time. <Readback> owns a fixed pool of three
+    // staging buffers, and a copy takes several frames to map; dispatching
+    // every frame while frames are being requested ran the pool dry ("Ran out
+    // of readback buffers", gggplot-2hz7). The frame cap is a backstop for a
+    // copy whose read never reports back, so a lost read cannot stall forever.
+    shouldDispatch: () => {
+      if (state.inFlight >= 0 && ++state.inFlight < IN_FLIGHT_FRAMES) {
+        return false;
+      }
+      return alive() && channel.wanted(version);
+    },
     then: (data: Uint32Array) => {
+      state.inFlight = -1;
       const dispatched = state.dispatched;
       if (state.version !== dispatched) {
         state.version = dispatched;
