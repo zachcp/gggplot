@@ -3,6 +3,13 @@ import { chromium } from "playwright";
 import { browserArgs } from "./browser_args.ts";
 import { buildGate, previewArgs } from "./gate_output.ts";
 import { SCALE_CAPTURE } from "./scale_binding_capture.ts";
+import {
+  NA_COLOR,
+  scaleAlphaValue,
+  scaleColorValue,
+  scaleSizeValue,
+} from "../../../packages/core/src/scale/mapping.ts";
+import { SEQUENTIAL_RAMP } from "../../../packages/core/src/scale/palette.ts";
 
 type ProbeWindow = {
   __gggplotScaleBindingProbe?: {
@@ -112,6 +119,7 @@ try {
       result,
       pixels,
       errors,
+      missingValues: missingValueContract(),
     };
     await Deno.writeTextFile(
       new URL("report.json", output),
@@ -149,8 +157,10 @@ try {
       guideRenders: number;
       guideRevision: number;
       counters: { markBufferCreations: number; markBufferWrites: number };
+      domain: number[];
       cases: Record<string, { maxError: number; revision: number }>;
     }[];
+    const initialDomain = [1, 7];
     for (const phase of phases) {
       if (
         phase.newMounts || phase.newScaleBundles || phase.newPipelines ||
@@ -172,6 +182,14 @@ try {
           !Number.isFinite(sample.maxError) || sample.maxError > 1e-5
         ) throw new Error(`${name}: CPU/GPU scale mismatch ${sample.maxError}`);
       }
+    }
+    const finalDomain = phases.at(-1)!.domain;
+    if (
+      finalDomain[0] === initialDomain[0] && finalDomain[1] === initialDomain[1]
+    ) {
+      throw new Error(
+        "pixel capture ran at the initial domain; it must differ to test domain updates",
+      );
     }
     if (pixels.visibleFraction < 0.03) {
       throw new Error("GPU marks are blank or unexpectedly sparse");
@@ -198,4 +216,34 @@ try {
     server.kill("SIGTERM");
   } catch { /* already stopped */ }
   await server.status;
+}
+
+// The missing-value contract (scale/mapping.ts NA_COLOR): color maps to
+// grey50, size and alpha to NaN ("not drawn"), which the GPU bindings encode
+// as zero. The points case binds the NaN row, so the audit above already
+// compares the GPU's result against this; here the CPU side is asserted.
+function missingValueContract() {
+  const range = [...SEQUENTIAL_RAMP];
+  const scales = {
+    color: { aes: "color", kind: "continuous", domain: [1, 7], range },
+    size: { aes: "size", kind: "continuous", domain: [1, 7], range: [8, 24] },
+    alpha: {
+      aes: "alpha",
+      kind: "continuous",
+      domain: [1, 7],
+      range: [0.4, 1],
+    },
+  } as const;
+  const color = scaleColorValue(scales.color as never, Number.NaN);
+  const size = scaleSizeValue(scales.size as never, Number.NaN);
+  const alpha = scaleAlphaValue(scales.alpha as never, Number.NaN);
+  if (color !== NA_COLOR || !Number.isNaN(size) || !Number.isNaN(alpha)) {
+    throw new Error(
+      `CPU missing-value contract broken: ${color} ${size} ${alpha}`,
+    );
+  }
+  return {
+    nan: { color, size: "NaN (not drawn)", alpha: "NaN (not drawn)" },
+    gpu: "color -> NA_COLOR rgb; radius 0 and alpha 0 (not drawn)",
+  };
 }

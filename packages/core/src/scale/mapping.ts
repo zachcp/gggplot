@@ -44,9 +44,19 @@ export function scalePosition(
 }
 
 /**
+ * The missing-value contract for aesthetics, after ggplot2's na.value: a
+ * missing color/fill (a non-finite continuous value or an unknown discrete
+ * level) maps to grey50, while a missing size/alpha/linewidth maps to NaN,
+ * which means the row is not drawn. GPU scale bindings encode "not drawn" as
+ * a zero radius and zero alpha, since WGSL cannot portably produce NaN.
+ */
+export const NA_COLOR = "#7f7f7f";
+
+/**
  * Map a raw data value into a hex color: a fixed categorical palette slot for
  * discrete color/fill scales (by factor-level index), or a point on the
  * selected serializable ramp for continuous ones. See scale/palette.ts.
+ * Missing values map to NA_COLOR.
  */
 export function scaleColorValue(
   scale: TrainedScale | undefined,
@@ -57,13 +67,16 @@ export function scaleColorValue(
   const domain = scale.domain;
   if (Array.isArray(domain) && typeof domain[0] === "string") {
     const levels = domain as string[];
-    return (scale.range as string[] | undefined)
-      ?.[levels.indexOf(String(raw))] ??
-      categoricalRange(levels.length)[levels.indexOf(String(raw))];
+    const index = levels.indexOf(String(raw));
+    if (index < 0) return NA_COLOR;
+    return (scale.range as string[] | undefined)?.[index] ??
+      categoricalRange(levels.length)[index];
   }
 
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return NA_COLOR;
   const [lo, hi] = domain as [number, number];
-  const t = hi > lo ? (Number(raw) - lo) / (hi - lo) : 0;
+  const t = hi > lo ? (value - lo) / (hi - lo) : 0;
   return interpolateColorRamp(
     (scale.range as string[] | undefined) ?? SEQUENTIAL_RAMP,
     t,
@@ -109,7 +122,9 @@ function interpolateRange(
 ): number {
   const [lo, hi] = (scale?.domain as [number, number]) ?? [0, 1];
   const [rLo, rHi] = (scale?.range as [number, number] | undefined) ?? fallback;
-  const t = hi > lo ? (Number(raw) - lo) / (hi - lo) : 0;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return Number.NaN;
+  const t = hi > lo ? (value - lo) / (hi - lo) : 0;
   return rLo + t * (rHi - rLo);
 }
 
@@ -122,6 +137,7 @@ export function scaleSizeValue(
   const [rLo, rHi] = (scale?.range as [number, number] | undefined) ??
     DEFAULT_SIZE_RANGE;
   const value = Number(raw);
+  if (!Number.isFinite(value)) return Number.NaN;
   const t = hi > lo ? Math.max(0, Math.min(1, (value - lo) / (hi - lo))) : 0;
   return rLo + Math.sqrt(t) * (rHi - rLo);
 }

@@ -129,6 +129,7 @@ function Marks({ fixture, refs, palette, revision, scales, cpu }: {
     paletteSource,
     paletteLength,
     alpha,
+    refs.naColor,
   ]);
   const radius = useShader(SIZE_BINDING, [
     values,

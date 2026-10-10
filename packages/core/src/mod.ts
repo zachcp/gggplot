@@ -97,6 +97,7 @@ export {
 } from "./stat/mod.ts";
 export {
   expandRange,
+  NA_COLOR,
   namedLinetypeValue,
   scaleAlphaValue,
   scaleColorValue,
