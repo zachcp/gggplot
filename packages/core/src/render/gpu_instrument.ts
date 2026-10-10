@@ -59,6 +59,12 @@ export interface GpuMarkCounters {
   totalBufferCreations: number;
   /** All buffer writes seen by the patched device, mark or not. */
   totalBufferWrites: number;
+  /**
+   * Bytes passed to every writeBuffer, mark or not. Plot's VirtualLayers
+   * aggregates same-type shapes into shared buffers, so write COUNTS cannot say
+   * how much of a layer was re-sent; bytes can (gggplot-vnh.3).
+   */
+  totalBytesWritten: number;
 }
 
 function freshCounters(): GpuMarkCounters {
@@ -67,6 +73,7 @@ function freshCounters(): GpuMarkCounters {
     markBufferWrites: 0,
     totalBufferCreations: 0,
     totalBufferWrites: 0,
+    totalBytesWritten: 0,
   };
 }
 
@@ -198,6 +205,14 @@ export function installGpuInstrumentation(device: GPUDevice): void {
     const payloadBuffer = data instanceof ArrayBuffer
       ? data
       : (data as ArrayBufferView).buffer;
+    // size and dataOffset count elements for a typed array, bytes otherwise.
+    const element = data instanceof ArrayBuffer
+      ? 1
+      : (data as unknown as { BYTES_PER_ELEMENT?: number }).BYTES_PER_ELEMENT ??
+        1;
+    counters.totalBytesWritten += size !== undefined
+      ? size * element
+      : data.byteLength - (dataOffset ?? 0) * element;
     if (
       inMarkBoundary() || taggedBuffers.has(buffer) ||
       knownMarkArrayBuffers.has(payloadBuffer)

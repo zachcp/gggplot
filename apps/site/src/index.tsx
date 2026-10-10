@@ -12,6 +12,12 @@ const PerformanceProbe = lazy(() =>
   }))
 );
 
+const ComponentRootProbe = lazy(() =>
+  import("./ComponentRootProbe.tsx").then((module) => ({
+    default: module.ComponentRootProbe,
+  }))
+);
+
 const ScaleBindingProbe = lazy(() =>
   import("./ScaleBindingProbe.tsx").then((module) => ({
     default: module.ScaleBindingProbe,
@@ -98,7 +104,13 @@ if (exportProbeMode) {
 const root = document.getElementById("root")!;
 const query = new URLSearchParams(location.search);
 createRoot(root).render(
-  query.has("scale-binding")
+  query.has("component-root")
+    ? (
+      <Suspense fallback={<p>Loading component-root spike…</p>}>
+        <ComponentRootProbe />
+      </Suspense>
+    )
+    : query.has("scale-binding")
     ? (
       <Suspense fallback={<p>Loading scale-binding spike…</p>}>
         <ScaleBindingProbe />

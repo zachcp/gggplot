@@ -259,3 +259,18 @@ Deno.test("gpu instrument: installGpuInstrumentation is idempotent per device in
   );
   uninstallGpuInstrumentation(device);
 });
+
+Deno.test("gpu instrument: bytes written count typed-array element ranges and raw byte ranges", () => {
+  const device = fakeDevice();
+  installGpuInstrumentation(device);
+  resetGpuMarkCounters();
+  try {
+    const buffer = device.createBuffer({ size: 64, usage: 0 });
+    device.queue.writeBuffer(buffer, 0, new Float32Array(4)); // 16 bytes
+    device.queue.writeBuffer(buffer, 0, new Float32Array(8), 2, 3); // 12 bytes
+    device.queue.writeBuffer(buffer, 0, new ArrayBuffer(10), 4); // 6 bytes
+    assertEquals(getGpuMarkCounters().totalBytesWritten, 34);
+  } finally {
+    uninstallGpuInstrumentation(device);
+  }
+});

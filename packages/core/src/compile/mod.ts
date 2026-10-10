@@ -28,6 +28,7 @@ import {
   resolvePlotDimension,
 } from "../geom/mod.ts";
 import type { LayerContext } from "../geom/mod.ts";
+import type { ResidentProductProps } from "../geom/types.ts";
 import {
   numericRange,
   polarGridLines,
@@ -76,6 +77,47 @@ export interface CompileOptions {
    * identical to pre-tzc.5 behavior. See compile/pack_cache.ts.
    */
   packCache?: PackCache;
+  /**
+   * Component path (gggplot-vnh.3): lowers one layer's marks in place of the
+   * built-in lowerLayer/pack-cache call. The component root passes a per-layer
+   * memo here, so a resize or a sibling's change does not re-lower a layer
+   * whose inputs did not change. Resident layers never reach this hook.
+   */
+  lowerMarks?: (args: LowerMarksArgs) => RenderNode[];
+}
+
+/** What a `CompileOptions.lowerMarks` override receives for one layer. */
+export interface LowerMarksArgs {
+  layer: Layer;
+  mapping: Aes;
+  data: DataFrame;
+  ctx: LayerContext;
+  layerIndex: number;
+  panelIndex: number;
+}
+
+/** One layer after row filtering and its stat: the input to scale training. */
+export interface PreparedLayer {
+  layer: Layer;
+  data: DataFrame;
+  mapping: Aes;
+  resident?: ResidentProductProps;
+}
+
+/** Rows one layer dropped before its stat, by reason (gggplot-9v6). */
+export interface LayerRemovals {
+  missing: number;
+  censored: number;
+}
+
+/** Every layer prepared per facet panel, plus the row removals to report. */
+export interface PreparedPlot {
+  panels: ReturnType<typeof buildFacetPanels>["panels"];
+  nrow: number;
+  ncol: number;
+  /** panelLayers[panel][layer], in spec.layers order. */
+  panelLayers: PreparedLayer[][];
+  removals: Map<string, RowRemoval>;
 }
 
 /** Fold every layer's geom domainContribution into the starting domains. */
@@ -247,90 +289,141 @@ function zoomed(
   return limit ?? domain;
 }
 
+/** The mapping a layer actually uses: its own, over the plot's unless it opts out. */
+export function effectiveMapping(spec: GGSpec, layer: Layer): Aes {
+  return layer.inheritAes === false
+    ? (layer.mapping ?? {})
+    : { ...spec.mapping, ...layer.mapping };
+}
+
+/**
+ * Filter one layer's rows and run its stat (or plan its resident product).
+ *
+ * ggplot2 order: scale limits censor the data BEFORE the stat runs, so
+ * stat_bin and friends never see rows the user excluded (gggplot-wjw). Two row
+ * filters, in ggplot2's order and for different reasons. Missing positions go
+ * first (a row that was never plottable), then scale limits (a row the user
+ * chose to exclude) — both before the stat, so neither is counted by stat_bin
+ * and then hidden at draw time.
+ *
+ * Pure in its inputs, so the component path (gggplot-vnh.3) can run it inside
+ * a geom component and memoize it there.
+ */
+export function prepareLayer(
+  spec: GGSpec,
+  layer: Layer,
+  panelData: DataFrame,
+  options: { resident?: boolean; faceted: boolean },
+): { prepared: PreparedLayer; removed: LayerRemovals } {
+  const mapping = effectiveMapping(spec, layer);
+  const geom = GEOM_REGISTRY[layer.geom];
+  const missing = geom.dropsMissingPositions
+    ? removeMissingPositions(
+      mapping,
+      layer.data ?? panelData,
+      geom.nonPositionalAes,
+    )
+    : { data: layer.data ?? panelData, removed: 0 };
+  const censored = censorToScaleLimits(
+    spec,
+    mapping,
+    missing.data,
+    geom.nonPositionalAes,
+  );
+  const removed = { missing: missing.removed, censored: censored.removed };
+  const data = censored.data;
+  const resident = options.resident
+    ? geom.residentPlan?.(
+      spec,
+      layer,
+      mapping,
+      data,
+      { standalone: !options.faceted && spec.layers.length === 1 },
+    )
+    : undefined;
+  if (resident) {
+    return { prepared: { layer, data, mapping, resident }, removed };
+  }
+  const res = applyStat(layer, mapping, data);
+  return {
+    prepared: { layer, data: res.data, mapping: res.mapping },
+    removed,
+  };
+}
+
+/** Add one layer's removals to the per-layer totals, summed across panels. */
+export function recordRemovals(
+  totals: Map<string, RowRemoval>,
+  layerIndex: number,
+  geom: string,
+  removed: LayerRemovals,
+): void {
+  const add = (reason: RowRemoval["reason"], rows: number) => {
+    if (rows <= 0) return;
+    const key = `${layerIndex}:${reason}`;
+    const existing = totals.get(key);
+    if (existing) existing.rows += rows;
+    else totals.set(key, { layer: layerIndex, geom, reason, rows });
+  };
+  add("missing-position", removed.missing);
+  add("outside-limits", removed.censored);
+}
+
+/**
+ * Partition into facet panels and prepare every layer in each.
+ *
+ * Panels are partitioned before stats so stat_count/stat_bin/etc. aggregate
+ * within each panel independently (ggplot2's default). A layer with its own
+ * data override bypasses faceting — it renders unfiltered into every panel.
+ */
+export function preparePlot(
+  spec: GGSpec,
+  options: CompileOptions = {},
+): PreparedPlot {
+  const { panels, nrow, ncol } = buildFacetPanels(
+    spec.facet,
+    spec.data,
+    spec.labels ?? {},
+  );
+  const faceted = spec.facet.kind !== "none";
+  // Row removals, keyed layer:reason and summed across panels: ggplot2
+  // reports one removal per layer, not one per facet cell.
+  const removals = new Map<string, RowRemoval>();
+  const panelLayers = panels.map((panel) =>
+    spec.layers.map((layer, layerIndex) => {
+      const { prepared, removed } = prepareLayer(spec, layer, panel.data, {
+        resident: options.resident,
+        faceted,
+      });
+      recordRemovals(removals, layerIndex, layer.geom, removed);
+      return prepared;
+    })
+  );
+  return { panels, nrow, ncol, panelLayers, removals };
+}
+
 export function compile(
   spec: GGSpec,
   options: CompileOptions = {},
 ): RenderNode {
+  return assemblePlot(spec, preparePlot(spec, options), options);
+}
+
+/**
+ * Train scales across prepared layers, lay out guides, lower marks, and
+ * assemble the RenderTree. `spec.layers` must be the layers `prepared` was
+ * built from, in the same order.
+ */
+export function assemblePlot(
+  spec: GGSpec,
+  prepared: PreparedPlot,
+  options: CompileOptions = {},
+): RenderNode {
   const dimensionality = resolvePlotDimension(spec);
   const labels = spec.labels ?? {};
-
-  // ③ facet → panels, partitioned before stats so stat_count/stat_bin/etc.
-  // aggregate within each panel independently (ggplot2's default). A layer
-  // with its own data override bypasses faceting — it renders unfiltered
-  // into every panel.
-  const { panels, nrow, ncol } = buildFacetPanels(
-    spec.facet,
-    spec.data,
-    labels,
-  );
+  const { panels, nrow, ncol, panelLayers } = prepared;
+  const removalTotals = prepared.removals;
   const faceted = spec.facet.kind !== "none";
-
-  // Row removals, keyed layer:reason and summed across panels (gggplot-9v6).
-  const removalTotals = new Map<string, RowRemoval>();
-  const recordRemoval = (
-    layer: number,
-    geom: string,
-    reason: RowRemoval["reason"],
-    rows: number,
-  ) => {
-    if (rows <= 0) return;
-    const key = `${layer}:${reason}`;
-    const existing = removalTotals.get(key);
-    if (existing) existing.rows += rows;
-    else removalTotals.set(key, { layer, geom, reason, rows });
-  };
-
-  // ① stat transform per layer, per panel (resolving each layer's effective mapping/data)
-  const panelLayers = panels.map((panel) =>
-    spec.layers.map((layer) => {
-      const mapping = layer.inheritAes === false
-        ? (layer.mapping ?? {})
-        : { ...spec.mapping, ...layer.mapping };
-      const geom = GEOM_REGISTRY[layer.geom];
-      // ggplot2 order: scale limits censor the data BEFORE the stat runs, so
-      // stat_bin and friends never see rows the user excluded (gggplot-wjw).
-      // Two row filters, in ggplot2's order and for different reasons. Missing
-      // positions go first (a row that was never plottable), then scale limits
-      // (a row the user chose to exclude) — both before the stat, so neither
-      // is counted by stat_bin and then hidden at draw time.
-      const layerIndex = spec.layers.indexOf(layer);
-      const missing = geom.dropsMissingPositions
-        ? removeMissingPositions(
-          mapping,
-          layer.data ?? panel.data,
-          geom.nonPositionalAes,
-        )
-        : { data: layer.data ?? panel.data, removed: 0 };
-      const censored = censorToScaleLimits(
-        spec,
-        mapping,
-        missing.data,
-        geom.nonPositionalAes,
-      );
-      // Accumulated per layer across panels: ggplot2 reports one removal per
-      // layer, not one per facet cell.
-      recordRemoval(
-        layerIndex,
-        layer.geom,
-        "missing-position",
-        missing.removed,
-      );
-      recordRemoval(layerIndex, layer.geom, "outside-limits", censored.removed);
-      const data = censored.data;
-      const resident = options.resident
-        ? geom.residentPlan?.(
-          spec,
-          layer,
-          mapping,
-          data,
-          { standalone: !faceted && spec.layers.length === 1 },
-        )
-        : undefined;
-      if (resident) return { layer, data, mapping, resident };
-      const res = applyStat(layer, mapping, data);
-      return { layer, data: res.data, mapping: res.mapping };
-    })
-  );
 
   // ② train scales across all panels combined → shared x/y domains for every
   // panel's view range (ggplot2's default scales="fixed"; free per-panel
@@ -486,6 +579,16 @@ export function compile(
               ...resident.props,
             }),
           ];
+        }
+        if (options.lowerMarks) {
+          return options.lowerMarks({
+            layer,
+            mapping,
+            data,
+            ctx,
+            layerIndex,
+            panelIndex,
+          });
         }
         if (!options.packCache || UNCACHEABLE_GEOMS.has(layer.geom)) {
           return lowerLayer(layer, mapping, data, ctx);

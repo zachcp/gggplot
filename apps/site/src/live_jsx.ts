@@ -23,4 +23,8 @@ export namespace JSX {
   export interface ElementChildrenAttribute {
     children: unknown;
   }
+  /** Live reconciles keyed siblings by key, like React. */
+  export interface IntrinsicAttributes {
+    key?: string | number;
+  }
 }
