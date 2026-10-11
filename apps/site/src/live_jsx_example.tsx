@@ -25,5 +25,9 @@ export const wrongViaFactory = Jsx.createElement(GGPlot, {
   spec: {} as GGSpec,
   wrongProp: 1,
 });
-// @ts-expect-error `spec` is required.
-export const missingSpec = Jsx.createElement(GGPlot, {});
+// The component form takes plot parts, not a spec: the two do not mix.
+// @ts-expect-error `spec` and `mapping` belong to different forms of GGPlot.
+export const mixedForms = Jsx.createElement(GGPlot, {
+  spec: {} as GGSpec,
+  mapping: { x: "wt" },
+});

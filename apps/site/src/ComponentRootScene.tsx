@@ -1,16 +1,13 @@
 /** @jsxRuntime classic */
 /** @jsx Jsx.createElement */
-// vnh.3: one canvas that renders scatterLine either through compile() or
-// through the Capture root, so pixels and upload counters compare like for like.
+// One canvas that renders scatterLine either through compile() or through the
+// component-first <GGPlot> root (gggplot-2bj), so pixels and upload counters
+// compare like for like. Layers are reported with the generic GGLayerPart until
+// the named geom components land (gggplot-8hz).
 import { createElement, type LiveElement, useOne } from "@use-gpu/live";
 import * as Jsx from "@gggplot/core/jsx";
 import { AutoCanvas, WebGPU } from "@use-gpu/webgpu";
-import {
-  FlatCamera,
-  FontLoader,
-  Pass,
-  useDeviceContext,
-} from "@use-gpu/workbench";
+import { FlatCamera, Pass, useDeviceContext } from "@use-gpu/workbench";
 import {
   type FontResources,
   geomLine,
@@ -18,13 +15,10 @@ import {
   GGPlot,
   ggplot,
   type GGSpec,
+  type Layer,
 } from "@gggplot/core";
 import { installGpuInstrumentation } from "../../../packages/core/src/render/gpu_instrument.ts";
-import {
-  GeomLineX,
-  GeomPointX,
-  GGPlotX,
-} from "../../../packages/core/spikes/ggplot_capture.ts";
+import { GGLayerPart } from "../../../packages/core/src/components/parts.ts";
 import { withSiteChartTheme } from "./chart_theme.ts";
 import { scatterLine } from "./docs/examples.tsx";
 
@@ -41,6 +35,17 @@ const mapping = { x: "wt", y: "mpg" };
 const theme = withSiteChartTheme(scatterLine.spec!).theme;
 const THIRD = { size: 3, color: "#f59e0b" };
 const LINE = { color: "#ef4444" };
+// Layer objects keep their identity while their inputs do, as the named geom
+// components will (the root memoizes each layer's stat and lowering on it).
+const THIRD_LAYER = geomPoint(THIRD).value as Layer;
+const LINE_LAYER = geomLine(LINE).value as Layer;
+const pointLayers = new Map<string, Layer>();
+const pointLayer = (color: string) => {
+  if (!pointLayers.has(color)) {
+    pointLayers.set(color, geomPoint({ size: 6, color }).value as Layer);
+  }
+  return pointLayers.get(color)!;
+};
 
 /** The same plot as a spec, for the compile path. */
 export function compiledSpec(state: ComponentRootState): GGSpec {
@@ -66,15 +71,11 @@ function Plot(
     });
   }
   return (
-    // FontFaceResource types `lazy` as unknown; GGPlot passes faces through
-    // to FontLoader the same way, untyped.
-    <FontLoader fonts={fonts.faces as never}>
-      <GGPlotX data={data} mapping={mapping} theme={theme}>
-        {state.third ? <GeomPointX key="third" {...THIRD} /> : null}
-        <GeomPointX key="points" size={6} color={state.pointColor} />
-        <GeomLineX key="line" {...LINE} />
-      </GGPlotX>
-    </FontLoader>
+    <GGPlot data={data} mapping={mapping} theme={theme} fontResources={fonts}>
+      {state.third ? <GGLayerPart key="third" layer={THIRD_LAYER} /> : null}
+      <GGLayerPart key="points" layer={pointLayer(state.pointColor)} />
+      <GGLayerPart key="line" layer={LINE_LAYER} />
+    </GGPlot>
   );
 }
 

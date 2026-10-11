@@ -88,6 +88,14 @@ jobs:
         env:
           GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
         run: deno task --cwd apps/site test:pixels
+      # The component-first root against compile() (gggplot-2bj): pixel parity
+      # plus the work counters for resize, a fixed-aesthetic change and an
+      # inserted layer. Draws WebGPU, so informational until a GPU runner.
+      - name: Component root
+        continue-on-error: true
+        env:
+          GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
+        run: deno task --cwd apps/site test:component-root
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4

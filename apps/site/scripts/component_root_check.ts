@@ -1,5 +1,5 @@
-// vnh.3 reproducible browser experiment: the Capture-based two-phase root
-// against compile() on scatterLine. Never silently skip a missing GPU.
+// The component-first <GGPlot> root (gggplot-2bj) against compile() on
+// scatterLine, in a browser. Never silently skip a missing GPU.
 //
 // Checks: pixel parity in two plot states, then three measurements on the
 // component path (resize, a fixed-color change on one layer, a third layer
@@ -222,7 +222,7 @@ try {
       atlasHistory,
       steps: { idle, resize, color, third },
       // The same changes on the compile path, for GPU bytes only (its work
-      // counters stay 0: compile() does not report through captureProbe).
+      // counters stay 0: compile() does not report through componentProbe).
       compileGpu: Object.fromEntries(
         Object.entries({
           idle: compileIdle,
@@ -265,13 +265,13 @@ try {
         `color change ran ${color.work.statCalls} stats, ${color.work.lowerCalls} lowers (want 1, 1)`,
       );
     }
-    if (third.work.geomMounts !== 1 || third.work.statCalls !== 1) {
+    if (third.work.layerMounts !== 1 || third.work.statCalls !== 1) {
       failures.push(
-        `third layer mounted ${third.work.geomMounts} geoms, ran ${third.work.statCalls} stats (want 1, 1)`,
+        `third layer mounted ${third.work.layerMounts} layers, ran ${third.work.statCalls} stats (want 1, 1)`,
       );
     }
     if (failures.length) throw new Error(failures.join("\n"));
-    console.log("Component-root spike passed.");
+    console.log("Component-root gate passed.");
   } finally {
     await browser.close();
   }

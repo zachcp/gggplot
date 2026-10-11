@@ -6,7 +6,7 @@ import {
   getGpuMarkCounters,
   resetGpuMarkCounters,
 } from "../../../packages/core/src/render/gpu_instrument.ts";
-import { captureProbe } from "../../../packages/core/spikes/ggplot_capture.ts";
+import { componentProbe } from "../../../packages/core/src/components/probe.ts";
 import {
   ComponentRootScene,
   type ComponentRootState,
@@ -27,7 +27,7 @@ export interface StepCost {
     lowerCalls: number;
     assembleCalls: number;
     viewRenders: number;
-    geomMounts: number;
+    layerMounts: number;
   };
   gpu: ReturnType<typeof getGpuMarkCounters>;
 }
@@ -74,7 +74,7 @@ export function ComponentRootProbe() {
       step: async (change) => {
         // Let any earlier change finish before the counters start.
         await frames(10);
-        captureProbe.reset();
+        componentProbe.reset();
         resetGpuMarkCounters();
         current = { ...current, ...change };
         setState(current);
@@ -82,11 +82,11 @@ export function ComponentRootProbe() {
         return {
           state: current,
           work: {
-            statCalls: captureProbe.statCalls,
-            lowerCalls: captureProbe.lowerCalls,
-            assembleCalls: captureProbe.assembleCalls,
-            viewRenders: captureProbe.viewRenders,
-            geomMounts: captureProbe.geomMounts,
+            statCalls: componentProbe.statCalls,
+            lowerCalls: componentProbe.lowerCalls,
+            assembleCalls: componentProbe.assembleCalls,
+            viewRenders: componentProbe.viewRenders,
+            layerMounts: componentProbe.layerMounts,
           },
           gpu: getGpuMarkCounters(),
         };
