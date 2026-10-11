@@ -62,3 +62,13 @@ export async function loadStaticDataset(
     throw error;
   }
 }
+
+/**
+ * Stable producers for <GGData load> (gggplot-y43): one function per dataset,
+ * so a re-render is not a new load.
+ */
+export const loadMpg = (): Promise<TypedDataFrame> => loadStaticDataset("mpg");
+export const loadMtcars = (): Promise<TypedDataFrame> =>
+  loadStaticDataset("mtcars");
+export const loadIris = (): Promise<TypedDataFrame> =>
+  loadStaticDataset("iris");

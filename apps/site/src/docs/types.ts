@@ -10,12 +10,15 @@ export interface ThreeDShowcase {
   /**
    * The real shared builder expression that produced this showcase.
    */
-  dslSource: string;
-  spec: GGSpec;
+  dslSource?: string;
+  spec?: GGSpec;
   /** Real emitted use.gpu source for the lowered node. */
-  emitted: string;
+  emitted?: string;
   /** One-line summary of the lowered node (point count, ranges, camera). */
-  summary: string;
+  summary?: string;
+  /** The component-form showcase and its shown JSX (gggplot-vnh.10.1). */
+  chart?: () => LiveElement;
+  jsxSource?: string;
 }
 
 export type DocSection =

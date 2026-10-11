@@ -38,7 +38,7 @@ import {
 import { installGpuInstrumentation } from "../../../packages/core/src/render/gpu_instrument.ts";
 import { GGLayerPart } from "../../../packages/core/src/components/parts.ts";
 import { withSiteChartTheme } from "./chart_theme.ts";
-import { scatterLine } from "./docs/examples.tsx";
+import { scatterData } from "./docs/data/demo.ts";
 
 export interface ComponentRootState {
   /**
@@ -87,9 +87,9 @@ export interface ComponentRootState {
   bump?: number;
 }
 
-const data = scatterLine.spec!.data;
+const data = ingest(scatterData);
 const mapping = { x: "wt", y: "mpg" };
-const theme = withSiteChartTheme(scatterLine.spec!).theme;
+const theme = withSiteChartTheme(ggplot(data, mapping).build()).theme;
 const THIRD = { size: 3, color: "#f59e0b" };
 const LINE = { color: "#ef4444" };
 // Layer objects keep their identity while their inputs do, as the named geom

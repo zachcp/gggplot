@@ -240,23 +240,18 @@ export function App() {
                   </p>
                 </div>
               </div>
-              <div style={styles.detailGrid}>
-                <Panel title="Lowered node">
-                  <p style={styles.metaCopy}>{threeD.summary}</p>
-                </Panel>
-              </div>
               <section
                 style={{
                   ...styles.grid,
                   ...(compact ? styles.gridCompact : {}),
                 }}
               >
-                <Panel title="ggplot 3D spec">
-                  <pre style={styles.pre}>{threeD.dslSource}</pre>
+                <Panel title="Component JSX">
+                  <pre style={styles.pre}>{threeD.jsxSource}</pre>
                 </Panel>
                 <Panel title="live WebGPU render (3D)">
                   <ChartCanvas3D
-                    spec={threeD.spec}
+                    chart={threeD.chart}
                     label={threeD.description}
                   />
                   <p style={styles.note}>
@@ -267,12 +262,6 @@ export function App() {
                   </p>
                 </Panel>
               </section>
-              <details style={styles.details}>
-                <summary style={styles.summary}>
-                  Emitted UseGPU source
-                </summary>
-                <pre style={styles.pre}>{threeD.emitted}</pre>
-              </details>
             </section>
           ))}
         </main>

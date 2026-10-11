@@ -10,6 +10,7 @@ import type {
   SceneRay,
 } from "@gggplot/core";
 import { pointerToUV } from "@gggplot/core";
+import type { LiveElement } from "@use-gpu/live";
 import { Scene3D } from "./scene3d.tsx";
 
 /** How far the pointer may travel between down and up and still count as a click. */
@@ -21,11 +22,14 @@ export type ScenePickPhase = "hover" | "select";
 export function ChartCanvas3D(
   {
     spec,
+    chart,
     label,
     prismInstances,
     onPick,
   }: {
-    spec: GGSpec;
+    /** A spec, or a component-form `chart` (gggplot-vnh.10.1). */
+    spec?: GGSpec;
+    chart?: () => LiveElement;
     label: string;
     prismInstances?: readonly PrismInstance3D[];
     /**
@@ -113,6 +117,7 @@ export function ChartCanvas3D(
             liveElement(Scene3D, {
               canvas,
               spec,
+              chart,
               prismInstances,
               publishPick: onPick ? publishPick : undefined,
             })}

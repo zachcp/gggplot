@@ -1,31 +1,35 @@
+/** @jsxRuntime classic */
+/** @jsx Jsx.createElement */
+// Stats, scales, themes and annotations, written as component JSX
+// (gggplot-vnh.10.1); see examples_basics.tsx for the chart/jsxSource
+// convention.
+import * as Jsx from "@gggplot/core/jsx";
 import {
-  annotate,
-  applyStat,
-  coordPolar,
-  facetGrid,
-  geomAbline,
-  geomBar,
-  geomCol,
-  geomHistogram,
-  geomHline,
-  geomLine,
-  geomPoint,
-  geomSmooth,
-  geomTile,
-  geomVline,
-  ggplot,
+  Annotate,
+  CoordPolar,
+  FacetGrid,
+  GeomAbline,
+  GeomBar,
+  GeomCol,
+  GeomHistogram,
+  GeomHline,
+  GeomLine,
+  GeomPoint,
+  GeomSmooth,
+  GeomTile,
+  GeomVline,
+  GGData,
   ingest,
-  scaleFill,
-  scaleShape,
-  scaleSize,
-  scaleXLog10,
-  scaleXSqrt,
-  scaleYContinuous,
-  theme,
-  themeClassic,
-  themeGrey,
+  ScaleFill,
+  ScaleShape,
+  ScaleSize,
+  ScaleXLog10,
+  ScaleXSqrt,
+  ScaleYContinuous,
+  ThemeClassic,
+  ThemeGrey,
 } from "@gggplot/core";
-import type { Aes, DataFrame, GGSpec } from "@gggplot/core";
+import { SitePlot } from "../site_plot.tsx";
 import type { DocExample } from "./types.ts";
 import {
   countData,
@@ -36,34 +40,29 @@ import {
   summaryData,
   transformData,
 } from "./data/demo.ts";
-
-function previewStatRows(spec: GGSpec, layerIndex = 0): DataFrame | undefined {
-  const layer = spec.layers[layerIndex];
-  if (!layer || layer.stat === "identity") return undefined;
-  const mapping: Aes = layer.inheritAes === false
-    ? (layer.mapping ?? {})
-    : { ...spec.mapping, ...layer.mapping };
-  const data = layer.data ?? spec.data;
-  return applyStat(layer, mapping, data).data;
-}
-
-const countStackedBarSpec = ggplot(countData, { x: "class", fill: "drive" })
-  .add(geomBar())
-  .build();
+import { loadIris, loadMpg } from "./data/real.ts";
+import { previewStatRows } from "./stat_preview.ts";
 
 export const countStackedBar: DocExample = {
   id: "CountStackedBar",
   title: "Counted, stacked bars",
   description:
-    "geomBar defaults to stat_count, then stacks the counted rows by mapped fill.",
+    "<GeomBar> defaults to stat_count, then stacks the counted rows by mapped fill.",
   whatChanged:
     "stat_count emits one count row per class and drive group before position stacking builds bar polygons.",
   dataPreview: countData,
-  dslSource: `ggplot(data, { x: "class", fill: "drive" })
-  .add(geomBar())
-  .build();`,
-  computedDataPreview: previewStatRows(countStackedBarSpec),
-  spec: countStackedBarSpec,
+  computedDataPreview: previewStatRows(GeomBar, {}, countData, {
+    x: "class",
+    fill: "drive",
+  }),
+  jsxSource: `<GGPlot data={countData} mapping={{ x: "class", fill: "drive" }}>
+  <GeomBar />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={countData} mapping={{ x: "class", fill: "drive" }}>
+      <GeomBar />
+    </SitePlot>
+  ),
 };
 
 const residentCountData = {
@@ -80,13 +79,15 @@ export const residentCategoricalCount: DocExample = {
   whatChanged:
     "stat_count keeps its u32 count grid resident; only bounded y-domain metadata crosses back for the standalone view.",
   executionDetail:
-    "The live compiler emits a ResidentProduct for this eligible unweighted factor count. Default-scale factor fill or color grouping can use the same path.",
-  dslSource: `ggplot(data, { x: "category" })
-  .add(geomBar({ fill: "#2563eb" }))
-  .build();`,
-  spec: ggplot(residentCountData, { x: "category" })
-    .add(geomBar({ fill: "#2563eb" }))
-    .build(),
+    "The root hosts a resident product for this eligible unweighted factor count. Default-scale factor fill or color grouping can use the same path.",
+  jsxSource: `<GGPlot data={residentCountData} mapping={{ x: "category" }}>
+  <GeomBar fill="#2563eb" />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={residentCountData} mapping={{ x: "category" }}>
+      <GeomBar fill="#2563eb" />
+    </SitePlot>
+  ),
 };
 
 export const residentInlineBars: DocExample = {
@@ -97,20 +98,22 @@ export const residentInlineBars: DocExample = {
   visualSummary:
     "Four equal blue bars, one per category, reaching five-sixths of the way up a y axis that runs to 6000.",
   whatChanged:
-    "Pinning y with scaleYContinuous switches the resident product from its standalone VIEW form to its inline MARK form. The view resolves its own y range from a stacked-maximum summary read back off the GPU; the mark cannot, because the panel already has a trained y domain, so it contributes bar topology only and reads nothing back. Same kernel, same resident grid — the difference is who owns the scale.",
+    "Pinning y with <ScaleYContinuous> switches the resident product from its standalone VIEW form to its inline MARK form. The view resolves its own y range from a stacked-maximum summary read back off the GPU; the mark cannot, because the panel already has a trained y domain, so it contributes bar topology only and reads nothing back. Same kernel, same resident grid — the difference is who owns the scale.",
   executionDetail:
     "barResidentPlan sets standaloneView from autoYDomain, so an explicit y domain is exactly what selects the mark form. This is the form a multi-layer or faceted panel would use, which is why it is documented next to the view rather than left implicit.",
-  dslSource: `ggplot(data, { x: "category" })
-  .add(geomBar({ fill: "#2563eb" }), scaleYContinuous({ domain: [0, 6000] }))
-  .build();`,
-  spec: ggplot(residentCountData, { x: "category" })
-    .add(
-      geomBar({ fill: "#2563eb" }),
-      scaleYContinuous({ domain: [0, 6000] }),
-    )
-    .build(),
+  jsxSource: `<GGPlot data={residentCountData} mapping={{ x: "category" }}>
+  <GeomBar fill="#2563eb" />
+  <ScaleYContinuous domain={[0, 6000]} />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={residentCountData} mapping={{ x: "category" }}>
+      <GeomBar fill="#2563eb" />
+      <ScaleYContinuous domain={[0, 6000]} />
+    </SitePlot>
+  ),
 };
 
+// Ingested once, so every re-render reads the same typed columns.
 const packedReuseData = ingest({
   x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
   y: [1, 3, 2, 5, 4, 6, 3, 7, 5, 8],
@@ -120,11 +123,11 @@ export const packedTensorReuse: DocExample = {
   id: "PackedTensorReuse",
   title: "Stable packed tensors: zero re-upload",
   description:
-    "A direct point-and-line plot ingests once and reuses the same typed columns across spec rebuilds.",
+    "A direct point-and-line plot ingests once and reuses the same typed columns across re-renders.",
   whatChanged:
-    "This is Flow B, not a resident histogram: the CPU packs renderer-ready tensors once, and stable column/pack identities let rerenders and linear-domain changes reuse those tensors.",
+    "This is Flow B, not a resident histogram: the CPU packs renderer-ready tensors once, and stable column/pack identities let re-renders and linear-domain changes reuse those tensors.",
   executionDetail:
-    "The companion browser probe measures mark-buffer creations and writes around five unchanged rerenders and one domain-only rebuild; both windows must remain zero while the frame redraws.",
+    "The companion browser probe measures mark-buffer creations and writes around five unchanged re-renders and one domain-only change; both windows must remain zero while the frame redraws.",
   action: {
     href: "?instrument",
     label: "Open the browser-instrumented Flow B surface →",
@@ -133,13 +136,16 @@ export const packedTensorReuse: DocExample = {
     x: [0, 1, 2, 3, 4],
     y: [1, 3, 2, 5, 4],
   },
-  dslSource: `const data = ingest(rawData); // once
-ggplot(data, { x: "x", y: "y" })
-  .add(geomPoint(), geomLine())
-  .build();`,
-  spec: ggplot(packedReuseData, { x: "x", y: "y" })
-    .add(geomPoint({ size: 4 }), geomLine())
-    .build(),
+  jsxSource: `<GGPlot data={packedReuseData} mapping={{ x: "x", y: "y" }}>
+  <GeomPoint size={4} />
+  <GeomLine />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={packedReuseData} mapping={{ x: "x", y: "y" }}>
+      <GeomPoint size={4} />
+      <GeomLine />
+    </SitePlot>
+  ),
 };
 
 const weightedHistogramData = {
@@ -157,22 +163,21 @@ export const weightedHistogramFallback: DocExample = {
   executionDetail:
     "Weight is the blocker here. An unweighted factor group mapped to fill or color can remain in Flow A when it uses the default discrete scale; mapped fill is not inherently a CPU fallback.",
   dataPreview: weightedHistogramData,
-  dslSource: `ggplot(data, { x: "value" })
-  .add(geomHistogram({ bins: 5, weight: "mass", fill: "#f59e0b" }))
-  .build();`,
   computedDataPreview: previewStatRows(
-    ggplot(weightedHistogramData, { x: "value" })
-      .add(geomHistogram({ bins: 5, weight: "mass", fill: "#f59e0b" }))
-      .build(),
+    GeomHistogram,
+    { bins: 5, weight: "mass", fill: "#f59e0b" },
+    weightedHistogramData,
+    { x: "value" },
   ),
-  spec: ggplot(weightedHistogramData, { x: "value" })
-    .add(geomHistogram({ bins: 5, weight: "mass", fill: "#f59e0b" }))
-    .build(),
+  jsxSource: `<GGPlot data={weightedHistogramData} mapping={{ x: "value" }}>
+  <GeomHistogram bins={5} weight="mass" fill="#f59e0b" />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={weightedHistogramData} mapping={{ x: "value" }}>
+      <GeomHistogram bins={5} weight="mass" fill="#f59e0b" />
+    </SitePlot>
+  ),
 };
-
-const summaryMeanSpec = ggplot(summaryData, { x: "day", y: "score" })
-  .add(geomPoint({ stat: "summary", size: 9, color: "#0f766e" }))
-  .build();
 
 export const summaryMean: DocExample = {
   id: "SummaryMean",
@@ -182,47 +187,63 @@ export const summaryMean: DocExample = {
   whatChanged:
     "The stat encodes x levels, reduces y with groupedSummary1d, and renders the computed means as points.",
   dataPreview: summaryData,
-  dslSource: `ggplot(data, { x: "day", y: "score" })
-  .add(geomPoint({ stat: "summary", size: 9, color: "#0f766e" }))
-  .build();`,
-  computedDataPreview: previewStatRows(summaryMeanSpec),
-  spec: summaryMeanSpec,
+  computedDataPreview: previewStatRows(
+    GeomPoint,
+    { stat: "summary", size: 9, color: "#0f766e" },
+    summaryData,
+    { x: "day", y: "score" },
+  ),
+  jsxSource: `<GGPlot data={summaryData} mapping={{ x: "day", y: "score" }}>
+  <GeomPoint stat="summary" size={9} color="#0f766e" />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={summaryData} mapping={{ x: "day", y: "score" }}>
+      <GeomPoint stat="summary" size={9} color="#0f766e" />
+    </SitePlot>
+  ),
 };
 
 export const smoothLm: DocExample = {
   id: "SmoothLm",
   title: "Grouped local smooth",
   description:
-    "geomSmooth fits robust loess curves for each drivetrain across all 234 mpg vehicles.",
+    "<GeomSmooth> fits robust loess curves for each drivetrain across all 234 mpg vehicles.",
   whatChanged:
     "Core smoothing supports lm, robust local-quadratic loess, and binomial-logit glm with serializable controls. GAM solvers attach through the extension registry rather than silently falling back.",
-  dslSource: `const data = await loadStaticDataset("mpg");
-ggplot(data, { x: "displ", y: "hwy", color: "drv" })
-  .add(geomPoint({ size: 3, opacity: 0.55 }))
-  .add(geomSmooth({ method: "loess", span: 0.75, se: false, n: 80 }))
-  .build();`,
+  jsxSource: `<GGData load={loadMpg}>
+  <GGPlot mapping={{ x: "displ", y: "hwy", color: "drv" }}>
+    <GeomPoint size={3} opacity={0.55} />
+    <GeomSmooth method="loess" span={0.75} se={false} n={80} />
+  </GGPlot>
+</GGData>`,
   dataSource: { id: "mpg" },
-  buildSpec: (data) =>
-    ggplot(data, { x: "displ", y: "hwy", color: "drv" })
-      .add(geomPoint({ size: 3, opacity: 0.55 }))
-      .add(geomSmooth({ method: "loess", span: 0.75, se: false, n: 80 }))
-      .build(),
+  chart: () => (
+    <GGData load={loadMpg}>
+      <SitePlot mapping={{ x: "displ", y: "hwy", color: "drv" }}>
+        <GeomPoint size={3} opacity={0.55} />
+        <GeomSmooth method="loess" span={0.75} se={false} n={80} />
+      </SitePlot>
+    </GGData>
+  ),
 };
 
 export const tileHeatmap: DocExample = {
   id: "TileHeatmap",
   title: "Tile heatmap",
   description:
-    "geomTile maps a rectangular grid to polygon cells, with fill trained from a numeric value column.",
+    "<GeomTile> maps a rectangular grid to polygon cells, with fill trained from a numeric value column.",
   whatChanged:
-    "The compiler computes cell widths from x/y resolution and widens domains so edge tiles are not clipped.",
+    "Cell widths come from the x/y resolution, and the domains widen so edge tiles are not clipped.",
   dataPreview: heatmapData,
-  dslSource: `ggplot(data, { x: "x", y: "y", fill: "value" })
-  .add(geomTile())
-  .build();`,
-  spec: ggplot(heatmapData, { x: "x", y: "y", fill: "value" })
-    .add(geomTile())
-    .build(),
+  jsxSource:
+    `<GGPlot data={heatmapData} mapping={{ x: "x", y: "y", fill: "value" }}>
+  <GeomTile />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={heatmapData} mapping={{ x: "x", y: "y", fill: "value" }}>
+      <GeomTile />
+    </SitePlot>
+  ),
 };
 
 export const residentTileStrip: DocExample = {
@@ -233,18 +254,22 @@ export const residentTileStrip: DocExample = {
   visualSummary:
     "Three stacked rows of tiles, one row per iris species, each row a twenty-bin strip across sepal length.",
   whatChanged:
-    "geomTile({ stat: \"bin\" }) with a numeric x, a factor fill and NO y mapping selects the dense [group, bin] tile product. The kernel writes every cell into its own tileVertices buffer, so no count crosses back to the CPU — and unlike the bar views this one reads nothing back at all, because the y range is simply the group-row count. Each cell shades by its OWN count now, not its row's palette color: a fixed five-stop ramp baked into the color pass reads the same resident counts grid and the same stacked-maximum summary slot the bar views already compute, normalizes on the GPU, and writes a per-cell RGBA — so a species' peak bin is visibly darker than its sparse ones, with no fill scale evaluated on the shader and no readback added.",
+    "<GeomTile stat=\"bin\"> with a numeric x, a factor fill and NO y mapping selects the dense [group, bin] tile product. The kernel writes every cell into its own tileVertices buffer, so no count crosses back to the CPU — and unlike the bar views this one reads nothing back at all, because the y range is simply the group-row count. Each cell shades by its OWN count, not its row's palette color: a fixed five-stop ramp baked into the color pass reads the same resident counts grid and the same stacked-maximum summary slot the bar views already compute, normalizes on the GPU, and writes a per-cell RGBA — so a species' peak bin is visibly darker than its sparse ones, with no fill scale evaluated on the shader and no readback added.",
   executionDetail:
-    "The combination is an explicit opt-in: no DSL helper defaults a tile layer to stat \"bin\". It is offered only as a standalone view, because the strip's y range is the statically known [0, groups] and an inline panel mark would fight the panel's trained y domain. With execution({ resident: false }) the same spec routes through statBin into lowerTile and draws (bin center, count) cells instead of a per-group strip, so the resident path is the authoritative renderer for this spec rather than an optimization of it.",
-  dslSource: `const data = await loadStaticDataset("iris");
-ggplot(data, { x: "Sepal.Length", fill: "Species" })
-  .add(geomTile({ stat: "bin", bins: 20 }))
-  .build();`,
+    "The combination is an explicit opt-in: no geom defaults a tile layer to stat \"bin\", so its `bins` goes through `params`. It is offered only as a standalone view, because the strip's y range is the statically known [0, groups] and an inline panel mark would fight the panel's trained y domain. With <Execution resident={false} /> the same plot routes through statBin into lowerTile and draws (bin center, count) cells instead of a per-group strip, so the resident path is the authoritative renderer for this plot rather than an optimization of it.",
+  jsxSource: `<GGData load={loadIris}>
+  <GGPlot mapping={{ x: "Sepal.Length", fill: "Species" }}>
+    <GeomTile stat="bin" params={{ bins: 20 }} />
+  </GGPlot>
+</GGData>`,
   dataSource: { id: "iris" },
-  buildSpec: (data) =>
-    ggplot(data, { x: "Sepal.Length", fill: "Species" })
-      .add(geomTile({ stat: "bin", bins: 20 }))
-      .build(),
+  chart: () => (
+    <GGData load={loadIris}>
+      <SitePlot mapping={{ x: "Sepal.Length", fill: "Species" }}>
+        <GeomTile stat="bin" params={{ bins: 20 }} />
+      </SitePlot>
+    </GGData>
+  ),
 };
 
 export const annotationComposite: DocExample = {
@@ -255,37 +280,37 @@ export const annotationComposite: DocExample = {
   whatChanged:
     "Each annotation becomes a tiny synthetic layer; hline/vline/abline are lowered after scale training.",
   dataPreview: scatterData,
-  dslSource: `ggplot(data, { x: "wt", y: "mpg" })
-  .add(geomPoint({ size: 6, color: "#2563eb" }))
-  .add(geomHline({ yintercept: 20, color: "#ef4444" }))
-  .add(geomVline({ xintercept: 3, color: "#0f766e" }))
-  .add(geomAbline({ slope: -4, intercept: 32, color: "#7c3aed" }))
-  .add(annotate("rect", { xmin: 2.4, xmax: 3.6, ymin: 17, ymax: 23, fill: "#f59e0b" }))
-  .add(annotate("text", { x: 3.7, y: 24, label: "target band", color: "#f8fafc" }))
-  .build();`,
-  spec: ggplot(scatterData, { x: "wt", y: "mpg" })
-    .add(geomPoint({ size: 6, color: "#2563eb" }))
-    .add(geomHline({ yintercept: 20, color: "#ef4444" }))
-    .add(geomVline({ xintercept: 3, color: "#0f766e" }))
-    .add(geomAbline({ slope: -4, intercept: 32, color: "#7c3aed" }))
-    .add(
-      annotate("rect", {
-        xmin: 2.4,
-        xmax: 3.6,
-        ymin: 17,
-        ymax: 23,
-        fill: "#f59e0b",
-      }),
-    )
-    .add(
-      annotate("text", {
-        x: 3.7,
-        y: 24,
-        label: "target band",
-        color: "#f8fafc",
-      }),
-    )
-    .build(),
+  jsxSource: `<GGPlot data={scatterData} mapping={{ x: "wt", y: "mpg" }}>
+  <GeomPoint size={6} color="#2563eb" />
+  <GeomHline yintercept={20} color="#ef4444" />
+  <GeomVline xintercept={3} color="#0f766e" />
+  <GeomAbline slope={-4} intercept={32} color="#7c3aed" />
+  <Annotate geom="rect" xmin={2.4} xmax={3.6} ymin={17} ymax={23} fill="#f59e0b" />
+  <Annotate geom="text" x={3.7} y={24} label="target band" color="#f8fafc" />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={scatterData} mapping={{ x: "wt", y: "mpg" }}>
+      <GeomPoint size={6} color="#2563eb" />
+      <GeomHline yintercept={20} color="#ef4444" />
+      <GeomVline xintercept={3} color="#0f766e" />
+      <GeomAbline slope={-4} intercept={32} color="#7c3aed" />
+      <Annotate
+        geom="rect"
+        xmin={2.4}
+        xmax={3.6}
+        ymin={17}
+        ymax={23}
+        fill="#f59e0b"
+      />
+      <Annotate
+        geom="text"
+        x={3.7}
+        y={24}
+        label="target band"
+        color="#f8fafc"
+      />
+    </SitePlot>
+  ),
 };
 
 export const scaleTransforms: DocExample = {
@@ -296,16 +321,24 @@ export const scaleTransforms: DocExample = {
   whatChanged:
     "The x domain and every x position are transformed consistently; y remains on the original continuous scale.",
   dataPreview: transformData,
-  dslSource: `ggplot(data, { x: "size", y: "latency" })
-  .add(geomPoint({ size: 8, color: "#2563eb" }))
-  .add(geomLine({ color: "#0f766e" }))
-  .add(scaleXLog10())
-  .build();`,
-  spec: ggplot(transformData, { x: "size", y: "latency" })
-    .add(geomPoint({ size: 8, color: "#2563eb" }))
-    .add(geomLine({ color: "#0f766e" }))
-    .add(scaleXLog10())
-    .build(),
+  jsxSource:
+    `<GGPlot data={transformData} mapping={{ x: "size", y: "latency" }}>
+  <GeomPoint size={8} color="#2563eb" />
+  <GeomLine color="#0f766e" />
+  <ScaleXLog10 />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={transformData} mapping={{ x: "size", y: "latency" }}>
+      <GeomPoint size={8} color="#2563eb" />
+      <GeomLine color="#0f766e" />
+      <ScaleXLog10 />
+    </SitePlot>
+  ),
+};
+
+const scaledData = {
+  ...groupedData,
+  size: [8, 12, 16, 9, 18, 10, 14, 13],
 };
 
 export const scaledAesthetics: DocExample = {
@@ -319,18 +352,26 @@ export const scaledAesthetics: DocExample = {
     wt: groupedData.wt,
     mpg: groupedData.mpg,
     cyl: groupedData.cyl,
-    size: [8, 12, 16, 9, 18, 10, 14, 13],
+    size: scaledData.size,
   },
-  dslSource: `ggplot(data, { x: "wt", y: "mpg", size: "size", shape: "cyl" })
-  .add(geomPoint())
-  .add(scaleSize({ range: [4, 12] }), scaleShape())
-  .build();`,
-  spec: ggplot({
-    ...groupedData,
-    size: [8, 12, 16, 9, 18, 10, 14, 13],
-  }, { x: "wt", y: "mpg", size: "size", shape: "cyl" })
-    .add(geomPoint(), scaleSize({ range: [4, 12] }), scaleShape())
-    .build(),
+  jsxSource: `<GGPlot
+  data={scaledData}
+  mapping={{ x: "wt", y: "mpg", size: "size", shape: "cyl" }}
+>
+  <GeomPoint />
+  <ScaleSize range={[4, 12]} />
+  <ScaleShape />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot
+      data={scaledData}
+      mapping={{ x: "wt", y: "mpg", size: "size", shape: "cyl" }}
+    >
+      <GeomPoint />
+      <ScaleSize range={[4, 12]} />
+      <ScaleShape />
+    </SitePlot>
+  ),
 };
 
 export const facetGridStats: DocExample = {
@@ -341,12 +382,16 @@ export const facetGridStats: DocExample = {
   whatChanged:
     "facet_grid crosses drive and class levels, slices panel data, then runs stat_count inside each panel.",
   dataPreview: countData,
-  dslSource: `ggplot(data, { x: "drive" })
-  .add(geomBar({ fill: "#3b82f6" }), facetGrid(["class"], ["drive"]))
-  .build();`,
-  spec: ggplot(countData, { x: "drive" })
-    .add(geomBar({ fill: "#3b82f6" }), facetGrid(["class"], ["drive"]))
-    .build(),
+  jsxSource: `<GGPlot data={countData} mapping={{ x: "drive" }}>
+  <GeomBar fill="#3b82f6" />
+  <FacetGrid rows={["class"]} cols={["drive"]} />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={countData} mapping={{ x: "drive" }}>
+      <GeomBar fill="#3b82f6" />
+      <FacetGrid rows={["class"]} cols={["drive"]} />
+    </SitePlot>
+  ),
 };
 
 export const polarThetaY: DocExample = {
@@ -357,48 +402,56 @@ export const polarThetaY: DocExample = {
   whatChanged:
     "The coord stores a yx projection, so the polar view reads y as the angular axis.",
   dataPreview: rankedData,
-  dslSource: `ggplot(data, { x: "tier", y: "score" })
-  .add(geomCol({ color: "#0f766e" }), coordPolar({ theta: "y" }))
-  .build();`,
-  spec: ggplot(rankedData, { x: "tier", y: "score" })
-    .add(geomCol({ color: "#0f766e" }), coordPolar({ theta: "y" }))
-    .build(),
+  jsxSource: `<GGPlot data={rankedData} mapping={{ x: "tier", y: "score" }}>
+  <GeomCol color="#0f766e" />
+  <CoordPolar theta="y" />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={rankedData} mapping={{ x: "tier", y: "score" }}>
+      <GeomCol color="#0f766e" />
+      <CoordPolar theta="y" />
+    </SitePlot>
+  ),
 };
 
 export const themeComparison: DocExample = {
   id: "ThemeComparison",
   title: "Theme comparison",
   description:
-    "Theme helpers set panel, grid, axis, and text defaults without changing data or scales.",
+    "Theme presets set panel, grid, axis, and text defaults without changing data or scales.",
   whatChanged:
-    "The same point layer is compiled under theme_grey plus a custom override for text color.",
+    "The same point layer is drawn under theme_grey, with its text color overridden.",
   dataPreview: scatterData,
-  dslSource: `ggplot(data, { x: "wt", y: "mpg" })
-  .add(geomPoint({ size: 7, color: "#111827" }), themeGrey(), theme({ textColor: "#111827" }))
-  .build();`,
-  spec: ggplot(scatterData, { x: "wt", y: "mpg" })
-    .add(
-      geomPoint({ size: 7, color: "#111827" }),
-      themeGrey(),
-      theme({ textColor: "#111827" }),
-    )
-    .build(),
+  jsxSource: `<GGPlot data={scatterData} mapping={{ x: "wt", y: "mpg" }}>
+  <GeomPoint size={7} color="#111827" />
+  <ThemeGrey textColor="#111827" />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={scatterData} mapping={{ x: "wt", y: "mpg" }}>
+      <GeomPoint size={7} color="#111827" />
+      <ThemeGrey textColor="#111827" />
+    </SitePlot>
+  ),
 };
 
 export const classicTheme: DocExample = {
   id: "ClassicTheme",
   title: "Classic theme",
   description:
-    "themeClassic removes grid lines while keeping axes and marks unchanged.",
+    "<ThemeClassic> removes grid lines while keeping axes and marks unchanged.",
   whatChanged:
-    "Only guide/theme nodes change; the compiled Point positions are identical to the default theme.",
+    "Only guide/theme marks change; the Point positions are identical to the default theme.",
   dataPreview: scatterData,
-  dslSource: `ggplot(data, { x: "wt", y: "mpg" })
-  .add(geomPoint({ size: 7, color: "#2563eb" }), themeClassic())
-  .build();`,
-  spec: ggplot(scatterData, { x: "wt", y: "mpg" })
-    .add(geomPoint({ size: 7, color: "#2563eb" }), themeClassic())
-    .build(),
+  jsxSource: `<GGPlot data={scatterData} mapping={{ x: "wt", y: "mpg" }}>
+  <GeomPoint size={7} color="#2563eb" />
+  <ThemeClassic />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={scatterData} mapping={{ x: "wt", y: "mpg" }}>
+      <GeomPoint size={7} color="#2563eb" />
+      <ThemeClassic />
+    </SitePlot>
+  ),
 };
 
 export const sqrtScale: DocExample = {
@@ -409,13 +462,17 @@ export const sqrtScale: DocExample = {
   whatChanged:
     "The transform path is shared with log scales: domains and mark positions are both projected through the scale.",
   dataPreview: transformData,
-  dslSource: `ggplot(data, { x: "size", y: "latency" })
-  .add(geomPoint({ size: 8, color: "#7c3aed" }))
-  .add(scaleXSqrt())
-  .build();`,
-  spec: ggplot(transformData, { x: "size", y: "latency" })
-    .add(geomPoint({ size: 8, color: "#7c3aed" }), scaleXSqrt())
-    .build(),
+  jsxSource:
+    `<GGPlot data={transformData} mapping={{ x: "size", y: "latency" }}>
+  <GeomPoint size={8} color="#7c3aed" />
+  <ScaleXSqrt />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={transformData} mapping={{ x: "size", y: "latency" }}>
+      <GeomPoint size={8} color="#7c3aed" />
+      <ScaleXSqrt />
+    </SitePlot>
+  ),
 };
 
 export const filledTiles: DocExample = {
@@ -426,10 +483,15 @@ export const filledTiles: DocExample = {
   whatChanged:
     "Only fill scale interpolation changes; tile positions and domain widening are unchanged.",
   dataPreview: heatmapData,
-  dslSource: `ggplot(data, { x: "x", y: "y", fill: "value" })
-  .add(geomTile(), scaleFill({ range: ["#dbeafe", "#1d4ed8"] }))
-  .build();`,
-  spec: ggplot(heatmapData, { x: "x", y: "y", fill: "value" })
-    .add(geomTile(), scaleFill({ range: ["#dbeafe", "#1d4ed8"] }))
-    .build(),
+  jsxSource:
+    `<GGPlot data={heatmapData} mapping={{ x: "x", y: "y", fill: "value" }}>
+  <GeomTile />
+  <ScaleFill range={["#dbeafe", "#1d4ed8"]} />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={heatmapData} mapping={{ x: "x", y: "y", fill: "value" }}>
+      <GeomTile />
+      <ScaleFill range={["#dbeafe", "#1d4ed8"]} />
+    </SitePlot>
+  ),
 };
