@@ -15,6 +15,7 @@ import {
   type PolarTransform,
   type PreparedLayer,
   prepareLayer,
+  prepareSignature,
   recordRemovals,
   type RenderNode,
   type RowRemoval,
@@ -24,7 +25,7 @@ import {
 import { reuseUnchanged } from "../compile/stable_tensors.ts";
 import { GG, type SpecPart } from "../dsl/base.ts";
 import { typedArrayForColumn } from "../data/mod.ts";
-import { GEOM_REGISTRY, LAYOUT_BOUND_GEOMS, lowerLayer } from "../geom/mod.ts";
+import { LAYOUT_BOUND_GEOMS, lowerLayer } from "../geom/mod.ts";
 import type {
   Aes,
   DataFrame,
@@ -45,12 +46,8 @@ import {
 export interface PreparedEntry {
   layer: Layer;
   data: DataFrame;
-  spec: GGSpec;
-  /**
-   * Whether the layer was alone in an unfaceted plot, which lets a resident
-   * plan take its standalone view. Read only for geoms with a residentPlan.
-   */
-  standalone: boolean;
+  /** What prepareLayer read off the spec (prepareSignature, gggplot-2gu). */
+  signature: string;
   prepared: PreparedLayer;
   removed: LayerRemovals;
 }
@@ -111,17 +108,21 @@ function contextSignature(
   layoutBound: boolean,
   bound: BoundPlan | null,
 ): string {
-  const { ctx } = args;
-  // A bound aesthetic's domain reaches the GPU through refs, not through the
-  // lowered marks, so its retrain must not re-lower the layer.
-  const scales = bound
-    ? Object.fromEntries(
-      Object.entries(ctx.scales).filter(([aes]) =>
-        !(bound.color && aes === bound.color.aes) &&
-        !(bound.size && aes === "size") && !(bound.alpha && aes === "alpha")
-      ),
-    )
-    : ctx.scales;
+  const { ctx, mapping } = args;
+  // Lowering reads the position scales and the scales of the aesthetics the
+  // layer maps (after its stat), never another layer's: a palette change on
+  // fill does not re-lower a layer without fill. A bound aesthetic's domain
+  // reaches the GPU through refs, not through the lowered marks, so its
+  // retrain must not re-lower the layer either.
+  const reads = (aes: string) =>
+    aes === "x" || aes === "y" || aes === "z" || aes in mapping;
+  const scales = Object.fromEntries(
+    Object.entries(ctx.scales).filter(([aes]) =>
+      reads(aes) &&
+      !(bound?.color && aes === bound.color.aes) &&
+      !(bound?.size && aes === "size") && !(bound?.alpha && aes === "alpha")
+    ),
+  );
   return JSON.stringify({
     scales,
     domains: ctx.domains,
@@ -274,13 +275,12 @@ export function assembleRoot(
       const key = `${id}:${panelIndex}`;
       livePrepared.add(key);
       const prev = caches.prepared.get(key);
-      // prepareLayer reads the layer, the panel's rows, and the spec's
-      // mapping, scales and facet; `base` changes identity when any
-      // plot-level part does.
+      // prepareLayer reads the layer, the panel's rows, and the slice of the
+      // spec its signature names: a theme, labels, coord limits or a scale's
+      // range leave the prepared rows (and the stat) alone.
+      const signature = prepareSignature(spec, layer, { faceted, standalone });
       let entry = prev && prev.layer === layer && prev.data === panel.data &&
-          prev.spec === base &&
-          (prev.standalone === standalone ||
-            !GEOM_REGISTRY[layer.geom].residentPlan)
+          prev.signature === signature
         ? prev
         : undefined;
       if (!entry) {
@@ -295,8 +295,7 @@ export function assembleRoot(
         entry = {
           layer,
           data: panel.data,
-          spec: base,
-          standalone,
+          signature,
           prepared,
           removed,
         };
