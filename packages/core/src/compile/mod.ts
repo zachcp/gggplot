@@ -253,16 +253,15 @@ function compileThreeDimensionalPlot(
 }
 
 /**
- * Root props carrying any row removals, plus ggplot2's console warning.
+ * Root props carrying any row removals.
  *
- * Two channels on purpose. The serializable `diagnostics` prop is the one
- * tests and tools read: gggplot compiles to a tree rather than running in a
- * REPL, so a warning alone would be unobservable. The console.warn matches the
- * existing palette-fold precedent in scale/palette.ts, because a user whose
- * plot silently lost rows should hear about it the same way a user whose
- * levels silently folded does.
+ * The serializable `diagnostics` prop is the channel tests and tools read:
+ * gggplot compiles to a tree rather than running in a REPL, so a warning alone
+ * would be unobservable. The console warning is warnRowRemovals, issued by
+ * whoever owns the plot's lifetime: compile() on every call, the component
+ * root only when its diagnostics change.
  *
- * A plot that drops nothing sets no prop and prints nothing.
+ * A plot that drops nothing sets no prop.
  */
 function removalProps(
   removals: Map<string, RowRemoval>,
@@ -271,7 +270,21 @@ function removalProps(
   const diagnostics = [...removals.values()].sort((a, b) =>
     a.layer - b.layer || a.reason.localeCompare(b.reason)
   );
-  for (const removal of diagnostics) {
+  return { diagnostics };
+}
+
+/** A tree's row removals, in layer then reason order; empty when none. */
+export function rowRemovalsOf(tree: RenderNode): readonly RowRemoval[] {
+  return (tree.props.diagnostics as RowRemoval[] | undefined) ?? [];
+}
+
+/**
+ * ggplot2's "Removed N rows containing missing values" warning, matching the
+ * palette-fold precedent in scale/palette.ts: a user whose plot silently lost
+ * rows should hear about it the way one whose levels silently folded does.
+ */
+export function warnRowRemovals(removals: readonly RowRemoval[]): void {
+  for (const removal of removals) {
     const kind = removal.reason === "missing-position"
       ? "missing values"
       : "non-finite values";
@@ -281,7 +294,6 @@ function removalProps(
       } containing ${kind} (${removal.geom})`,
     );
   }
-  return { diagnostics };
 }
 
 /**
@@ -428,7 +440,9 @@ export function compile(
   spec: GGSpec,
   options: CompileOptions = {},
 ): RenderNode {
-  return assemblePlot(spec, preparePlot(spec, options), options);
+  const tree = assemblePlot(spec, preparePlot(spec, options), options);
+  warnRowRemovals(rowRemovalsOf(tree));
+  return tree;
 }
 
 /**
