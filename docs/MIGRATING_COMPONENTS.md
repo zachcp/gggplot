@@ -180,3 +180,26 @@ panel and bind those same scales:
 splicing it into the compiled tree. Put that content in `<GGPanel>` instead. In
 a 3D plot it draws in the scene's Cartesian, inside the 3D camera's view, which
 is where `ScenePicker` and `PrismInstances3D` need to be.
+
+## Data producers (`<GGData load>`)
+
+Every data origin ends in `<GGData>`, which mounts each column once and shares
+it with every plot, layer and GPU product below:
+
+```tsx
+const loadMpg = () =>
+  fetch("/data/mpg.csv").then((r) => r.text()).then(parseCsv);
+
+<GGData load={loadMpg}>
+  <GGPlot mapping={{ x: "displ", y: "hwy" }}>
+    <GeomPoint />
+  </GGPlot>
+</GGData>;
+```
+
+`data` takes raw columns or rows, an ingested frame, or ADR-006 resident columns
+(`createResidentColumn`), which mount with no upload at all. `load` takes any
+async producer, such as a fetched file, a decoder or a GPU loader. Nothing below
+mounts until it resolves, and the function's identity is the load, so keep it
+stable. Resident stat products read the data tier's columns directly when they
+plot its frame, rather than uploading copies.

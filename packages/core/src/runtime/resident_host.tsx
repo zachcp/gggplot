@@ -42,6 +42,7 @@ import {
   RESIDENT_STAT_COUNT_PRODUCT,
 } from "../compile/resident.ts";
 import { GPUDataProvider } from "./live.tsx";
+import { type GGDataValue, useGGData } from "../components/gg_data.ts";
 import { type CountProductOptions, useCountProduct } from "./count_product.ts";
 import type { GridSummary } from "./resident_grid_pending.ts";
 import {
@@ -196,6 +197,54 @@ export function collectResidentNodes(
 }
 
 /**
+ * The mounted sources for `names` when the nearest <GGData> mounted this very
+ * frame (gggplot-y43): the product reads the data tier's columns instead of
+ * uploading its own copies. Null otherwise (no <GGData>, a censored or
+ * layer-level frame, a column it did not mount), and the product mounts its
+ * columns itself as before.
+ */
+export function sharedSources(
+  shared: GGDataValue | null,
+  data: unknown,
+  names: readonly string[],
+): Record<string, GPUStorageSource> | null {
+  if (!shared || shared.frame !== data) return null;
+  const sources: Record<string, GPUStorageSource> = {};
+  for (const name of names) {
+    const column = shared.columns[name];
+    if (!column) return null;
+    sources[name] = column.source;
+  }
+  return sources;
+}
+
+/** Mounts `fields` of `data`, or takes them from <GGData>, then renders. */
+const ProductSources = (
+  { data, fields, children }: {
+    data: unknown;
+    fields: {
+      name: string;
+      dtype: string;
+      shape: string;
+      dimensions: string[];
+    }[];
+    children: (sources: Record<string, GPUStorageSource>) => LiveElement;
+  },
+): LiveElement => {
+  const shared = sharedSources(
+    useGGData(),
+    data,
+    fields.map((field) => field.name),
+  );
+  if (shared) return children(shared);
+  return createElement(GPUDataProvider, {
+    data,
+    fields,
+    children,
+  }) as LiveElement;
+};
+
+/**
  * Builds one stat_count node's product through the ProductSpec adapter
  * (gggplot-034) and yields it with the elements for the frame's <Compute>.
  */
@@ -245,7 +294,7 @@ const HoistedCount = (
       : []),
   ];
   const summary = useOne(makeSummaryChannel);
-  return createElement(GPUDataProvider, {
+  return createElement(ProductSources, {
     data: props.data,
     fields,
     children: (sources: Record<string, GPUStorageSource>) =>
@@ -299,7 +348,7 @@ const HoistedHistogram = (
     domain: createReadbackChannel<ResidentDomain1DResult>(),
     summary: makeSummaryChannel(),
   }));
-  return createElement(GPUDataProvider, {
+  return createElement(ProductSources, {
     data: props.data,
     fields,
     children: (sources: Record<string, GPUStorageSource>) =>

@@ -16,6 +16,7 @@ import {
 } from "@use-gpu/workbench";
 import {
   type FontResources,
+  geomBar,
   geomBlank,
   geomLine,
   geomPoint,
@@ -43,7 +44,12 @@ export interface ComponentRootState {
    * "shared": two component plots (points, line) under one <GGData>, to count
    * column uploads across plots (gggplot-0m6).
    */
-  mode: "compile" | "component" | "shared";
+  /**
+   * "loaded": the component plot with its frame from <GGData load>
+   * (gggplot-y43). "resident": a resident stat_count plot under <GGData>,
+   * whose product must read the data tier's column, not upload its own.
+   */
+  mode: "compile" | "component" | "shared" | "loaded" | "resident";
   pointColor: string;
   /** Adds a third layer BEFORE the first two, the harder case for keyed reconciliation. */
   third: boolean;
@@ -178,11 +184,21 @@ export const builds = { shaderModules: 0, pipelines: 0 };
 
 /** Uploads whose payload is a frame column's typed array, by column name. */
 export const columnUploads: Record<string, number> = {};
+// A frame stat_count keeps resident: 20k factor ids, as the doc example has.
+const RESIDENT_DATA = ingest({
+  category: Array.from(
+    { length: 20_000 },
+    (_, i) => ["alpha", "beta", "gamma", "delta"][i % 4],
+  ),
+});
+const RESIDENT_LAYER = geomBar({ fill: "#2563eb" }).value as Layer;
+/** A stable producer: a new function would be a new load. */
+const LOAD = () => Promise.resolve(data);
+
 const columnBuffers = new Map<ArrayBufferLike, string>(
-  Object.entries(data).map(([name, column]) => [
-    typedArrayForColumn(column).buffer,
-    name,
-  ]),
+  [...Object.entries(data), ...Object.entries(RESIDENT_DATA)].map((
+    [name, column],
+  ) => [typedArrayForColumn(column).buffer, name]),
 );
 
 function Instrumented({ children }: { children: LiveElement }): LiveElement {
@@ -227,6 +243,25 @@ function Plot(
         </GGPlot>
         <GGPlot mapping={mapping} theme={theme} fontResources={fonts}>
           <GGLayerPart layer={LINE_LAYER} />
+        </GGPlot>
+      </GGData>
+    );
+  }
+  if (state.mode === "loaded") {
+    return (
+      <GGData load={LOAD}>
+        <GGPlot mapping={mapping} theme={theme} fontResources={fonts}>
+          <GGLayerPart key="points" layer={pointLayer(state.pointColor)} />
+          <GGLayerPart key="line" layer={LINE_LAYER} />
+        </GGPlot>
+      </GGData>
+    );
+  }
+  if (state.mode === "resident") {
+    return (
+      <GGData data={RESIDENT_DATA}>
+        <GGPlot mapping={{ x: "category" }} theme={theme} fontResources={fonts}>
+          <GGLayerPart layer={RESIDENT_LAYER} />
         </GGPlot>
       </GGData>
     );

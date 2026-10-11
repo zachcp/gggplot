@@ -27,6 +27,7 @@ import {
   makeContext,
   provide,
   QueueReconciler,
+  useAwait,
   useCapture,
   useContext,
   useMemo,
@@ -132,9 +133,19 @@ const MountColumn = (
   return trigger;
 };
 
+/** A producer of a frame: a fetched file, a parsed blob, a GPU loader. */
+export type GGDataLoad = () => Promise<InputData | MountedDataFrame>;
+
 export interface GGDataProps {
   /** Raw columns/rows, an ingested frame, or one mixing resident columns. */
-  data: InputData | MountedDataFrame;
+  data?: InputData | MountedDataFrame;
+  /**
+   * Or a producer that resolves to one: a file or URL source, a decoder, an
+   * ADR-006 GPU loader (gggplot-y43). Nothing below mounts until it resolves.
+   * Keep its identity stable (a module-level function, or memoized): a new
+   * function is a new load.
+   */
+  load?: GGDataLoad;
   /** Mount only these columns. Default: every column in the frame. */
   columns?: readonly string[];
   children?: unknown;
@@ -146,6 +157,25 @@ export interface GGDataProps {
  * upload: several layers, several plots, and the products that read them.
  */
 export const GGData = (props: GGDataProps): LiveElement => {
+  if (props.load) return createElement(LoadData, { ...props });
+  if (!props.data) {
+    throw new Error("[gggplot] <GGData> needs `data` or `load`");
+  }
+  return createElement(MountData, { ...props });
+};
+
+/**
+ * Resolves `load`, then mounts its frame exactly as `data` would be: every
+ * origin ends in the same column contract.
+ */
+const LoadData = (props: GGDataProps): LiveElement => {
+  const [loaded, error] = useAwait(props.load!, [props.load]);
+  if (error) throw error;
+  if (!loaded) return null;
+  return createElement(MountData, { ...props, load: undefined, data: loaded });
+};
+
+const MountData = (props: GGDataProps): LiveElement => {
   const frame = useMemo(
     () =>
       // A frame holding resident columns is already mounted; anything else
