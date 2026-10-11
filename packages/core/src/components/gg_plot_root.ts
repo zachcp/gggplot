@@ -85,6 +85,7 @@ import {
   type PreparedRoot,
   prepareRoot,
   type RootCaches,
+  versionKey,
 } from "./root_assembly.ts";
 
 export { componentProbe };
@@ -229,9 +230,12 @@ const PlotView = (
     if (fontResources) validateFontRequests(base, fontResources);
     return true;
   }, [base, fontResources]);
+  // A column touched in place moves its version, not the frame's identity:
+  // facet partitions are cut again, and prepareRoot re-prepares what read it.
+  const dataVersion = versionKey(base.data);
   const panels = useMemo(
     () => buildFacetPanels(base.facet, base.data, base.labels),
-    [base.facet, base.data, base.labels],
+    [base.facet, base.data, base.labels, dataVersion],
   );
 
   const caches = useOne(() => createRootCaches());
@@ -245,7 +249,7 @@ const PlotView = (
     const next = prepareRoot(base, layers, panels, caches);
     if (next) lastRef.value = next;
     return lastRef.value;
-  }, [base, layers, panels]);
+  }, [base, layers, panels, dataVersion]);
   // Row removals: reported once per distinct set, not on every re-assembly.
   const reportedRef = useOne(() => ({ key: "[]" }));
   if (root) {

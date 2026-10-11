@@ -241,6 +241,19 @@ try {
       scaledComponent,
     );
 
+    // Component-path invariants (gggplot-bv0), beyond those asserted above:
+    // a fixed aesthetic beside a GPU-bound one uploads no mark data, and a
+    // column touched in place under <GGData> uploads exactly that column.
+    await step(page, {
+      mode: "component",
+      scaled: true,
+      colorDomain: [10, 30],
+      fixedSize: 5,
+    });
+    const fixedSizeChange = await step(page, { fixedSize: 9 });
+    await step(page, { fixedSize: undefined, scaled: false, mode: "bump" });
+    const columnBump = await step(page, { bump: 1 });
+
     // Data producers (gggplot-y43): the same plot with its frame from
     // <GGData load> renders identically to the direct frame.
     const directFrame = await frameAfter(page, {
@@ -325,6 +338,17 @@ try {
     const report = {
       generatedAt: new Date().toISOString(),
       scaled: { scaledMount, scaledResize, domainChange, parity: parityScaled },
+      invariants: {
+        resize: resize.gpu,
+        fixedSizeChange: {
+          work: fixedSizeChange.work,
+          gpu: fixedSizeChange.gpu,
+        },
+        columnBump: {
+          work: columnBump.work,
+          columnUploads: columnBump.columnUploads,
+        },
+      },
       producers: {
         loaded: loadedPixels,
         residentUploads: residentMount.columnUploads,
@@ -378,6 +402,33 @@ try {
           `${name}: ${parity.changed} pixels differ, max ${parity.maxDifference}`,
         );
       }
+    }
+    if (resize.gpu.markBufferCreations || resize.gpu.markBufferWrites) {
+      failures.push(
+        `resize uploaded mark data (${resize.gpu.markBufferCreations} creations, ${resize.gpu.markBufferWrites} writes)`,
+      );
+    }
+    if (
+      fixedSizeChange.gpu.markBufferCreations ||
+      fixedSizeChange.gpu.markBufferWrites
+    ) {
+      failures.push(
+        `a fixed size beside a GPU-bound color uploaded mark data (${fixedSizeChange.gpu.markBufferCreations} creations, ${fixedSizeChange.gpu.markBufferWrites} writes)`,
+      );
+    }
+    if (fixedSizeChange.work.boundRenders < 1) {
+      failures.push("fixed size: the layer did not take the GPU-bound path");
+    }
+    const bumped = Object.entries(columnBump.columnUploads);
+    if (bumped.length !== 1 || columnBump.columnUploads.mpg !== 1) {
+      failures.push(
+        `a touched column uploaded ${
+          JSON.stringify(columnBump.columnUploads)
+        } (want exactly {"mpg":1})`,
+      );
+    }
+    if (columnBump.work.statCalls < 1) {
+      failures.push("a touched column did not re-prepare the layer reading it");
     }
     if (resize.work.statCalls || resize.work.lowerCalls) {
       failures.push(
