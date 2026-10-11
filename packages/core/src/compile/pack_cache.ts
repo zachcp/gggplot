@@ -132,7 +132,8 @@ import { type Column, columnVersion } from "../data/mod.ts";
 import type { Aes, AesName, DataFrame, GeomKind, Layer } from "../ir/types.ts";
 import type { TrainedScale } from "../scale/mod.ts";
 import type { RenderNode } from "./rendertree.ts";
-import { isFlatTensor, munchFlatNode, polarizeNode } from "./coordinates.ts";
+import { isFlatTensor, polarizeMark } from "./coordinates.ts";
+import { LAYOUT_BOUND_GEOMS } from "../geom/mod.ts";
 
 /** Anything a stage key's revision can be tracked against (see module doc). */
 export type RevisionKey = Column | Float32Array;
@@ -144,11 +145,7 @@ export type RevisionKey = Column | Float32Array;
  * fraction of the domain) — see the Stage A doc above. Excluded from
  * packCache entirely; lowerLayer still runs, uncached, every compile.
  */
-export const UNCACHEABLE_GEOMS: ReadonlySet<GeomKind> = new Set([
-  "text",
-  "label",
-  "rug",
-]);
+export const UNCACHEABLE_GEOMS: ReadonlySet<GeomKind> = LAYOUT_BOUND_GEOMS;
 
 /**
  * The staged geometry cache. One instance is meant to live for the lifetime
@@ -325,7 +322,12 @@ export function stageBTransformedMark(
   end: number,
 ): RenderNode {
   const compute = () =>
-    munchFlatNode(polarizeNode(mark, axis, domain, start, end));
+    polarizeMark(mark, {
+      thetaAxis: axis,
+      thetaDomain: domain,
+      thetaStart: start,
+      thetaEnd: end,
+    });
   if (!cache) return compute();
   const positions = mark.props.positions;
   if (!isFlatTensor(positions)) return compute();

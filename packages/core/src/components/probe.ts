@@ -4,6 +4,8 @@
 export const componentProbe = {
   statCalls: 0,
   lowerCalls: 0,
+  /** Polar transforms actually computed (cache misses, gggplot-mqj). */
+  polarCalls: 0,
   assembleCalls: 0,
   viewRenders: 0,
   /** Layer part mounts: a remount of an existing layer shows up here. */
@@ -15,6 +17,7 @@ export const componentProbe = {
   reset(): void {
     this.statCalls = 0;
     this.lowerCalls = 0;
+    this.polarCalls = 0;
     this.assembleCalls = 0;
     this.viewRenders = 0;
     this.layerMounts = 0;

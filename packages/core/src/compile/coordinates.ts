@@ -446,3 +446,42 @@ export function polarGridLines(
     key: "grid-polar",
   };
 }
+
+/** The polar view's angular mapping for one panel. */
+export interface PolarTransform {
+  /** Which position axis is the angle: 0 for x, 1 for y. */
+  thetaAxis: 0 | 1;
+  thetaDomain: [number, number];
+  thetaStart: number;
+  thetaEnd: number;
+}
+
+/**
+ * A flat mark in polar coordinates: the pointwise theta/radius remap, then
+ * munching so straight segments bend along the circle.
+ *
+ * The mark's `key` survives, so a keyed mark keeps its identity in polar too.
+ * Its per-vertex `owners` survive only while the vertex count does (points):
+ * munching inserts vertices the owner rows do not describe.
+ */
+export function polarizeMark(
+  mark: RenderNode,
+  { thetaAxis, thetaDomain, thetaStart, thetaEnd }: PolarTransform,
+): RenderNode {
+  const out = munchFlatNode(
+    polarizeNode(mark, thetaAxis, thetaDomain, thetaStart, thetaEnd),
+  );
+  const vertices = (n: RenderNode) => {
+    const positions = n.props.positions;
+    return isFlatTensor(positions) ? positions.array.length : -1;
+  };
+  const owners = mark.owners && vertices(out) === vertices(mark)
+    ? mark.owners
+    : undefined;
+  if (mark.key === undefined && !owners) return out;
+  return {
+    ...out,
+    ...(mark.key !== undefined ? { key: mark.key } : {}),
+    ...(owners ? { owners } : {}),
+  };
+}

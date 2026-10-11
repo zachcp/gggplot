@@ -36,9 +36,11 @@ import type { ResidentProductProps } from "../geom/types.ts";
 import {
   numericRange,
   polarGridLines,
+  type PolarTransform,
   resolveAxes2d,
   resolveAxes3d,
 } from "./coordinates.ts";
+export { polarizeMark, type PolarTransform } from "./coordinates.ts";
 import {
   axisGuideOverlay,
   axisTickValues,
@@ -81,6 +83,12 @@ export interface CompileOptions {
    * identical to pre-tzc.5 behavior. See compile/pack_cache.ts.
    */
   packCache?: PackCache;
+  /**
+   * Replaces the polar transform of each mark (the component root memoizes
+   * it per mark instead of through packCache's Stage B). Receives a lowered
+   * mark and the panel's polar mapping; polarizeMark is the default.
+   */
+  transformMark?: (mark: RenderNode, polar: PolarTransform) => RenderNode;
   /**
    * Component path (gggplot-vnh.3): lowers one layer's marks in place of the
    * built-in lowerLayer/pack-cache call. The component root passes a per-layer
@@ -685,16 +693,24 @@ export function assemblePlot(
     // Cartesian views never reach this branch at all (`polarMarks = marks`
     // below), which is exactly what makes "Cartesian reuses Stage A tensors
     // unchanged" true by construction rather than by a caching decision.
+    const polar: PolarTransform = {
+      thetaAxis,
+      thetaDomain,
+      thetaStart,
+      thetaEnd,
+    };
     const polarMarks = view === "Polar"
       ? marks.map((mark) =>
-        stageBTransformedMark(
-          options.packCache,
-          mark,
-          thetaAxis,
-          thetaDomain,
-          thetaStart,
-          thetaEnd,
-        )
+        options.transformMark
+          ? options.transformMark(mark, polar)
+          : stageBTransformedMark(
+            options.packCache,
+            mark,
+            thetaAxis,
+            thetaDomain,
+            thetaStart,
+            thetaEnd,
+          )
       )
       : marks;
     const viewXDomain: [number, number] = view === "Polar" && thetaAxis === 0
