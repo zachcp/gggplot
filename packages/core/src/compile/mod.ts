@@ -393,6 +393,59 @@ export function prepareLayer(
   };
 }
 
+/**
+ * Everything prepareLayer reads off the spec for one layer, as a comparable
+ * string: two specs with equal signatures prepare the layer identically from
+ * the same rows (gggplot-2gu, vnh.15 finding 3).
+ *
+ * That makes it the stat tier of the scale-change classifier. A change that
+ * moves the signature re-runs the layer's filter and stat:
+ * - its effective mapping;
+ * - a position scale's `domain` (scale limits censor rows before the stat;
+ *   discrete limits by level SET, since censoring ignores their order);
+ * - a position scale's transform (log/sqrt), conservatively: transforms apply
+ *   at mapping time today, and move before the stat with gggplot-xg07;
+ * - for a geom with a resident plan, whatever the plan reads: the scales of
+ *   its mapped aesthetics, the execution policy, coord and facet kinds, and
+ *   whether the layer stands alone.
+ * Anything else (themes, labels, coord limits, a continuous range or palette,
+ * level order) leaves the prepared rows alone: it re-lowers marks at most,
+ * and a GPU-bound aesthetic only writes a uniform (gggplot-fbq).
+ */
+export function prepareSignature(
+  spec: GGSpec,
+  layer: Layer,
+  options: { faceted: boolean; standalone: boolean },
+): string {
+  const mapping = effectiveMapping(spec, layer);
+  const mapped = new Set(Object.keys(mapping));
+  const POSITION: Record<PositionAxis, readonly string[]> = {
+    x: ["x", "xmin", "xmax", "xend"],
+    y: ["y", "ymin", "ymax", "yend"],
+    z: ["z", "zend"],
+  };
+  const positions = (["x", "y", "z"] as const).flatMap((axis) => {
+    if (!POSITION[axis].some((aes) => mapped.has(aes))) return [];
+    // censorToScaleLimits reads the first scale declared for the axis.
+    const scale = spec.scales.find((s) => s.aes === axis);
+    if (!scale) return [];
+    const domain = scale.kind === "discrete" && Array.isArray(scale.domain)
+      ? [...(scale.domain as string[])].sort()
+      : scale.domain ?? null;
+    return [[axis, scale.kind, domain]];
+  });
+  const resident = GEOM_REGISTRY[layer.geom].residentPlan
+    ? {
+      scales: spec.scales.filter((s) => mapped.has(s.aes) || s.aes === "y"),
+      execution: spec.execution ?? null,
+      coord: spec.coord.kind,
+      facet: spec.facet.kind,
+      standalone: options.standalone && !options.faceted,
+    }
+    : null;
+  return JSON.stringify({ mapping, positions, resident });
+}
+
 /** Add one layer's removals to the per-layer totals, summed across panels. */
 export function recordRemovals(
   totals: Map<string, RowRemoval>,
