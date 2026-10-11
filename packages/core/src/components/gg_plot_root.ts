@@ -19,8 +19,10 @@
 // A resize therefore re-runs guide layout only: no stat, no lowering, no mark
 // upload.
 //
-// Resident GPU products are not on this path yet (gggplot-280): every layer
-// takes its CPU stat.
+// GPU-eligible layers (stat_count / stat_bin through geom.residentPlan) become
+// resident products: the assembly collects one hoisted node per distinct
+// product and ResidentHost mounts each once in a sibling <Compute>, handing it
+// to every mark that reads it (gggplot-280).
 import type { LiveElement } from "@use-gpu/live";
 import {
   LayoutContext,
@@ -51,6 +53,7 @@ import {
   isInstrumentFlagSet,
   resetGpuMarkCounters,
 } from "../render/gpu_instrument.ts";
+import { ResidentHost } from "../runtime/resident_host.tsx";
 import { isResidentColumn } from "../runtime/types.ts";
 import {
   capture,
@@ -128,8 +131,8 @@ export const GGPlotRoot = (props: GGPlotRootProps): LiveElement => {
         isResidentColumn(column as never)
       )
     ) {
-      // CPU stats and lowering read columns on the CPU. A GPU-only resident
-      // column is for resident products (gggplot-280).
+      // CPU stats and lowering read columns on the CPU. Plots over GPU-only
+      // columns arrive with the loader routes (gggplot-y43).
       throw new Error(
         "[gggplot] <GGPlot> cannot read a GPU-resident column on the CPU path",
       );
@@ -255,7 +258,7 @@ const PlotView = (
   }
 
   if (!assembled) return null;
-  const { tree, info } = assembled;
+  const { tree, info, residentNodes } = assembled;
 
   // One immutable value per distinct set of scales: a resize keeps the
   // identity, a retrain moves the revision.
@@ -290,7 +293,17 @@ const PlotView = (
   return provide(
     GGScalesContext,
     scalesRef.value,
-    provide(GGPanelContext, panelRef.value, renderTree(view) as LiveElement),
+    provide(
+      GGPanelContext,
+      panelRef.value,
+      // Products are built ABOVE the tree: <Plot>'s VirtualLayers boundary
+      // keeps a kernel below it from reaching a compute pass (see
+      // runtime/resident_host.tsx).
+      createElement(ResidentHost, {
+        nodes: residentNodes,
+        children: renderTree(view) as LiveElement,
+      }) as LiveElement,
+    ),
   );
 };
 

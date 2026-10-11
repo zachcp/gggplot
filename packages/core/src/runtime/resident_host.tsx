@@ -100,7 +100,7 @@ export interface HoistedResult {
   computes: LiveElement[];
 }
 
-interface HoistedNode {
+export interface HoistedNode {
   id: number;
   props: Record<string, unknown>;
 }
@@ -122,15 +122,52 @@ const HOISTED_PRODUCTS = new Set<string>([
   RESIDENT_STAT_BIN_TILES_PRODUCT,
 ]);
 
+/** Identity tokens for the data frames products read, held weakly. */
+const frameTokens = new WeakMap<object, number>();
+let nextFrameToken = 1;
+
+/**
+ * What makes two hoisted nodes the same product: the kernel family (both
+ * stat_bin forms run one kernel and differ only in the buffers their marks
+ * draw), the data frame by identity, the columns, the kernel options and the
+ * palette input. Everything else on a node (its mark color, `view`, axes,
+ * theme) belongs to the consumer.
+ */
+function productKey(props: Record<string, unknown>): string {
+  const data = props.data;
+  let token = 0;
+  if (data && typeof data === "object") {
+    token = frameTokens.get(data) ?? 0;
+    if (!token) frameTokens.set(data, token = nextFrameToken++);
+  }
+  const family = props.product === RESIDENT_STAT_COUNT_PRODUCT
+    ? "count"
+    : "bin";
+  return JSON.stringify([
+    family,
+    token,
+    props.x,
+    props.group ?? null,
+    props.options ?? null,
+    props.paletteColors ?? null,
+    props.opacity ?? null,
+  ]);
+}
+
 /**
  * Stamps a `residentId` on every hoistable ResidentProduct node and returns
- * them alongside the rewritten tree. The tree is copied, never mutated: the
- * compiled tree is cached by the pack cache and shared across re-renders.
+ * one hoisted node per distinct product alongside the rewritten tree.
+ *
+ * Fan-out (gggplot-280): consumers of the same product (productKey) share
+ * one id, so the product is built and dispatched once however many marks
+ * read it. The tree is copied, never mutated: the compiled tree is cached and
+ * shared across re-renders.
  */
 export function collectResidentNodes(
   tree: RenderNode,
 ): { tree: RenderNode; nodes: HoistedNode[] } {
   const nodes: HoistedNode[] = [];
+  const ids = new Map<string, number>();
   const visit = (node: RenderNode): RenderNode => {
     // Both forms hoist. The `view` flag used to gate this, back when only the
     // view components could consume a hoisted product; now that grid.Mark can
@@ -142,8 +179,13 @@ export function collectResidentNodes(
     if (!hoistable) {
       return children === node.children ? node : { ...node, children };
     }
-    const id = nodes.length;
-    nodes.push({ id, props: node.props });
+    const key = productKey(node.props);
+    let id = ids.get(key);
+    if (id === undefined) {
+      id = nodes.length;
+      ids.set(key, id);
+      nodes.push({ id, props: node.props });
+    }
     return {
       ...node,
       props: { ...node.props, [RESIDENT_ID_PROP]: id },

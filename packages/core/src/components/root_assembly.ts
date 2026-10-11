@@ -24,7 +24,7 @@ import {
 import { reuseUnchanged } from "../compile/stable_tensors.ts";
 import { GG, type SpecPart } from "../dsl/base.ts";
 import { typedArrayForColumn } from "../data/mod.ts";
-import { LAYOUT_BOUND_GEOMS, lowerLayer } from "../geom/mod.ts";
+import { GEOM_REGISTRY, LAYOUT_BOUND_GEOMS, lowerLayer } from "../geom/mod.ts";
 import type {
   Aes,
   DataFrame,
@@ -37,11 +37,20 @@ import { isGpuBindable } from "../render/scale_bindings.ts";
 import { type CpuStatCache, createCpuStatCache } from "../stat/mod.ts";
 import type { PlotPart } from "./parts.ts";
 import { componentProbe } from "./probe.ts";
+import {
+  collectResidentNodes,
+  type HoistedNode,
+} from "../runtime/resident_host.tsx";
 
 export interface PreparedEntry {
   layer: Layer;
   data: DataFrame;
   spec: GGSpec;
+  /**
+   * Whether the layer was alone in an unfaceted plot, which lets a resident
+   * plan take its standalone view. Read only for geoms with a residentPlan.
+   */
+  standalone: boolean;
   prepared: PreparedLayer;
   removed: LayerRemovals;
 }
@@ -229,6 +238,8 @@ export interface RootAssembly {
   info: AssembledPlot | null;
   /** Rows each layer dropped before its stat, as compile() reports them. */
   diagnostics: readonly RowRemoval[];
+  /** The GPU products the tree's resident marks read, one per product. */
+  residentNodes: HoistedNode[];
 }
 
 /** The layer parts a root assembles, in tree order. */
@@ -251,6 +262,7 @@ export function assembleRoot(
   componentProbe.assembleCalls++;
   const spec: GGSpec = { ...base, layers: layers.map((l) => l.layer) };
   const faceted = spec.facet.kind !== "none";
+  const standalone = !faceted && layers.length === 1;
   const removals = new Map<string, RowRemoval>();
   const livePrepared = new Set<string>();
   const panelLayers = panels.panels.map((panel, panelIndex) =>
@@ -262,7 +274,9 @@ export function assembleRoot(
       // mapping, scales and facet; `base` changes identity when any
       // plot-level part does.
       let entry = prev && prev.layer === layer && prev.data === panel.data &&
-          prev.spec === base
+          prev.spec === base &&
+          (prev.standalone === standalone ||
+            !GEOM_REGISTRY[layer.geom].residentPlan)
         ? prev
         : undefined;
       if (!entry) {
@@ -270,8 +284,18 @@ export function assembleRoot(
         const { prepared, removed } = prepareLayer(spec, layer, panel.data, {
           faceted,
           statCache: caches.stat,
+          // GPU-eligible layers (geom.residentPlan) become products the
+          // root hosts (gggplot-280); the rest take their CPU stat.
+          resident: true,
         });
-        entry = { layer, data: panel.data, spec: base, prepared, removed };
+        entry = {
+          layer,
+          data: panel.data,
+          spec: base,
+          standalone,
+          prepared,
+          removed,
+        };
         caches.prepared.set(key, entry);
       }
       recordRemovals(removals, layerIndex, layer.geom, entry.removed);
@@ -339,5 +363,12 @@ export function assembleRoot(
     if (!liveLowered.has(key)) caches.lowered.delete(key);
   }
   const assembled = info as AssembledPlot | null;
-  return { tree, info: assembled, diagnostics: rowRemovalsOf(tree) };
+  // Each distinct product once, every consumer stamped with its id.
+  const hosted = collectResidentNodes(tree);
+  return {
+    tree: hosted.tree,
+    info: assembled,
+    diagnostics: rowRemovalsOf(tree),
+    residentNodes: hosted.nodes,
+  };
 }
