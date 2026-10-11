@@ -54,3 +54,13 @@ export {
   type ResidentProductComponents,
   resolveResidentProduct,
 } from "./resident_registry.ts";
+export {
+  type ProductAllocation,
+  ProductKernels,
+  type ProductKernelsProps,
+  useProductAllocation,
+} from "./product_kernels.ts";
+export {
+  type GenerationPhase,
+  ProductGeneration,
+} from "./product_generation.ts";

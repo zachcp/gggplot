@@ -8,3 +8,6 @@ export * from "./gpu/resident_histogram.ts";
 export * from "./gpu/resident_count.ts";
 export * from "./gpu/resident_domain.ts";
 export * from "./gpu/benchmark.ts";
+export * from "./product_spec.ts";
+export * from "./product_catalog.ts";
+export * from "./gpu/product.ts";
