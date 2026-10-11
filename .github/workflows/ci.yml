@@ -88,6 +88,14 @@ jobs:
         env:
           GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
         run: deno task --cwd apps/site test:pixels
+      # Every doc example's JSX against the compile-path golden frames
+      # (gggplot-w8zq, apps/site/goldens/README.md). Draws WebGPU, so
+      # non-blocking here until a GPU runner, like the gates above.
+      - name: Golden frames
+        continue-on-error: true
+        env:
+          GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
+        run: deno task --cwd apps/site test:goldens
       # The component-first root against compile() (gggplot-2bj): pixel parity
       # plus the component-path invariants (gggplot-bv0, docs/ARCHITECTURE.md):
       # resize, a fixed aesthetic beside a GPU-bound one, an inserted layer, a
