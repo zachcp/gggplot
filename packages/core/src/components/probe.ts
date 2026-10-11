@@ -8,11 +8,16 @@ export const componentProbe = {
   viewRenders: 0,
   /** Layer part mounts: a remount of an existing layer shows up here. */
   layerMounts: 0,
+  /** Renders of GPU-bound point marks (gggplot-vnh.6.1). */
+  boundRenders: 0,
+  /** The latest GGScalesContext revision any root provided. Not reset. */
+  scalesRevision: 0,
   reset(): void {
     this.statCalls = 0;
     this.lowerCalls = 0;
     this.assembleCalls = 0;
     this.viewRenders = 0;
     this.layerMounts = 0;
+    this.boundRenders = 0;
   },
 };

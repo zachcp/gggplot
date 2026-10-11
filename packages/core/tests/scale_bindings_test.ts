@@ -18,6 +18,9 @@ const color = (domain: [number, number], range?: string[]): TrainedScale => ({
 
 Deno.test("only continuous numeric scales bind", () => {
   assert(isGpuBindable(color([0, 1])));
+  // A continuous color scale trains as kind "color".
+  assert(isGpuBindable({ aes: "color", kind: "color", domain: [0, 1] }));
+  assert(!isGpuBindable({ aes: "x", kind: "log", domain: [1, 10] }));
   assert(!isGpuBindable({ aes: "color", kind: "discrete", domain: ["a"] }));
   assert(!isGpuBindable(undefined));
 });

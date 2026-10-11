@@ -30,6 +30,8 @@ export interface StepCost {
     assembleCalls: number;
     viewRenders: number;
     layerMounts: number;
+    boundRenders: number;
+    scalesRevision: number;
   };
   gpu: ReturnType<typeof getGpuMarkCounters>;
   /** Uploads of each frame column's typed array during the step. */
@@ -97,6 +99,8 @@ export function ComponentRootProbe() {
             assembleCalls: componentProbe.assembleCalls,
             viewRenders: componentProbe.viewRenders,
             layerMounts: componentProbe.layerMounts,
+            boundRenders: componentProbe.boundRenders,
+            scalesRevision: componentProbe.scalesRevision,
           },
           gpu: getGpuMarkCounters(),
           columnUploads: { ...columnUploads },

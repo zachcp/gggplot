@@ -119,7 +119,11 @@ const DEFAULT_ALPHA_RANGE: [number, number] = [0.1, 1];
 
 /** Whether a trained scale can be bound on the GPU instead of CPU-packed. */
 export function isGpuBindable(scale: TrainedScale | undefined): boolean {
-  return !!scale && scale.kind === "continuous" &&
+  // A continuous color scale trains as kind "color" (gradient, viridis,
+  // gradient2 ramps), a continuous size/alpha as "continuous". Both map a
+  // numeric domain linearly, which is what the bindings implement. log/sqrt
+  // transforms are not bindable yet.
+  return !!scale && (scale.kind === "continuous" || scale.kind === "color") &&
     typeof scale.domain[0] === "number" && typeof scale.domain[1] === "number";
 }
 

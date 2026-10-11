@@ -488,6 +488,7 @@ const PlotView = (
         revision: (prev?.revision ?? 0) + 1,
         gpu: gpuRefs,
       };
+      componentProbe.scalesRevision = scalesRef.value.revision;
     }
     const panel = panelRef.value;
     if (
