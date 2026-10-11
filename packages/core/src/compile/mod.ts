@@ -224,8 +224,19 @@ function compileThreeDimensionalPlot(
     },
     measureText: options.layout?.measureText,
   };
-  const marks = perLayer.flatMap(({ layer, mapping, data }) =>
-    lowerLayer(layer, mapping, data, context)
+  // The component root memoizes each layer's lowering through lowerMarks, in
+  // 3D as in 2D, so a resize keeps every 3D tensor (gggplot-so9h).
+  const marks = perLayer.flatMap(({ layer, mapping, data }, layerIndex) =>
+    options.lowerMarks
+      ? options.lowerMarks({
+        layer,
+        mapping,
+        data,
+        ctx: context,
+        layerIndex,
+        panelIndex: 0,
+      })
+      : lowerLayer(layer, mapping, data, context)
   );
   const positionScales = { x, y, z };
   const scene = node("Plot", {}, [
