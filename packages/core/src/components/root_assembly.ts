@@ -11,6 +11,8 @@ import {
   type buildFacetPanels,
   type LayerRemovals,
   type LowerMarksArgs,
+  polarizeMark,
+  type PolarTransform,
   type PreparedLayer,
   prepareLayer,
   recordRemovals,
@@ -19,11 +21,10 @@ import {
   rowRemovalsOf,
   type TextMeasurer,
 } from "../compile/mod.ts";
-import { UNCACHEABLE_GEOMS } from "../compile/pack_cache.ts";
 import { reuseUnchanged } from "../compile/stable_tensors.ts";
 import { GG, type SpecPart } from "../dsl/base.ts";
 import { typedArrayForColumn } from "../data/mod.ts";
-import { lowerLayer } from "../geom/mod.ts";
+import { LAYOUT_BOUND_GEOMS, lowerLayer } from "../geom/mod.ts";
 import type {
   Aes,
   DataFrame,
@@ -116,7 +117,7 @@ function contextSignature(
     scales,
     domains: ctx.domains,
     // Only text/label/rug read the theme and panel size for packed output
-    // (compile/pack_cache.ts UNCACHEABLE_GEOMS); the rest are layout-free.
+    // (geom/mod.ts LAYOUT_BOUND_GEOMS); the rest are layout-free.
     ...(layoutBound ? { theme: ctx.theme, panelPixels: ctx.panelPixels } : {}),
   });
 }
@@ -190,6 +191,12 @@ export interface RootCaches {
   lowered: Map<string, LoweredEntry>;
   /** CPU stat runs per input version (gggplot-l82). */
   stat: CpuStatCache;
+  /**
+   * Polar-transformed marks, per lowered mark. A lowered mark keeps its
+   * identity while unchanged, so a resize or a sibling's change reuses its
+   * munched tensors too.
+   */
+  polar: WeakMap<RenderNode, { key: string; mark: RenderNode }>;
 }
 
 export function createRootCaches(): RootCaches {
@@ -197,7 +204,23 @@ export function createRootCaches(): RootCaches {
     prepared: new Map(),
     lowered: new Map(),
     stat: createCpuStatCache(),
+    polar: new WeakMap(),
   };
+}
+
+/** A lowered mark in polar coordinates, reused while it and the mapping hold. */
+function transformMark(
+  caches: RootCaches,
+  mark: RenderNode,
+  polar: PolarTransform,
+): RenderNode {
+  const key = JSON.stringify(polar);
+  const prev = caches.polar.get(mark);
+  if (prev?.key === key) return prev.mark;
+  componentProbe.polarCalls++;
+  const next = reuseUnchanged(polarizeMark(mark, polar), prev?.mark);
+  caches.polar.set(mark, { key, mark: next });
+  return next;
 }
 
 /** One assembly of the plot: its tree, scales/panel info and row removals. */
@@ -265,7 +288,7 @@ export function assembleRoot(
     const id = layers[layerIndex].id;
     const key = `${id}:${panelIndex}`;
     liveLowered.add(key);
-    const layoutBound = UNCACHEABLE_GEOMS.has(layer.geom);
+    const layoutBound = LAYOUT_BOUND_GEOMS.has(layer.geom);
     const bound = boundPlan(args);
     const signature = contextSignature(args, layoutBound, bound);
     const prev = caches.lowered.get(key);
@@ -307,6 +330,7 @@ export function assembleRoot(
   }, {
     layout,
     lowerMarks,
+    transformMark: (mark, polar) => transformMark(caches, mark, polar),
     onAssembled: (assembledInfo) => {
       info = assembledInfo;
     },

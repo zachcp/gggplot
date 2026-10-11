@@ -64,6 +64,19 @@ const doc = (
 ): GeomDocMeta => ({ summary, aesthetics: { required, optional }, params });
 
 /** Every GeomKind maps to exactly one definition; several kinds may share a lower fn. */
+/**
+ * Geoms whose lower() reads the layout (ctx.theme, ctx.panelPixels or the
+ * panel domains) for its packed output: text and label place glyphs with
+ * the theme's font and the panel's pixel size; rug sizes its ticks as a pixel
+ * fraction. Their marks are re-lowered when the layout changes; every other
+ * geom's packing is layout-free and survives a resize or theme change.
+ */
+export const LAYOUT_BOUND_GEOMS: ReadonlySet<GeomKind> = new Set([
+  "text",
+  "label",
+  "rug",
+]);
+
 export const GEOM_REGISTRY: Record<GeomKind, GeomDefinition> = {
   point: {
     dropsMissingPositions: true,
