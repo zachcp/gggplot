@@ -81,8 +81,32 @@ The untyped form underneath is `<GeomLayer geom="point" ... />`.
 layer-only `data` (with `dataOptions`), `stat`, `position`, `inheritAes`, and
 every other prop as a geom/stat parameter. Defaults for `stat` and `position`
 come from the geom registry, as before, so `geomBar()` and
-`<GeomLayer geom="bar" />` build the same layer. Scales, coords, facets and
-themes are still passed as `<GGPart part>` until their own components land.
+`<GeomLayer geom="bar" />` build the same layer.
+
+## Plot parts as components
+
+Scales, coords, facets, themes, labels, the 3D camera and the execution policy
+are children too, one component per DSL constructor:
+
+| DSL                               | Component                                             |
+| --------------------------------- | ----------------------------------------------------- |
+| `scaleXLog10({ name })`           | `<ScaleXLog10 name="..." />`                          |
+| `scaleColorViridis()`             | `<ScaleColorViridis />`                               |
+| `coordCartesian({ ylim })`        | `<CoordCartesian ylim={[0, 60]} />`                   |
+| `coordPolar({ theta: "y" })`      | `<CoordPolar theta="y" />`                            |
+| `coordFixed(2)`                   | `<CoordFixed ratio={2} />`                            |
+| `facetWrap(["g"], 2, "free_y")`   | `<FacetWrap vars={["g"]} ncol={2} scales="free_y" />` |
+| `facetGrid(["a"], ["b"])`         | `<FacetGrid rows={["a"]} cols={["b"]} />`             |
+| `labels({ title })`               | `<Labs title="..." />`                                |
+| `themeMinimal()` + `theme({...})` | `<ThemeMinimal fontSize={12} />`                      |
+| `theme({...})`                    | `<ThemeOverrides gridColor="#eee" />`                 |
+| `camera3d(opts)`                  | `<Camera3d {...opts} />`                              |
+| `execution({ resident: false })`  | `<Execution resident={false} />`                      |
+
+They apply in tree order with the DSL's `.add()` semantics: a later coord, facet
+or camera replaces an earlier one, while themes and labels merge. A theme
+preset's props override its fields. `theme()` became `<ThemeOverrides>` because
+`Theme` is already the type's name.
 
 Parity: of the 65 doc examples in the basics, stats, intervals and shapes pages,
 every example rendered through `<GeomLayer>` matches the compile path pixel for

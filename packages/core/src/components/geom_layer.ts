@@ -20,8 +20,9 @@ import type {
   PositionKind,
   StatKind,
 } from "../ir/types.ts";
-import { createElement, useMemo, useOne } from "../runtime/usegpu_compat.ts";
+import { createElement, useMemo } from "../runtime/usegpu_compat.ts";
 import { GGLayerPart } from "./parts.ts";
+import { useStableProps } from "./stable_props.ts";
 
 export interface GeomLayerProps {
   geom: GeomKind;
@@ -37,20 +38,6 @@ export interface GeomLayerProps {
   inheritAes?: boolean;
   /** Everything else is a geom/stat parameter: color, size, bins, ... */
   [param: string]: unknown;
-}
-
-/**
- * Returns `value` unless it is shallow-equal to the previous one, in which
- * case the previous one comes back, so inline JSX objects keep identity.
- */
-function useShallowStable<T extends Record<string, unknown>>(value: T): T {
-  const ref = useOne(() => ({ current: value }));
-  const prev = ref.current;
-  const keys = Object.keys(value);
-  const same = keys.length === Object.keys(prev).length &&
-    keys.every((k) => prev[k] === value[k]);
-  if (!same) ref.current = value;
-  return ref.current;
 }
 
 /** The layer a GeomLayer's props describe, with the registry's defaults. */
@@ -85,11 +72,12 @@ export function layerFromProps(props: GeomLayerProps): Layer {
 export const GeomLayer = (props: GeomLayerProps): LiveElement => {
   const { mapping, data, ...rest } = props;
   // Stable inputs: the mapping by shallow value, the data by identity (ingest
-  // passes an already-typed frame through), every param by value.
-  const stableMapping = useShallowStable(
+  // passes an already-typed frame through), every param by value (arrays and
+  // plain objects one level deep).
+  const stableMapping = useStableProps(
     (mapping ?? {}) as Record<string, unknown>,
   );
-  const stableRest = useShallowStable(rest as Record<string, unknown>);
+  const stableRest = useStableProps(rest as Record<string, unknown>);
   const layer = useMemo(
     () =>
       layerFromProps({
