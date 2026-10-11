@@ -34,6 +34,7 @@ export {
   type PlotPart,
 } from "./components/parts.ts";
 export { useGGColors, useGGSizes } from "./components/gg_panel.ts";
+export { GGLayer, type GGLayerProps } from "./components/gg_layer.ts";
 export {
   GeomLayer,
   type GeomLayerProps,

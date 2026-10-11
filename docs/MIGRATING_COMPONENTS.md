@@ -159,3 +159,17 @@ follows every retrain by uniform write, with no relink. `useGGScales()` gives
 the immutable trained scales and their revision for CPU work, and `useGGPanel()`
 gives the panel's bounds. In a faceted plot the content draws in every panel; in
 3D, in the scene's data space.
+
+## Custom layers (`<GGLayer>`)
+
+`<GGPanel>` draws but trains nothing. `<GGLayer>` declares the rows and
+aesthetics its primitive shows, as a geom would. They train the plot's scales,
+widening the axes and adding a legend for any color, fill or size it maps, and
+they are censored and faceted like any layer's rows. Its children draw in the
+panel and bind those same scales:
+
+```tsx
+<GGLayer data={stations} mapping={{ x: "lon", y: "lat", color: "temp" }}>
+  <StationGlyphs />
+</GGLayer>;
+```
