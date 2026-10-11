@@ -144,7 +144,6 @@ createRoot(root).render(
       <Suspense fallback={<p>Loading…</p>}>
         <CaptureProbe
           id={query.get("capture")!}
-          path={query.get("path") ?? "compile"}
         />
       </Suspense>
     )

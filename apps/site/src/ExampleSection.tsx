@@ -1,16 +1,37 @@
 import React from "react";
-import {
-  columnValues,
-  compile,
-  emitSource,
-  isTypedDataFrame,
-} from "@gggplot/core";
+import { columnValues, isTypedDataFrame } from "@gggplot/core";
 import type { DataFrame } from "@gggplot/core";
 import { ChartCanvas } from "./ChartCanvas.tsx";
-import { staticDatasets } from "./docs/data/real.ts";
+import { loadStaticDataset, staticDatasets } from "./docs/data/real.ts";
 import type { DocExample } from "./docs/types.ts";
-import { useResolvedExample } from "./hooks.ts";
 import { styles } from "./styles.ts";
+
+/** A static dataset for the preview panel, loaded only when shown. */
+function useDatasetPreview(
+  id: "mpg" | "mtcars" | "iris" | undefined,
+): { data?: DataFrame; error?: string } {
+  const [state, setState] = React.useState<
+    { data?: DataFrame; error?: string }
+  >(
+    {},
+  );
+  React.useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    loadStaticDataset(id).then(
+      (data) => !cancelled && setState({ data }),
+      (error: unknown) =>
+        !cancelled &&
+        setState({
+          error: error instanceof Error ? error.message : String(error),
+        }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+  return state;
+}
 
 export function ExampleSection({
   index,
@@ -23,17 +44,10 @@ export function ExampleSection({
   compact: boolean;
   forceChartFailure: boolean;
 }) {
-  const resolved = useResolvedExample(example);
-  const tree = resolved.spec ? compile(resolved.spec) : undefined;
-  const liveTree = resolved.spec
-    ? compile(resolved.spec, { resident: true })
-    : undefined;
-  const emitted = tree ? emitSource(tree, example.id) : undefined;
-  const nodeCount = tree ? countNodes(tree) : undefined;
-  const resident = liveTree ? hasComponent(liveTree, "ResidentProduct") : false;
   const dataset = example.dataSource
     ? staticDatasets[example.dataSource.id]
     : undefined;
+  const preview = useDatasetPreview(example.dataSource?.id);
 
   return (
     <section data-doc-example={example.id} style={styles.example}>
@@ -56,7 +70,13 @@ export function ExampleSection({
 
       <div style={styles.detailGrid}>
         <Panel title="Data preview">
-          <DataPreview data={resolved.data ?? example.dataPreview} />
+          {preview.error
+            ? (
+              <p style={styles.metaCopy}>
+                Dataset load failed: {preview.error}
+              </p>
+            )
+            : <DataPreview data={preview.data ?? example.dataPreview} />}
         </Panel>
         {example.computedDataPreview
           ? (
@@ -67,20 +87,6 @@ export function ExampleSection({
           : null}
         <Panel title="What changed">
           <p style={styles.bodyCopy}>{example.whatChanged}</p>
-          {liveTree
-            ? (
-              <p
-                data-execution-flow={resident ? "resident" : "pack-once"}
-                style={resident
-                  ? styles.executionBadgeResident
-                  : styles.executionBadgePacked}
-              >
-                {resident
-                  ? "Flow A · GPU-resident product"
-                  : "Flow B · CPU pack-once, GPU-rendered marks"}
-              </p>
-            )
-            : null}
           {example.executionDetail
             ? <p style={styles.metaCopy}>{example.executionDetail}</p>
             : null}
@@ -91,61 +97,27 @@ export function ExampleSection({
               </a>
             )
             : null}
-          <p style={styles.metaCopy}>
-            {example.chart
-              ? "Component tree: rendered by the <GGPlot> root, no RenderTree or emitted source."
-              : nodeCount === undefined
-              ? resolved.error
-                ? `Dataset load failed: ${resolved.error}`
-                : "Loading typed dataset lazily…"
-              : `RenderTree: ${nodeCount} nodes after stats, scales, coords, guides, and theme.`}
-          </p>
         </Panel>
       </div>
 
       <section
         style={{ ...styles.grid, ...(compact ? styles.gridCompact : {}) }}
       >
-        <Panel title={example.chart ? "Component JSX" : "ggplot DSL"}>
-          <pre style={styles.pre}>
-            {example.chart ? example.jsxSource : example.dslSource}
-          </pre>
+        <Panel title="Component JSX">
+          <pre style={styles.pre}>{example.jsxSource}</pre>
         </Panel>
         <Panel title="live WebGPU render">
-          {example.chart
-            ? (
-              <ChartCanvas
-                chart={example.chart}
-                label={example.visualSummary ?? example.description}
-                forceFailure={forceChartFailure}
-              />
-            )
-            : resolved.spec
-            ? (
-              <ChartCanvas
-                spec={resolved.spec}
-                label={example.visualSummary ?? example.description}
-                forceFailure={forceChartFailure}
-              />
-            )
-            : (
-              <p style={styles.metaCopy}>
-                {resolved.error ?? "Loading chart data…"}
-              </p>
-            )}
+          <ChartCanvas
+            chart={example.chart}
+            label={example.visualSummary ?? example.description}
+            forceFailure={forceChartFailure}
+          />
           <p style={styles.note}>
-            Requires a WebGPU browser. If the canvas is blank, the DSL and
-            emitted source still show the compiler output for this feature.
+            Requires a WebGPU browser. If the canvas is blank, the component JSX
+            still shows the plot this example builds.
           </p>
         </Panel>
       </section>
-
-      {example.chart ? null : (
-        <details style={styles.details}>
-          <summary style={styles.summary}>Emitted UseGPU Live source</summary>
-          <pre style={styles.pre}>{emitted ?? "Loading typed dataset…"}</pre>
-        </details>
-      )}
     </section>
   );
 }
@@ -206,20 +178,4 @@ function DataPreview(
         : null}
     </div>
   );
-}
-
-function countNodes(node: { children?: unknown[] }): number {
-  const children = (node.children ?? []) as Array<{ children?: unknown[] }>;
-  return 1 + children.reduce((total, child) => total + countNodes(child), 0);
-}
-
-function hasComponent(
-  node: { component?: string; children?: unknown[] },
-  component: string,
-): boolean {
-  if (node.component === component) return true;
-  return ((node.children ?? []) as Array<{
-    component?: string;
-    children?: unknown[];
-  }>).some((child) => hasComponent(child, component));
 }

@@ -337,7 +337,7 @@ export const docPages: DocPage[] = [
       {
         heading: "Same pipeline, one more axis",
         body:
-          "The shared compiler keeps positions in data space and hands the use.gpu Cartesian view a 3-axis range plus the plot's single camera. Projection stays on the GPU, and compile, GGPlot, and emitSource are the same entry points used for 2D.",
+          "The plot keeps positions in data space and hands the use.gpu Cartesian view a 3-axis range plus the plot's single camera. Projection stays on the GPU, and the same <GGPlot> components build 2D and 3D plots: mapping z is what selects a geom's 3D mode.",
       },
     ],
     examples: [],

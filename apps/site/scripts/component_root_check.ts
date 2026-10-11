@@ -1,7 +1,9 @@
-// The component-first <GGPlot> root (gggplot-2bj) against compile() on
-// scatterLine, in a browser. Never silently skip a missing GPU.
+// The component-first <GGPlot> root (gggplot-2bj) on scatterLine and
+// variants, in a browser. Never silently skip a missing GPU.
 //
-// Checks: pixel parity in two plot states, then three measurements on the
+// Checks: pixel parity against the frames the compile path drew before it was
+// retired (goldens/component-root, gggplot-tnxt) in four plot states, the
+// component-path invariants (gggplot-bv0), and three measurements on the
 // component path (resize, a fixed-color change on one layer, a third layer
 // inserted before the first two). Work counters are asserted; GPU bytes are
 // recorded for the bead notes, because <Plot>'s VirtualLayers aggregates
@@ -21,7 +23,11 @@ type ProbeWindow = {
   __readScaleCapture: () => Promise<string>;
 };
 
-/** Per-channel difference glyph anti-aliasing alone produces (see atlasHistory). */
+/**
+ * Per-channel difference glyph anti-aliasing alone produces: atlas packing
+ * order depends on mount history, so the same chart's text differs from
+ * itself by up to ~24 (measured on compile against itself before retiring it).
+ */
 const MAX_TEXT_AA_DIFFERENCE = 32;
 
 const host = "127.0.0.1";
@@ -53,6 +59,15 @@ const frameAfter = (page: Page, change: Partial<ComponentRootState>) =>
     await w.__gggplotComponentRootProbe!.step(change);
     return await w.__readScaleCapture();
   }, change);
+
+/** A reference frame the compile path drew before it was retired, as a data URL. */
+function golden(name: string): string {
+  const bytes = Deno.readFileSync(
+    new URL(`../goldens/component-root/${name}.png`, import.meta.url),
+  );
+  return "data:image/png;base64," +
+    btoa(Array.from(bytes, (c) => String.fromCharCode(c)).join(""));
+}
 
 async function compare(page: Page, name: string, a: string, b: string) {
   for (const [mode, url] of [["compile", a], ["component", b]]) {
@@ -171,8 +186,10 @@ try {
     );
     await step(page, {});
 
-    // Parity, two-layer state: compile frame, then a fresh component mount.
-    const twoCompile = await frameAfter(page, { mode: "compile" });
+    // Parity, two-layer state: a fresh component mount against the frame the
+    // compile path drew before it was retired (goldens/component-root).
+    const twoCompile = golden("two");
+    await step(page, { mode: "shared" });
     const twoComponent = await frameAfter(page, { mode: "component" });
     const parityTwo = await compare(page, "two", twoCompile, twoComponent);
 
@@ -182,38 +199,14 @@ try {
     const color = await step(page, { pointColor: "#22c55e" });
     const third = await step(page, { third: true });
 
-    // Parity, three-layer state with the changed color and new width. The
-    // compile path replays the same history first: glyph atlases pack in the
-    // order glyphs first appear, so a resized plot and a freshly mounted one
-    // anti-alias their labels slightly differently on EITHER path.
+    // Parity, three-layer state with the changed color and new width.
     const threeComponent = await frameAfter(page, { width: 601 });
-    // Switching mode remounts, so the compile path starts its atlas at 520.
-    await step(page, {
-      mode: "compile",
-      width: 520,
-      pointColor: "#3b82f6",
-      third: false,
-    });
-    const compileIdle = await step(page, {});
-    const compileResize = await step(page, { width: 600 });
-    const compileColor = await step(page, { pointColor: "#22c55e" });
-    const compileThird = await step(page, { third: true });
-    const threeCompile = await frameAfter(page, { width: 601 });
+    const threeCompile = golden("three");
     const parityThree = await compare(
       page,
       "three",
       threeCompile,
       threeComponent,
-    );
-    // Recorded, not asserted: compile against itself, freshly mounted in the
-    // final state vs resized into it.
-    await step(page, { mode: "component" });
-    const freshCompile = await frameAfter(page, { mode: "compile" });
-    const atlasHistory = await compare(
-      page,
-      "atlas-history",
-      freshCompile,
-      threeCompile,
     );
 
     // Shared data (gggplot-0m6): two plots under one <GGData>. Mounting it
@@ -233,7 +226,7 @@ try {
     const scaledResize = await step(page, { width: 560 });
     const domainChange = await step(page, { colorDomain: [5, 40] });
     const scaledComponent = await frameAfter(page, { colorDomain: [5, 41] });
-    const scaledCompile = await frameAfter(page, { mode: "compile" });
+    const scaledCompile = golden("scaled");
     const parityScaled = await compare(
       page,
       "scaled",
@@ -327,7 +320,7 @@ try {
     const discreteComponent = await frameAfter(page, {
       palette: ["#f97316", "#0ea5e9", "#facc15"],
     });
-    const discreteCompile = await frameAfter(page, { mode: "compile" });
+    const discreteCompile = golden("discrete");
     const parityDiscrete = await compare(
       page,
       "discrete",
@@ -367,18 +360,7 @@ try {
       },
       shared: { columnUploads: shared.columnUploads },
       parity: { two: parityTwo, three: parityThree },
-      atlasHistory,
       steps: { idle, resize, color, third },
-      // The same changes on the compile path, for GPU bytes only (its work
-      // counters stay 0: compile() does not report through componentProbe).
-      compileGpu: Object.fromEntries(
-        Object.entries({
-          idle: compileIdle,
-          resize: compileResize,
-          color: compileColor,
-          third: compileThird,
-        }).map(([k, v]) => [k, v.gpu]),
-      ),
       errors,
     };
     await Deno.writeTextFile(
@@ -395,7 +377,7 @@ try {
       }
       // Glyph anti-aliasing depends on atlas packing order, which depends on
       // mount history and async glyph timing: compile differs from ITSELF by
-      // up to ~24 per channel (atlasHistory). Anything wrong in layout or
+      // up to ~24 per channel. Anything wrong in layout or
       // marks moves a pixel by far more than that.
       if (parity.maxDifference > MAX_TEXT_AA_DIFFERENCE) {
         failures.push(
@@ -534,12 +516,12 @@ try {
     }
     if (parityDiscrete.maxDifference > MAX_TEXT_AA_DIFFERENCE) {
       failures.push(
-        `discrete: ${parityDiscrete.changed} pixels differ from compile, max ${parityDiscrete.maxDifference}`,
+        `discrete: ${parityDiscrete.changed} pixels differ from the compile golden, max ${parityDiscrete.maxDifference}`,
       );
     }
     if (parityScaled.maxDifference > MAX_TEXT_AA_DIFFERENCE) {
       failures.push(
-        `scaled: ${parityScaled.changed} pixels differ from compile, max ${parityScaled.maxDifference}`,
+        `scaled: ${parityScaled.changed} pixels differ from the compile golden, max ${parityScaled.maxDifference}`,
       );
     }
     const columnNames = Object.keys(shared.columnUploads);

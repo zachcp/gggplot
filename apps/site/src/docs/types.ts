@@ -1,24 +1,16 @@
-import type { DataFrame, GGSpec } from "@gggplot/core";
+import type { DataFrame } from "@gggplot/core";
 import type { LiveElement } from "@use-gpu/live";
 import type { ModelDocument } from "@gggplot/model-inspect";
 
-/** A 3D GGSpec preview on a docs page. */
+/** A 3D showcase on a docs page: a component-form plot that maps z. */
 export interface ThreeDShowcase {
   id: string;
   title: string;
   description: string;
-  /**
-   * The real shared builder expression that produced this showcase.
-   */
-  dslSource?: string;
-  spec?: GGSpec;
-  /** Real emitted use.gpu source for the lowered node. */
-  emitted?: string;
-  /** One-line summary of the lowered node (point count, ranges, camera). */
-  summary?: string;
-  /** The component-form showcase and its shown JSX (gggplot-vnh.10.1). */
-  chart?: () => LiveElement;
-  jsxSource?: string;
+  /** The showcase as a component-form <GGPlot> tree (gggplot-vnh.10.1). */
+  chart: () => LiveElement;
+  /** The same code as the reader sees it. */
+  jsxSource: string;
 }
 
 export type DocSection =
@@ -48,27 +40,22 @@ export interface DocExample {
   whatChanged: string;
   dataPreview?: Record<string, unknown[]>;
   computedDataPreview?: DataFrame;
-  /** DSL source shown to the reader - kept in sync with `spec` by hand. */
-  dslSource?: string;
   /**
-   * A component-form example: a Live component rendering a <GGPlot> tree
-   * (SitePlot), with its JSX shown to the reader in `jsxSource`, kept in
-   * sync by hand. Used instead of `spec`/`buildSpec`.
+   * The example: a Live component rendering a <GGPlot> tree (SitePlot), with
+   * its JSX shown to the reader in `jsxSource` (jsx_source_test.ts keeps the
+   * two in step).
    */
-  chart?: () => LiveElement;
-  jsxSource?: string;
+  chart: () => LiveElement;
+  jsxSource: string;
   /** Explanation shown beside the execution flow detected from the live tree. */
   executionDetail?: string;
   /** Optional route for an interactive or instrumented companion demonstration. */
   action?: { href: string; label: string };
-  /** Inline examples are immediately compilable. */
-  spec?: GGSpec;
   /**
-   * Real data is loaded only when its example is mounted. The builder receives
-   * the typed, column-oriented frame rather than row objects.
+   * A static dataset the chart loads through <GGData load> when mounted; the
+   * preview panel loads it the same way.
    */
   dataSource?: { id: "mpg" | "mtcars" | "iris" };
-  buildSpec?: (data: DataFrame) => GGSpec;
 }
 
 export interface DocNarrative {

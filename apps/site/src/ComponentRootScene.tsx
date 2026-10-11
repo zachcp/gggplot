@@ -1,9 +1,12 @@
 /** @jsxRuntime classic */
 /** @jsx Jsx.createElement */
-// One canvas that renders scatterLine either through compile() or through the
-// component-first <GGPlot> root (gggplot-2bj), so pixels and upload counters
-// compare like for like. Layers are reported with the generic GGLayerPart until
-// the named geom components land (gggplot-8hz).
+// One canvas for the component-root gate (gggplot-2bj, -bv0): the ScatterLine
+// plot and variants through the component-first <GGPlot> root, measured by
+// its work counters and the GPU instrumentation. Its pixels are compared with
+// reference frames the compile path drew before it was retired
+// (goldens/component-root, gggplot-tnxt). Layers are reported with
+// GGLayerPart, built from the named geoms' props, so a layer object keeps its
+// identity while its inputs do.
 import { createElement, type LiveElement, useOne } from "@use-gpu/live";
 import * as Jsx from "@gggplot/core/jsx";
 import { AutoCanvas, WebGPU } from "@use-gpu/webgpu";
@@ -16,19 +19,18 @@ import {
 } from "@use-gpu/workbench";
 import {
   type FontResources,
-  geomBar,
-  geomBlank,
-  geomLine,
-  geomPoint,
+  GeomBar,
+  GeomBlank,
+  GeomLine,
+  GeomPoint,
   GGData,
   GGPanel,
   GGPart,
   GGPlot,
-  ggplot,
-  type GGSpec,
   ingest,
   type Layer,
-  scaleColor,
+  layerFromProps,
+  ScaleColor,
   type SpecPart,
   touchColumn,
   typedArrayForColumn,
@@ -37,7 +39,7 @@ import {
 } from "@gggplot/core";
 import { installGpuInstrumentation } from "../../../packages/core/src/render/gpu_instrument.ts";
 import { GGLayerPart } from "../../../packages/core/src/components/parts.ts";
-import { withSiteChartTheme } from "./chart_theme.ts";
+import { SITE_CHART_THEME } from "./chart_theme.ts";
 import { scatterData } from "./docs/data/demo.ts";
 
 export interface ComponentRootState {
@@ -50,14 +52,14 @@ export interface ComponentRootState {
    * (gggplot-y43). "resident": a resident stat_count plot under <GGData>,
    * whose product must read the data tier's column, not upload its own.
    */
-  mode: "compile" | "component" | "shared" | "loaded" | "resident" | "bump";
+  mode: "component" | "shared" | "loaded" | "resident" | "bump";
   pointColor: string;
   /** Adds a third layer BEFORE the first two, the harder case for keyed reconciliation. */
   third: boolean;
   width: number;
   /**
    * A point layer with color and size mapped to continuous columns, its color
-   * domain declared (gggplot-fbq): the GPU-bound path against compile().
+   * domain declared (gggplot-fbq): the GPU-bound path.
    */
   scaled?: boolean;
   colorDomain?: [number, number];
@@ -89,29 +91,32 @@ export interface ComponentRootState {
 
 const data = ingest(scatterData);
 const mapping = { x: "wt", y: "mpg" };
-const theme = withSiteChartTheme(ggplot(data, mapping).build()).theme;
-const THIRD = { size: 3, color: "#f59e0b" };
-const LINE = { color: "#ef4444" };
-// Layer objects keep their identity while their inputs do, as the named geom
-// components will (the root memoizes each layer's stat and lowering on it).
-const THIRD_LAYER = geomPoint(THIRD).value as Layer;
-const LINE_LAYER = geomLine(LINE).value as Layer;
+const theme = SITE_CHART_THEME;
+// The root memoizes each layer's stat and lowering on the layer object, so
+// these keep their identity across steps.
+const THIRD_LAYER = layerFromProps(
+  GeomPoint.layerProps({ size: 3, color: "#f59e0b" }),
+);
+const LINE_LAYER = layerFromProps(GeomLine.layerProps({ color: "#ef4444" }));
 const pointLayers = new Map<string, Layer>();
 const pointLayer = (color: string) => {
   if (!pointLayers.has(color)) {
-    pointLayers.set(color, geomPoint({ size: 6, color }).value as Layer);
+    pointLayers.set(
+      color,
+      layerFromProps(GeomPoint.layerProps({ size: 6, color })),
+    );
   }
   return pointLayers.get(color)!;
 };
 
 const SCALED_MAPPING = { x: "wt", y: "mpg", color: "mpg", size: "wt" };
-const SCALED_LAYER = geomPoint().value as Layer;
+const SCALED_LAYER = layerFromProps(GeomPoint.layerProps({}));
 // Trains the same scales and draws nothing: the custom points draw instead.
-const BLANK_LAYER = geomBlank().value as Layer;
+const BLANK_LAYER = layerFromProps(GeomBlank.layerProps({}));
 const colorParts = new Map<string, SpecPart>();
 const colorPart = (domain: [number, number]) => {
   const key = domain.join(",");
-  if (!colorParts.has(key)) colorParts.set(key, scaleColor({ domain }));
+  if (!colorParts.has(key)) colorParts.set(key, ScaleColor.part({ domain }));
   return colorParts.get(key)!;
 };
 
@@ -125,7 +130,7 @@ const DISCRETE_DATA = {
   }).band,
 };
 const DISCRETE_MAPPING = { x: "wt", y: "mpg", color: "band" };
-const DISCRETE_LAYER = geomPoint({ size: 6 }).value as Layer;
+const DISCRETE_LAYER = layerFromProps(GeomPoint.layerProps({ size: 6 }));
 const DEFAULT_PALETTE = ["#2a78d6", "#1baf7a", "#eda100"];
 const DEFAULT_LEVELS = ["light", "mid", "heavy"];
 const discreteParts = new Map<string, SpecPart>();
@@ -134,7 +139,7 @@ const discretePart = (state: ComponentRootState) => {
   const domain = state.levels ?? DEFAULT_LEVELS;
   const key = JSON.stringify([range, domain]);
   if (!discreteParts.has(key)) {
-    discreteParts.set(key, scaleColor({ range, domain }));
+    discreteParts.set(key, ScaleColor.part({ range, domain }));
   }
   return discreteParts.get(key)!;
 };
@@ -165,28 +170,6 @@ function CustomPoints({ offset = 0 }: { offset?: number }): LiveElement {
   });
 }
 
-/** The same plot as a spec, for the compile path. */
-export function compiledSpec(state: ComponentRootState): GGSpec {
-  if (state.discrete) {
-    return withSiteChartTheme(
-      ggplot(DISCRETE_DATA, DISCRETE_MAPPING)
-        .add(geomPoint({ size: 6 }), discretePart(state))
-        .build(),
-    );
-  }
-  if (state.scaled) {
-    return withSiteChartTheme(
-      ggplot(data, SCALED_MAPPING)
-        .add(geomPoint(), colorPart(state.colorDomain ?? [10, 30]))
-        .build(),
-    );
-  }
-  const plot = ggplot(data, mapping);
-  if (state.third) plot.add(geomPoint(THIRD));
-  plot.add(geomPoint({ size: 6, color: state.pointColor }), geomLine(LINE));
-  return withSiteChartTheme(plot.build());
-}
-
 /** Shader modules and render pipelines built (vnh.16's rebuild counters). */
 export const builds = { shaderModules: 0, pipelines: 0 };
 
@@ -199,7 +182,7 @@ const RESIDENT_DATA = ingest({
     (_, i) => ["alpha", "beta", "gamma", "delta"][i % 4],
   ),
 });
-const RESIDENT_LAYER = geomBar({ fill: "#2563eb" }).value as Layer;
+const RESIDENT_LAYER = layerFromProps(GeomBar.layerProps({ fill: "#2563eb" }));
 // Its own column objects, so touching one never disturbs the other modes.
 const BUMP_DATA = ingest(
   Object.fromEntries(
@@ -209,11 +192,11 @@ const BUMP_DATA = ingest(
     ]),
   ),
 );
-const BUMP_LAYER = geomPoint({ size: 6 }).value as Layer;
+const BUMP_LAYER = layerFromProps(GeomPoint.layerProps({ size: 6 }));
 const fixedSizeLayers = new Map<number, Layer>();
 const fixedSizeLayer = (size: number) => {
   if (!fixedSizeLayers.has(size)) {
-    fixedSizeLayers.set(size, geomPoint({ size }).value as Layer);
+    fixedSizeLayers.set(size, layerFromProps(GeomPoint.layerProps({ size })));
   }
   return fixedSizeLayers.get(size)!;
 };
@@ -345,12 +328,6 @@ function Plot(
           : null}
       </GGPlot>
     );
-  }
-  if (state.mode === "compile") {
-    return createElement(GGPlot, {
-      spec: compiledSpec(state),
-      fontResources: fonts,
-    });
   }
   return (
     <GGPlot data={data} mapping={mapping} theme={theme} fontResources={fonts}>

@@ -16,7 +16,10 @@ export function ChartCanvas(
     label,
     forceFailure = false,
   }: {
-    /** A spec to compile, or a component-form `chart` to render. */
+    /**
+     * A component-form `chart`, or a programmatically built spec (rendered
+     * through the component root by Scene; no compile()).
+     */
     spec?: GGSpec;
     chart?: () => LiveElement;
     label: string;
