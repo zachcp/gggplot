@@ -6,21 +6,9 @@
 // and interprets the RenderTree (render/render_tree.tsx) until vnh.18 removes
 // that form.
 
-import {
-  createElement,
-  type LiveElement,
-  useAwait,
-  useContext,
-  useMemo,
-  useOne,
-} from "@use-gpu/live";
-import {
-  FontLoader,
-  LayoutContext,
-  useDeviceContext,
-  useFontContext,
-  useNoDeviceContext,
-} from "@use-gpu/workbench";
+import * as UseGpuLive from "@use-gpu/live";
+import type { LiveElement } from "@use-gpu/live";
+import * as UseGpuWorkbench from "@use-gpu/workbench";
 import type { GGSpec } from "../ir/types.ts";
 import { compile, createPackCache } from "../compile/mod.ts";
 import {
@@ -41,6 +29,18 @@ import {
   GGPlotRoot,
   type GGPlotRootProps,
 } from "../components/gg_plot_root.ts";
+import { esm } from "../runtime/usegpu_compat.ts";
+const { createElement, useAwait, useContext, useMemo, useOne } = esm(
+  UseGpuLive,
+  "useMemo",
+);
+const {
+  FontLoader,
+  LayoutContext,
+  useDeviceContext,
+  useFontContext,
+  useNoDeviceContext,
+} = esm(UseGpuWorkbench, "LayoutContext");
 
 export * from "./render_tree.tsx";
 /** The legacy form: compile a GGSpec (removed by gggplot-vnh.18). */

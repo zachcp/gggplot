@@ -1,9 +1,9 @@
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { LiveCanvas } from "@use-gpu/react";
-import * as Live from "@use-gpu/live";
-import { Canvas, WebGPU } from "@use-gpu/webgpu";
-import { FlatCamera, Pass, Screenshot } from "@use-gpu/workbench";
+import * as UseGpuReact from "@use-gpu/react";
+import * as UseGpuLive from "@use-gpu/live";
+import * as UseGpuWebgpu from "@use-gpu/webgpu";
+import * as UseGpuWorkbench from "@use-gpu/workbench";
 import type { GGSpec } from "../ir/types.ts";
 import { GGPlot } from "../render/GGPlot.tsx";
 import type { FontResources } from "../render/font_resources.ts";
@@ -15,6 +15,11 @@ import {
   resolveExportSize,
   validateExportDimensions,
 } from "./utils.ts";
+import { esm } from "../runtime/usegpu_compat.ts";
+const { FlatCamera, Pass, Screenshot } = esm(UseGpuWorkbench, "LayoutContext");
+const Live = esm(UseGpuLive, "useMemo");
+const { LiveCanvas } = esm(UseGpuReact, "LiveCanvas");
+const { Canvas, WebGPU } = esm(UseGpuWebgpu, "WebGPU");
 
 export interface GgSaveOptions {
   /** Width in `units`; pixels when units is omitted. */
@@ -49,7 +54,7 @@ class ExportErrorBoundary extends React.Component<BoundaryProps> {
 
 function liveExportScene(
   canvas: HTMLCanvasElement,
-  renderPlot: () => Live.LiveElement,
+  renderPlot: () => UseGpuLive.LiveElement,
   options: GgSaveOptions,
   onBlob: (blob: Blob) => void,
   onError: (error: Error) => void,
@@ -95,7 +100,7 @@ function liveExportScene(
 const RETRY_INTERVAL_MS = 1_500;
 
 function ExportCanvas(props: {
-  renderPlot: () => Live.LiveElement;
+  renderPlot: () => UseGpuLive.LiveElement;
   options: GgSaveOptions;
   onBlob(blob: Blob): void;
   onError(error: Error): void;
@@ -167,7 +172,7 @@ function ExportCanvas(props: {
 
 /** Render a Live plot subtree on a dedicated WebGPU target and return a PNG. */
 export async function saveLivePng(
-  renderPlot: () => Live.LiveElement,
+  renderPlot: () => UseGpuLive.LiveElement,
   options: GgSaveOptions,
   scene: { ownsPasses?: boolean } = {},
 ): Promise<Blob> {

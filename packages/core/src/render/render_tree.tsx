@@ -6,39 +6,11 @@
 // render/GGPlot.tsx so the component-first root (components/gg_plot_root.ts)
 // can render guides with it while GGPlot imports that root, with no cycle.
 
-import {
-  createElement,
-  Fragment,
-  type LiveElement,
-  makeContext,
-  provide,
-  useContext,
-  useMemo,
-  useOne,
-} from "@use-gpu/live";
-import {
-  Axis,
-  Cartesian,
-  Embedded,
-  Grid,
-  Label,
-  Line,
-  Plot,
-  Point,
-  Polar,
-  Polygon,
-  ScissorBox,
-  Tick,
-  Transform,
-} from "@use-gpu/plot";
-import {
-  FlatCamera,
-  LayoutContext,
-  OrbitCamera,
-  Pass,
-} from "@use-gpu/workbench";
-import { OrbitControls } from "@use-gpu/interact";
-import { RangeContext } from "@use-gpu/plot/mjs/providers/range-provider.mjs";
+import * as UseGpuLive from "@use-gpu/live";
+import type { LiveElement } from "@use-gpu/live";
+import * as UseGpuPlot from "@use-gpu/plot";
+import * as UseGpuWorkbench from "@use-gpu/workbench";
+import * as UseGpuInteract from "@use-gpu/interact";
 import { ProductMark } from "../runtime/product_mark.tsx";
 import type { ComponentName, RenderNode } from "../compile/rendertree.ts";
 import type { FlatTensor } from "../compile/rendertree.ts";
@@ -53,6 +25,37 @@ import {
   registerKnownMarkArray,
 } from "./gpu_instrument.ts";
 import { facetCellLayouts } from "../compile/facet_layout.ts";
+import { esm } from "../runtime/usegpu_compat.ts";
+const {
+  createElement,
+  Fragment,
+  makeContext,
+  provide,
+  useContext,
+  useMemo,
+  useOne,
+} = esm(UseGpuLive, "useMemo");
+const {
+  Axis,
+  Cartesian,
+  Embedded,
+  Grid,
+  Label,
+  Line,
+  Plot,
+  Point,
+  Polar,
+  Polygon,
+  RangeContext,
+  ScissorBox,
+  Tick,
+  Transform,
+} = esm(UseGpuPlot, "Plot");
+const { FlatCamera, LayoutContext, OrbitCamera, Pass } = esm(
+  UseGpuWorkbench,
+  "LayoutContext",
+);
+const { OrbitControls } = esm(UseGpuInteract, "OrbitControls");
 
 export interface FacetGridProps {
   nrow: number;

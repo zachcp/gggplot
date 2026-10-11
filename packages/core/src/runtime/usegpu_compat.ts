@@ -141,6 +141,16 @@ const interop = <T>(namespace: unknown, probe: string): T => {
   return (ns?.default && ns.default[probe] ? ns.default : ns) as T;
 };
 
+/**
+ * A Use.GPU package namespace with its own types, its values taken from
+ * whichever build the toolchain loaded (see interop). Destructure from it in
+ * place of named imports: Deno cannot bind a named import to the CommonJS
+ * build, so one named value import makes the whole module graph unloadable
+ * under Deno (the CLI, and tests that import components).
+ */
+export const esm = <T>(namespace: T, probe: keyof T & string): T =>
+  interop<T>(namespace, probe);
+
 const live = interop<{
   createElement: CreateElement;
   Fragment: unknown;

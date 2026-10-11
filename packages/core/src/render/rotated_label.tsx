@@ -4,14 +4,18 @@
 // no angle trait, so this keeps its glyph/SDF pipeline and replaces only the
 // glyph attachment shader.
 
-import * as Live from "@use-gpu/live";
-import * as Workbench from "@use-gpu/workbench";
+import * as UseGpuLive from "@use-gpu/live";
+import * as UseGpuWorkbench from "@use-gpu/workbench";
 import { wgsl } from "@use-gpu/shader/wgsl";
 import {
   getViewResolution,
   getWorldScale,
   worldToClip,
 } from "@use-gpu/wgsl/use/view.wgsl";
+import { esm } from "../runtime/usegpu_compat.ts";
+
+const Live = esm(UseGpuLive, "useMemo");
+const Workbench = esm(UseGpuWorkbench, "LayoutContext");
 
 const attachRotatedLabelTo = wgsl`
   @link fn getPosition(i: u32) -> vec4<f32>;
