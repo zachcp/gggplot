@@ -151,7 +151,8 @@ export interface FlatTensor {
   dims: 1 | 2 | 4;
   length: number; // element count = array.length / dims
   size: number[]; // [length]
-  version: number; // 0 for fresh packs; identity is the cache key
+  // No version field: array identity is what decides an upload, and a
+  // changed column changes the array (gggplot-67c).
 }
 
 /**

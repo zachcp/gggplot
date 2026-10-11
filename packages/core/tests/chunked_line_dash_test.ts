@@ -76,7 +76,6 @@ function tensor(values: number[]): FlatTensor {
     dims: 2,
     length: values.length / 2,
     size: [values.length / 2],
-    version: 0,
   };
 }
 

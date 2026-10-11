@@ -46,7 +46,6 @@ export function packScalar(values: number[], mask: Uint8Array): FlatTensor {
     dims: 1,
     length: kept,
     size: [kept],
-    version: 0,
   };
 }
 
@@ -79,7 +78,6 @@ export function packColorsRGBA(
     dims: 4,
     length: kept,
     size: [kept],
-    version: 0,
   };
 }
 
@@ -151,7 +149,6 @@ export function packPoints3d(input: PackPoints3dInput): PackedPoints3d {
     dims: 4,
     length: kept,
     size: [kept],
-    version: 0,
   };
   return {
     mask,
@@ -194,7 +191,6 @@ export function packMarkRows(input: PackMarkRowsInput): PackedMarkRows {
     dims: 2,
     length: kept,
     size: [kept],
-    version: 0,
   };
 
   return {
@@ -232,7 +228,6 @@ export function expandByOwners(
     dims,
     length: owners.length,
     size: [owners.length],
-    version: 0,
   };
 }
 
@@ -267,7 +262,6 @@ export function concatPacked(geoms: PackedGeometry[]): PackedGeometry {
       dims: 2,
       length: 0,
       size: [0],
-      version: 0,
     };
     return { positions: empty, topology: { kind: "points" } };
   }
@@ -303,7 +297,6 @@ export function concatPacked(geoms: PackedGeometry[]): PackedGeometry {
       dims,
       length: totalVerts,
       size: [totalVerts],
-      version: 0,
     },
     topology: {
       kind,
@@ -337,7 +330,6 @@ export function concatFlatTensors(tensors: FlatTensor[]): FlatTensor {
       dims,
       length: 0,
       size: [0],
-      version: 0,
     };
   }
   const { dims, format } = nonEmpty[0];
@@ -354,7 +346,6 @@ export function concatFlatTensors(tensors: FlatTensor[]): FlatTensor {
     dims,
     length: totalLength,
     size: [totalLength],
-    version: 0,
   };
 }
 
@@ -406,7 +397,6 @@ export function packFaceLoops(loops: FaceLoop[]): PackedFaceGeometry {
         dims: 2,
         length: loop.positions.length,
         size: [loop.positions.length],
-        version: 0,
       },
       topology: { kind: "loops", loops: true },
       // LOCAL owners (all-0): each piece is exactly ONE row (one loop) —
@@ -465,7 +455,6 @@ export function packUniformChunks(
         dims: 2,
         length: 0,
         size: [0],
-        version: 0,
       },
       topology: { kind: "polyline" },
     };
@@ -487,7 +476,6 @@ export function packUniformChunks(
       dims: 2,
       length,
       size: [chunkLen, chunkCount],
-      version: 0,
     },
     topology: {
       kind: "polyline",
@@ -516,7 +504,6 @@ export function packUniformChunks3d(
         dims: 4,
         length: 0,
         size: [0],
-        version: 0,
       },
       topology: { kind: "polyline" },
     };
@@ -545,7 +532,6 @@ export function packUniformChunks3d(
       // ChunkedLine instead, which reads topology.chunks and translates our
       // internal format string into the WGSL one use.gpu expects.
       size: [length],
-      version: 0,
     },
     topology: {
       kind: "polyline",
@@ -585,7 +571,6 @@ export function packFaceLoops3d(loops: FaceLoop3D[]): PackedFaceGeometry {
         dims: 4,
         length: loop.positions.length,
         size: [loop.positions.length],
-        version: 0,
       },
       topology: { kind: "loops", loops: true } as MarkTopology,
       // Local all-0 owners, rebased by concatPacked exactly as the 2D packer

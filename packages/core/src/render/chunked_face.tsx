@@ -72,7 +72,8 @@ function useOptionalTensorSource(tensor: FlatTensor | undefined): unknown {
         array: tensor.array,
         format: tensor.format,
         size: tensor.size,
-        version: tensor.version,
+        // Array identity decides the upload; a changed tensor is a new array.
+        version: 0,
       })
     );
   }

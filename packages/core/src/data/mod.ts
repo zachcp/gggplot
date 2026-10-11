@@ -13,6 +13,8 @@ export type MissingValue = null | undefined;
 export interface NumericColumn {
   type: "numeric";
   values: Array<number | null>;
+  /** Content version; see {@link touchColumn}. Absent means 0. */
+  version?: number;
 }
 
 export interface FactorColumn {
@@ -20,6 +22,8 @@ export interface FactorColumn {
   values: Array<string | null>;
   levels: string[];
   declaredLevels?: string[];
+  /** Content version; see {@link touchColumn}. Absent means 0. */
+  version?: number;
 }
 
 export type Column = NumericColumn | FactorColumn;
@@ -194,18 +198,12 @@ function copyFactorColumn(
  * gggplot-tzc.5's pack cache depends on to recognize a DSL-rebuilt spec as
  * depending on the same underlying data without any deep-equality check.
  *
- * Because of this, mutating spec.data (or any Column object reached through
- * it) IN PLACE after build()/ingest() is UNSUPPORTED: nothing revalidates a
- * pack cache against an in-place mutation, since identity — not a version
- * counter on the array itself — is the coherence signal (see FlatTensor's
- * `version` field, which stays 0 always; compile/pack_cache.ts's revisions
- * WeakMap is the only supported invalidation path). A host that must mutate
- * ingested data in place should call `packCache.invalidate(column)` itself
- * (compile/pack_cache.ts) as the explicit escape hatch — see that module's
- * doc comment for the invalidation contract. The same in-place-mutation
- * contract governs `typedArrayForColumn`: its typed view is computed once and
- * cached on the Column's identity, so mutating a column's `values` after that
- * view is first taken is likewise unsupported.
+ * Column identity plus its `version` is the coherence signal, and the version
+ * is the ONE mechanism for "this column changed" (gggplot-67c, ADR-007
+ * decision 8). A host that mutates a Column's `values` in place calls
+ * {@link touchColumn} afterwards: the typed view, the pack cache and the
+ * mounted GPU source all key on the version, so exactly that column is
+ * re-lowered and re-uploaded.
  */
 export function ingest(
   data: InputData,
@@ -306,7 +304,26 @@ export function numericBuffer(column: NumericColumn): Float32Array {
   return out;
 }
 
-const typedArrays = new WeakMap<Column, Float32Array | Uint32Array>();
+const typedArrays = new WeakMap<
+  Column,
+  { version: number; array: Float32Array | Uint32Array }
+>();
+
+/** A column's content version: 0 until {@link touchColumn} bumps it. */
+export function columnVersion(column: Column): number {
+  return column.version ?? 0;
+}
+
+/**
+ * Declare that `column.values` changed in place. Bumps the column's version,
+ * which is what every cache keys on: the typed view below, the pack cache, and
+ * the GPU source GPUDataProvider mounts, which re-uploads exactly this column.
+ * Returns the new version.
+ */
+export function touchColumn(column: Column): number {
+  column.version = columnVersion(column) + 1;
+  return column.version;
+}
 
 /**
  * Canonical typed (GPU-lowering) representation of a column, cached on the
@@ -314,20 +331,21 @@ const typedArrays = new WeakMap<Column, Float32Array | Uint32Array>();
  * `numericBuffer` builds); factor → Uint32Array level ids (0xffffffff for
  * null, exactly `factorIds`). Computed on first access and retained thereafter,
  * so a column reused across compiles/uploads yields the SAME typed array
- * (identity is the coherence signal — see ingest()'s doc comment). Because the
- * view is cached on identity, mutating a column's boxed `values` IN PLACE after
- * this accessor has run is unsupported. `numericBuffer`/`factorIds` remain the
+ * (identity plus version is the coherence signal — see ingest()'s doc
+ * comment). After an in-place mutation and {@link touchColumn}, the next call
+ * builds a fresh array. `numericBuffer`/`factorIds` remain the
  * uncached builders this delegates to. Phase A of the GPUDataFrame plan; Phase
  * B (typed `values` storage) is future work.
  */
 export function typedArrayForColumn(
   column: Column,
 ): Float32Array | Uint32Array {
+  const version = columnVersion(column);
   const cached = typedArrays.get(column);
-  if (cached) return cached;
+  if (cached && cached.version === version) return cached.array;
   const array = column.type === "numeric"
     ? numericBuffer(column)
     : factorIds(column);
-  typedArrays.set(column, array);
+  typedArrays.set(column, { version, array });
   return array;
 }

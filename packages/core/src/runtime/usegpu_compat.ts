@@ -95,10 +95,16 @@ export type UseRawTensorSource = (data: {
   version: number;
 }) => unknown;
 export type UseNoRawTensorSource = () => void;
-/** Uploads `array` once per identity and returns its storage source. */
+/**
+ * Uploads `array` and returns its storage source. Re-uploads when the array's
+ * identity or `version` changes.
+ */
 export type UseRawSource = (
   array: Float32Array | Uint32Array,
   format: string,
+  options?: Record<string, unknown>,
+  size?: number[],
+  version?: number,
 ) => GPUStorageSource;
 export type UseNoRawSource = () => void;
 
@@ -170,6 +176,7 @@ const workbench = interop<{
   useNoRawSource: UseNoRawSource;
   QueueReconciler: { signal: () => LiveElement };
   LoopContext: unknown;
+  DeviceContext: unknown;
   useShader: UseShader;
   useShaderRef: UseShaderRef;
   useMaterialContext: UseMaterialContext;
@@ -259,6 +266,8 @@ export const QueueReconciler = workbench.QueueReconciler;
  * default (no SyncLoop above) is a no-op.
  */
 export const LoopContext = workbench.LoopContext;
+/** The mounted GPUDevice; provided by <WebGPU>, or directly in headless tests. */
+export const DeviceContext = workbench.DeviceContext;
 export const useShader = workbench.useShader;
 export const useShaderRef = workbench.useShaderRef;
 export const useMaterialContext = workbench.useMaterialContext;

@@ -1,7 +1,11 @@
 // The only Use.GPU-specific module in the runtime layer.
 
 import type { LiveElement } from "@use-gpu/live";
-import type { Column, TypedDataFrame } from "../data/mod.ts";
+import {
+  type Column,
+  columnVersion,
+  type TypedDataFrame,
+} from "../data/mod.ts";
 import type { FieldSpec } from "../plan/mod.ts";
 import { rawArrayForColumn } from "./raw.ts";
 import {
@@ -39,6 +43,8 @@ export type ColumnMount =
     kind: "upload";
     array: Float32Array | Uint32Array;
     format: "f32" | "u32";
+    /** The column's content version (gggplot-67c). */
+    version: number;
   };
 
 /**
@@ -65,6 +71,7 @@ export function planColumnMounts(
       kind: "upload",
       array: rawArrayForColumn(column as Column),
       format,
+      version: columnVersion(column as Column),
     };
   });
 }
@@ -105,9 +112,16 @@ const MountColumns = (
       // A zero-byte buffer cannot be bound ("binding size is zero"). <RawData>
       // always allocated at least one element, so an empty column still does,
       // and reports its true length of 0.
+      // The column's version is the one change signal (gggplot-67c). A
+      // touched column also yields a new typed array, so either alone would
+      // re-upload; passing the version states the contract rather than
+      // relying on that.
       const source = useRawSource(
         empty ? EMPTY[mount.format] : mount.array,
         mount.format,
+        undefined,
+        undefined,
+        mount.version,
       );
       sources[mount.name] = empty
         ? { ...source, length: 0, size: [0] }

@@ -117,8 +117,7 @@
                     "length": 2,
                     "size": [
                       2
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "points"
@@ -146,8 +145,7 @@
                     "size": [
                       2,
                       1
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -184,8 +182,7 @@
                     "length": 4,
                     "size": [
                       4
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "loops",
@@ -222,8 +219,7 @@
                     "length": 4,
                     "size": [
                       4
-                    ],
-                    "version": 0
+                    ]
                   },
                   "concave": false
                 },
@@ -309,8 +305,7 @@
                     "size": [
                       33,
                       1
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -344,8 +339,7 @@
                     "size": [
                       2,
                       1
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -391,8 +385,7 @@
                     "size": [
                       2,
                       4
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -641,8 +634,7 @@
                     "length": 2,
                     "size": [
                       2
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "points"
@@ -670,8 +662,7 @@
                     "size": [
                       2,
                       1
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -708,8 +699,7 @@
                     "length": 4,
                     "size": [
                       4
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "loops",
@@ -746,8 +736,7 @@
                     "length": 4,
                     "size": [
                       4
-                    ],
-                    "version": 0
+                    ]
                   },
                   "concave": false
                 },
@@ -833,8 +822,7 @@
                     "size": [
                       33,
                       1
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -868,8 +856,7 @@
                     "size": [
                       2,
                       1
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -915,8 +902,7 @@
                     "size": [
                       2,
                       4
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",

@@ -119,8 +119,7 @@
                     "length": 3,
                     "size": [
                       3
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "points"
@@ -247,8 +246,7 @@
                     "length": 48,
                     "size": [
                       48
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "loops",
@@ -463,8 +461,7 @@
                     "length": 48,
                     "size": [
                       48
-                    ],
-                    "version": 0
+                    ]
                   },
                   "concave": false,
                   "zBias": 0,
@@ -588,8 +585,7 @@
                     "size": [
                       17,
                       3
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -627,8 +623,7 @@
                     "length": 3,
                     "size": [
                       3
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "points"
@@ -898,8 +893,7 @@
                     "length": 3,
                     "size": [
                       3
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "points"
@@ -1026,8 +1020,7 @@
                     "length": 48,
                     "size": [
                       48
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "loops",
@@ -1242,8 +1235,7 @@
                     "length": 48,
                     "size": [
                       48
-                    ],
-                    "version": 0
+                    ]
                   },
                   "concave": false,
                   "zBias": 0,
@@ -1367,8 +1359,7 @@
                     "size": [
                       17,
                       3
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -1406,8 +1397,7 @@
                     "length": 3,
                     "size": [
                       3
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "points"

@@ -26,7 +26,8 @@ Deno.test("packMarkRows positions are interleaved [x0,y0,x1,y1,...], not planar"
   assertEquals(packed.positions.dims, 2);
   assertEquals(packed.positions.length, 2);
   assertEquals(packed.positions.size, [2]);
-  assertEquals(packed.positions.version, 0);
+  // No version field (gggplot-67c): array identity decides uploads.
+  assertEquals("version" in packed.positions, false);
 });
 
 // ---------------------------------------------------------------------------
@@ -76,7 +77,6 @@ Deno.test("expandByOwners expands a per-row bar color to its 4 vertices, keeping
     dims: 4,
     length: 2,
     size: [2],
-    version: 0,
   };
   const owners = Uint32Array.from([0, 0, 0, 0, 1, 1, 1, 1]);
 
@@ -108,7 +108,6 @@ Deno.test("expandByOwners handles a scalar (dims=1) row tensor", () => {
     dims: 1,
     length: 2,
     size: [2],
-    version: 0,
   };
   const owners = Uint32Array.from([1, 1, 0, 0]);
   const expanded = expandByOwners(rowSizes, owners);
@@ -139,7 +138,6 @@ Deno.test("MarkTopology/PackedGeometry separation: owners lives only on PackedGe
       dims: 2,
       length: 0,
       size: [0],
-      version: 0,
     },
     topology: { kind: "points" },
     owners: new Uint32Array([0]),
@@ -201,7 +199,6 @@ function point(x: number, y: number): PackedGeometry {
       dims: 2,
       length: 1,
       size: [1],
-      version: 0,
     },
     topology: { kind: "points" },
   };
@@ -215,7 +212,6 @@ function emptyGroup(): PackedGeometry {
       dims: 2,
       length: 0,
       size: [0],
-      version: 0,
     },
     topology: { kind: "points" },
   };
@@ -229,7 +225,6 @@ Deno.test("concatPacked concatenates positions and emits per-group chunk lengths
       dims: 2,
       length: 2,
       size: [2],
-      version: 0,
     },
     topology: { kind: "points" },
   };
@@ -240,7 +235,6 @@ Deno.test("concatPacked concatenates positions and emits per-group chunk lengths
       dims: 2,
       length: 3,
       size: [3],
-      version: 0,
     },
     topology: { kind: "points" },
   };
@@ -272,7 +266,6 @@ Deno.test("concatPacked re-bases owners by each preceding group's own row span",
       dims: 2,
       length: 4,
       size: [4],
-      version: 0,
     },
     topology: { kind: "loops", loops: true },
     owners: Uint32Array.from([0, 0, 1, 1]), // 2 source rows in group A
@@ -284,7 +277,6 @@ Deno.test("concatPacked re-bases owners by each preceding group's own row span",
       dims: 2,
       length: 4,
       size: [4],
-      version: 0,
     },
     topology: { kind: "loops", loops: true },
     owners: Uint32Array.from([0, 0, 1, 1]), // group B's OWN row-local owners
