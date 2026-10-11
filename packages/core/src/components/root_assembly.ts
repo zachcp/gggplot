@@ -250,7 +250,7 @@ export type LayerParts = readonly Extract<PlotPart, { kind: "layer" }>[];
  * `caches` is still valid: a layer's prepared rows while its layer, panel rows
  * and plot-level spec are unchanged, its marks while everything lowering
  * reads is. Pure but for the caches, so the component path can be exercised
- * without a Live tree.
+ * without a Live tree. Null while any layer is pending.
  */
 export function assembleRoot(
   base: GGSpec,
@@ -258,7 +258,11 @@ export function assembleRoot(
   panels: ReturnType<typeof buildFacetPanels>,
   layout: { width: number; height: number; measureText: TextMeasurer },
   caches: RootCaches,
-): RootAssembly {
+): RootAssembly | null {
+  // vs7 trap 2: a layer whose domain contribution is still in flight would
+  // train as empty, so nothing is trained or assembled until every layer has
+  // reported. The previous assembly stays on screen meanwhile.
+  if (layers.some((layer) => layer.pending)) return null;
   componentProbe.assembleCalls++;
   const spec: GGSpec = { ...base, layers: layers.map((l) => l.layer) };
   const faceted = spec.facet.kind !== "none";

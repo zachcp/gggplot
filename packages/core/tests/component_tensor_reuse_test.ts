@@ -4,7 +4,7 @@
 // nothing re-uploads.
 import { assert, assertEquals, assertNotStrictEquals } from "@std/assert";
 import {
-  assembleRoot,
+  assembleRoot as assembleRootOrNull,
   createRootCaches,
   plotSpec,
   type RootCaches,
@@ -22,6 +22,11 @@ import type { SpecPart } from "../src/dsl/base.ts";
 import { ingest } from "../src/data/mod.ts";
 import type { Layer } from "../src/ir/types.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
+
+/** assembleRoot for plots with no pending layer: never null. */
+const assembleRoot = (
+  ...args: Parameters<typeof assembleRootOrNull>
+) => assembleRootOrNull(...args)!;
 
 const data = ingest({
   x: [0, 1, 2, 3, 4, 5],

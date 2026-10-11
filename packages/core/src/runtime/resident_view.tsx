@@ -10,6 +10,7 @@ import type { ResidentHistogramOptions } from "../compile/resident.ts";
 import { ResidentHistogramBars } from "./resident_bar.tsx";
 import type { ResidentHistogramProduct } from "./resident_live.tsx";
 import { useHoistedProduct } from "./resident_products.ts";
+import { stamped, viewGeneration } from "./generation_gate.ts";
 import {
   Axis,
   Cartesian,
@@ -49,10 +50,17 @@ interface AwaitSummaryProps extends Omit<ResidentHistogramViewProps, "data"> {
 const AwaitSummaryView = (
   { product, xRange, color, opacity, axes, theme }: AwaitSummaryProps,
 ): LiveElement => {
-  const [summary, error] = useAwait(() => product.readSummary(), [
-    product.summary.version,
-  ]);
+  // Keyed on the DATA version and stamped with it: a stale summary sizes the
+  // guides but never the live marks (gggplot-wkc).
+  const [awaited, error] = useAwait(
+    stamped(product.version, () => product.readSummary()),
+    [product.version],
+  );
   if (error) throw error;
+  const { domain: summary, drawMarks } = viewGeneration(
+    awaited,
+    product.version,
+  );
   if (!summary) return null as never;
   const yRange: [number, number] = [0, Math.max(1, summary.stackedMaximum)];
   const guides = [
@@ -74,12 +82,14 @@ const AwaitSummaryView = (
       zBias: 0,
       ...(theme.axisColor ? { color: theme.axisColor } : {}),
     }),
-    createElement(ResidentHistogramBars, {
-      product,
-      color,
-      opacity,
-      colors: product.barColors,
-    }),
+    drawMarks
+      ? createElement(ResidentHistogramBars, {
+        product,
+        color,
+        opacity,
+        colors: product.barColors,
+      })
+      : null,
   ].filter(Boolean);
   return createElement(Cartesian, { range: [xRange, yRange], axes }, ...guides);
 };

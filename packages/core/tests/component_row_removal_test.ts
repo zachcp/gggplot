@@ -4,7 +4,7 @@
 // reporting them when its prepared layers come from cache.
 import { assertEquals } from "@std/assert";
 import {
-  assembleRoot,
+  assembleRoot as assembleRootOrNull,
   createRootCaches,
   plotSpec,
   type RootCaches,
@@ -30,6 +30,11 @@ import type { SpecPart } from "../src/dsl/base.ts";
 import { ingest, type InputData } from "../src/data/mod.ts";
 import type { Aes, GGSpec, Layer } from "../src/ir/types.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
+
+/** assembleRoot for plots with no pending layer: never null. */
+const assembleRoot = (
+  ...args: Parameters<typeof assembleRootOrNull>
+) => assembleRootOrNull(...args)!;
 
 const LAYOUT = {
   width: 640,
