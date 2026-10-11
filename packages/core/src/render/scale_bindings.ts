@@ -14,7 +14,7 @@
 // may fold `v != v`.
 import { wgsl } from "@use-gpu/shader/wgsl";
 import { parseColorRGBA } from "../color/mod.ts";
-import { NA_COLOR } from "../scale/mapping.ts";
+import { NA_COLOR, scaleColorValue } from "../scale/mapping.ts";
 import { SEQUENTIAL_RAMP } from "../scale/palette.ts";
 import type { TrainedScale } from "../scale/types.ts";
 
@@ -46,6 +46,27 @@ ${IS_MISSING}
   let rgb = mix(getPalette(low).rgb, getPalette(min(low + 1u, last)).rgb, fract(x));
   // The CPU mapping quantizes interpolated RGB to an 8-bit hex color.
   return vec4<f32>(floor(rgb * 255.0 + 0.5) / 255.0, alpha);
+}`;
+
+/**
+ * Discrete color (gggplot-81r): a factor's u32 level code through a small
+ * per-layer lookup of RGBA, one entry per DATA level, built on the CPU by
+ * discreteColorLookup. A level-order or palette change rewrites only the
+ * lookup, never the mark's codes. A missing value's code (0xffffffff) or any
+ * code past the lookup maps to the NA color, as on the CPU.
+ */
+export const DISCRETE_COLOR_BINDING = wgsl`
+@link fn getCode(i: u32) -> u32;
+@link fn getOwner(i: u32) -> u32;
+@link fn getLookup(i: u32) -> vec4<f32>;
+@link fn getLookupLength() -> u32;
+@link fn getAlpha(i: u32) -> f32;
+@link fn getNaColor() -> vec4<f32>;
+@export fn getColor(i: u32) -> vec4<f32> {
+  let code = getCode(getOwner(i));
+  let alpha = clamp(getAlpha(i), 0.0, 1.0);
+  if (code >= getLookupLength()) { return vec4<f32>(getNaColor().rgb, alpha); }
+  return vec4<f32>(getLookup(code).rgb, alpha);
 }`;
 
 /** Continuous size: area semantics, radius proportional to sqrt(t). */
@@ -125,6 +146,30 @@ export function isGpuBindable(scale: TrainedScale | undefined): boolean {
   // transforms are not bindable yet.
   return !!scale && (scale.kind === "continuous" || scale.kind === "color") &&
     typeof scale.domain[0] === "number" && typeof scale.domain[1] === "number";
+}
+
+/** Whether a trained color scale maps factor levels, bindable as a lookup. */
+export function isDiscreteGpuBindable(
+  scale: TrainedScale | undefined,
+): boolean {
+  return !!scale && scale.kind === "color" && Array.isArray(scale.domain) &&
+    (scale.domain.length === 0 || typeof scale.domain[0] === "string");
+}
+
+/**
+ * RGBA per data level code, through scale/mapping.ts's own scaleColorValue,
+ * so palette folding ("Other"), explicit ranges and levels outside the
+ * scale's domain (NA) match the CPU mapping exactly.
+ */
+export function discreteColorLookup(
+  scale: TrainedScale | undefined,
+  levels: readonly string[],
+): Float32Array {
+  // At least one entry: an empty storage buffer cannot be bound.
+  if (levels.length === 0) return new Float32Array(4);
+  return Float32Array.from(
+    levels.flatMap((level) => parseColorRGBA(scaleColorValue(scale, level))),
+  );
 }
 
 function rampOf(scale: TrainedScale | undefined): string[] {

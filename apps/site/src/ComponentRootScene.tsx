@@ -17,6 +17,7 @@ import {
   GGPlot,
   ggplot,
   type GGSpec,
+  ingest,
   type Layer,
   scaleColor,
   type SpecPart,
@@ -43,6 +44,14 @@ export interface ComponentRootState {
    */
   scaled?: boolean;
   colorDomain?: [number, number];
+  /**
+   * A point layer colored by a factor (gggplot-81r): its level codes bind
+   * through a lookup, so a palette swap or level reorder writes the lookup
+   * and no mark data.
+   */
+  discrete?: boolean;
+  palette?: string[];
+  levels?: string[];
 }
 
 const data = scatterLine.spec!.data;
@@ -71,8 +80,39 @@ const colorPart = (domain: [number, number]) => {
   return colorParts.get(key)!;
 };
 
+// mtcars weight bands as a factor column beside the frame's own columns.
+const DISCRETE_DATA = {
+  ...data,
+  band: ingest({
+    band: (data.wt.values as number[]).map((wt) =>
+      wt < 2.5 ? "light" : wt < 3.5 ? "mid" : "heavy"
+    ),
+  }).band,
+};
+const DISCRETE_MAPPING = { x: "wt", y: "mpg", color: "band" };
+const DISCRETE_LAYER = geomPoint({ size: 6 }).value as Layer;
+const DEFAULT_PALETTE = ["#2a78d6", "#1baf7a", "#eda100"];
+const DEFAULT_LEVELS = ["light", "mid", "heavy"];
+const discreteParts = new Map<string, SpecPart>();
+const discretePart = (state: ComponentRootState) => {
+  const range = state.palette ?? DEFAULT_PALETTE;
+  const domain = state.levels ?? DEFAULT_LEVELS;
+  const key = JSON.stringify([range, domain]);
+  if (!discreteParts.has(key)) {
+    discreteParts.set(key, scaleColor({ range, domain }));
+  }
+  return discreteParts.get(key)!;
+};
+
 /** The same plot as a spec, for the compile path. */
 export function compiledSpec(state: ComponentRootState): GGSpec {
+  if (state.discrete) {
+    return withSiteChartTheme(
+      ggplot(DISCRETE_DATA, DISCRETE_MAPPING)
+        .add(geomPoint({ size: 6 }), discretePart(state))
+        .build(),
+    );
+  }
   if (state.scaled) {
     return withSiteChartTheme(
       ggplot(data, SCALED_MAPPING)
@@ -142,6 +182,19 @@ function Plot(
           <GGLayerPart layer={LINE_LAYER} />
         </GGPlot>
       </GGData>
+    );
+  }
+  if (state.mode === "component" && state.discrete) {
+    return (
+      <GGPlot
+        data={DISCRETE_DATA}
+        mapping={DISCRETE_MAPPING}
+        theme={theme}
+        fontResources={fonts}
+      >
+        <GGLayerPart layer={DISCRETE_LAYER} />
+        <GGPart part={discretePart(state)} />
+      </GGPlot>
     );
   }
   if (state.mode === "component" && state.scaled) {
