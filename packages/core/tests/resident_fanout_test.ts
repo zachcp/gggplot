@@ -10,7 +10,7 @@ import {
 import { collectResidentNodes } from "../src/runtime/resident_host.tsx";
 import { RESIDENT_ID_PROP } from "../src/runtime/resident_products.ts";
 import {
-  assembleRoot,
+  assembleRoot as assembleRootOrNull,
   createRootCaches,
   plotSpec,
 } from "../src/components/root_assembly.ts";
@@ -20,6 +20,11 @@ import { ScaleYContinuous } from "../src/components/plot_parts.ts";
 import { buildFacetPanels } from "../src/compile/mod.ts";
 import { ingest } from "../src/data/mod.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
+
+/** assembleRoot for plots with no pending layer: never null. */
+const assembleRoot = (
+  ...args: Parameters<typeof assembleRootOrNull>
+) => assembleRootOrNull(...args)!;
 
 const frame = ingest({ x: [0.5, 1.5, 2.5, 3.5], g: ["a", "b", "a", "b"] });
 

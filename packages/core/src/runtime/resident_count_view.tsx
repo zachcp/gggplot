@@ -7,6 +7,7 @@ import type { MountedCountSourceOptions } from "./resident.ts";
 import type { ResidentCountProduct } from "./resident_count_live.tsx";
 import { ResidentHistogramBars } from "./resident_bar.tsx";
 import { useHoistedProduct } from "./resident_products.ts";
+import { stamped, viewGeneration } from "./generation_gate.ts";
 import {
   Axis,
   Cartesian,
@@ -39,10 +40,18 @@ const AwaitCountSummary = (
     & Omit<ResidentCountViewProps, "data" | "x" | "group">
     & { product: ResidentCountProduct },
 ): LiveElement => {
-  const [summary, error] = useAwait(() => product.readSummary(), [
-    product.summary.version,
-  ]);
+  // Keyed on the DATA version (the summary buffer's binding version never
+  // moves) and stamped with it, so a stale summary sizes the guides but never
+  // the live marks (gggplot-wkc).
+  const [awaited, error] = useAwait(
+    stamped(product.version, () => product.readSummary()),
+    [product.version],
+  );
   if (error) throw error;
+  const { domain: summary, drawMarks } = viewGeneration(
+    awaited,
+    product.version,
+  );
   if (!summary) return null as never;
   const yMax = options.position === "fill"
     ? 1
@@ -64,12 +73,14 @@ const AwaitCountSummary = (
       width: theme.axisWidth ?? 2,
       ...(theme.axisColor ? { color: theme.axisColor } : {}),
     }),
-    createElement(ResidentHistogramBars, {
-      product,
-      color,
-      opacity,
-      colors: product.barColors,
-    }),
+    drawMarks
+      ? createElement(ResidentHistogramBars, {
+        product,
+        color,
+        opacity,
+        colors: product.barColors,
+      })
+      : null,
   ].filter(Boolean);
   return createElement(Cartesian, {
     range: [[-0.5, Math.max(0.5, options.valuesCount - 0.5)], [0, yMax]],

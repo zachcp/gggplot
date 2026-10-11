@@ -73,7 +73,12 @@ import {
 } from "./gg_scales.ts";
 import { type PlotPart, PlotPartCapture } from "./parts.ts";
 import { componentProbe } from "./probe.ts";
-import { assembleRoot, createRootCaches, plotSpec } from "./root_assembly.ts";
+import {
+  assembleRoot,
+  createRootCaches,
+  plotSpec,
+  type RootAssembly,
+} from "./root_assembly.ts";
 
 export { componentProbe };
 
@@ -233,18 +238,21 @@ const PlotView = (
   const gpuRefs = useOne(() => createScaleBindingRefs());
   const panelRef = useOne(() => ({ value: null as GGPanelValue | null }));
 
-  const pending = layers.some((layer) => layer.pending);
+  // Null while a layer is pending (vs7 trap 2); the last assembly is kept.
+  const lastRef = useOne(() => ({ value: null as RootAssembly | null }));
   const assembled = useMemo(
-    () =>
-      // vs7 trap 2: never train a contribution that has not arrived as empty.
-      pending ? null : assembleRoot(
+    () => {
+      const next = assembleRoot(
         base,
         layers,
         panels,
         { width, height, measureText },
         caches,
-      ),
-    [pending, base, layers, panels, width, height, measureText],
+      );
+      if (next) lastRef.value = next;
+      return lastRef.value;
+    },
+    [base, layers, panels, width, height, measureText],
   );
   // Row removals: reported once per distinct set, not on every re-assembly.
   const reportedRef = useOne(() => ({ key: "[]" }));

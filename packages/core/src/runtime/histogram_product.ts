@@ -25,11 +25,13 @@ import type { GridSummary } from "./resident_grid_pending.ts";
 import type { ResidentHistogramProduct } from "./resident_live.tsx";
 import type { ReadbackChannel } from "./resident_readback.tsx";
 import type { GPUStorageSource } from "./types.ts";
+import { dispatchVersion, stamped } from "./generation_gate.ts";
 import {
   createElement,
   useAwait,
   useMemo,
   useNoRawSource,
+  useOne,
   useRawSource,
 } from "./usegpu_compat.ts";
 
@@ -86,11 +88,14 @@ export const HistogramProductNode = (
       frames: DOMAIN_FRAME_BUDGET,
     }) as LiveElement,
   ];
-  const [bounds, error] = useAwait(
-    () => channels.domain.read(version),
+  // Stamped with the version they describe: useAwait keeps the previous
+  // bounds while the next are read back (gggplot-wkc).
+  const [awaited, error] = useAwait(
+    stamped(version, (v) => channels.domain.read(v)),
     [version],
   );
   if (error) throw error;
+  const bounds = awaited?.value;
   if (!bounds || bounds.empty) {
     return children({ product: null, computes: domainComputes });
   }
@@ -99,6 +104,7 @@ export const HistogramProductNode = (
     group,
     options,
     bounds,
+    boundsCurrent: awaited.version === version,
     summary: channels.summary,
     domainComputes,
     children,
@@ -107,11 +113,22 @@ export const HistogramProductNode = (
 
 /** The bin grid, sized to resolved bounds. */
 const HistogramGrid = (
-  { x, group, options, bounds, summary, domainComputes, children }: {
+  {
+    x,
+    group,
+    options,
+    bounds,
+    boundsCurrent,
+    summary,
+    domainComputes,
+    children,
+  }: {
     x: GPUStorageSource;
     group?: GPUStorageSource;
     options: HistogramProductOptions;
     bounds: ResidentDomain1DResult;
+    /** Whether `bounds` describe the column's current version. */
+    boundsCurrent: boolean;
     summary: Channels["summary"];
     domainComputes: LiveElement[];
     children: (result: HistogramProductResult) => LiveElement;
@@ -146,7 +163,16 @@ const HistogramGrid = (
   const palette = options.palette
     ? useRawSource(options.palette, "vec4<f32>")
     : (useNoRawSource(), undefined);
-  const version = Math.max(x.version, group?.version ?? 0);
+  // The grid dispatches a new data version only once that version's bounds
+  // are in: until then it holds the version it last dispatched, so its
+  // buffers keep a whole generation (data and sizing together) rather than
+  // binning new rows into the previous bounds (gggplot-wkc).
+  const held = useOne(() => ({ version: null as number | null }));
+  const version = held.version = dispatchVersion(
+    held.version,
+    Math.max(x.version, group?.version ?? 0),
+    boundsCurrent,
+  );
   const inputs = useMemo(() => ({
     values: x,
     groupIds: group ?? x,
