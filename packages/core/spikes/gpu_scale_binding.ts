@@ -69,70 +69,13 @@ export function updateParameters(
   }
 }
 
-// WGSL may fold `v != v`, so non-finite is tested on the exponent bits.
-// NaN and +/-Inf are both missing, matching Number.isFinite on the CPU.
-const IS_MISSING = `
-fn isMissing(v: f32) -> bool {
-  return (bitcast<u32>(v) & 0x7f800000u) == 0x7f800000u;
-}`;
-
-export const COLOR_BINDING = wgsl`
-@link fn getValue(i: u32) -> f32;
-@link fn getOwner(i: u32) -> u32;
-@link fn getDomain() -> vec2<f32>;
-@link fn getPalette(i: u32) -> vec4<f32>;
-@link fn getPaletteLength() -> u32;
-@link fn getAlpha(i: u32) -> f32;
-@link fn getNaColor() -> vec4<f32>;
-${IS_MISSING}
-@export fn getColor(i: u32) -> vec4<f32> {
-  let domain = getDomain();
-  let value = getValue(getOwner(i));
-  let alpha = clamp(getAlpha(i), 0.0, 1.0);
-  if (isMissing(value)) { return vec4<f32>(getNaColor().rgb, alpha); }
-  var t = 0.0;
-  if (domain.y > domain.x) { t = (value - domain.x) / (domain.y - domain.x); }
-  let last = getPaletteLength() - 1u;
-  let x = clamp(t, 0.0, 1.0) * f32(last);
-  let low = u32(floor(x));
-  let rgb = mix(getPalette(low).rgb, getPalette(min(low + 1u, last)).rgb, fract(x));
-  // Existing CPU mapping quantizes interpolated RGB to an 8-bit hex color.
-  return vec4<f32>(floor(rgb * 255.0 + 0.5) / 255.0, alpha);
-}`;
-
-export const SIZE_BINDING = wgsl`
-@link fn getValue(i: u32) -> f32;
-@link fn getOwner(i: u32) -> u32;
-@link fn getDomain() -> vec2<f32>;
-@link fn getRange() -> vec2<f32>;
-${IS_MISSING}
-@export fn getRadius(i: u32) -> f32 {
-  let domain = getDomain();
-  let range = getRange();
-  let value = getValue(getOwner(i));
-  // A missing size means the row is not drawn.
-  if (isMissing(value)) { return 0.0; }
-  var t = 0.0;
-  if (domain.y > domain.x) { t = clamp((value - domain.x) / (domain.y - domain.x), 0.0, 1.0); }
-  return range.x + sqrt(t) * (range.y - range.x);
-}`;
-
-export const ALPHA_BINDING = wgsl`
-@link fn getValue(i: u32) -> f32;
-@link fn getOwner(i: u32) -> u32;
-@link fn getDomain() -> vec2<f32>;
-@link fn getRange() -> vec2<f32>;
-${IS_MISSING}
-@export fn getAlpha(i: u32) -> f32 {
-  let domain = getDomain();
-  let range = getRange();
-  let value = getValue(getOwner(i));
-  // A missing alpha means the row is not drawn.
-  if (isMissing(value)) { return 0.0; }
-  var t = 0.0;
-  if (domain.y > domain.x) { t = (value - domain.x) / (domain.y - domain.x); }
-  return range.x + t * (range.y - range.x);
-}`;
+// The bindings are the production ones (render/scale_bindings.ts), so the
+// probe's CPU/GPU audit measures exactly what marks use.
+export {
+  ALPHA_BINDING,
+  COLOR_BINDING,
+  SIZE_BINDING,
+} from "../src/render/scale_bindings.ts";
 
 export const FIXED_BINDING = wgsl`
 @link fn getFixed() -> vec4<f32>;

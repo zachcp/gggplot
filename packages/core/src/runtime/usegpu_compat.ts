@@ -177,6 +177,8 @@ const workbench = interop<{
   QueueReconciler: { signal: () => LiveElement };
   LoopContext: unknown;
   DeviceContext: unknown;
+  PointLayer: LiveComponent;
+  useLambdaSource: (shader: unknown, props: { length: number }) => unknown;
   useShader: UseShader;
   useShaderRef: UseShaderRef;
   useMaterialContext: UseMaterialContext;
@@ -268,6 +270,10 @@ export const QueueReconciler = workbench.QueueReconciler;
 export const LoopContext = workbench.LoopContext;
 /** The mounted GPUDevice; provided by <WebGPU>, or directly in headless tests. */
 export const DeviceContext = workbench.DeviceContext;
+/** Workbench's point layer: takes shader-bound colors/sizes, unlike plot's <Point>. */
+export const PointLayer = workbench.PointLayer;
+/** Wraps a bound shader function as a source of `length` elements. */
+export const useLambdaSource = workbench.useLambdaSource;
 export const useShader = workbench.useShader;
 export const useShaderRef = workbench.useShaderRef;
 export const useMaterialContext = workbench.useMaterialContext;

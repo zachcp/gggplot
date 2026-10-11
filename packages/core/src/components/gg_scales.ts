@@ -4,12 +4,13 @@
 // revision (vnh.15 decision (1), finding 3): a CPU consumer such as a guide
 // re-renders when the revision moves, and sees one consistent set. The value
 // keeps its identity while the scales are unchanged, so a resize does not
-// re-render what reads it. Stable GPU refs for shaders join this value with
-// the production scale-binding adapter (gggplot-fbq).
+// re-render what reads it. `gpu` holds the stable refs that bound shaders
+// read (gggplot-fbq).
 //
 // Leaf module: types and the Live compatibility surface only.
 import type { AesName } from "../ir/types.ts";
 import type { TrainedScale } from "../scale/types.ts";
+import type { ScaleBindingRefs } from "../render/scale_bindings.ts";
 import { makeContext, useContext } from "../runtime/usegpu_compat.ts";
 
 export interface GGScalesValue {
@@ -17,6 +18,12 @@ export interface GGScalesValue {
   scales: Partial<Record<AesName, TrainedScale>>;
   /** Moves exactly when `scales` changes in value. */
   revision: number;
+  /**
+   * Stable GPU refs for the bindable scales (gggplot-fbq): the same object for
+   * the root's lifetime, written in place on every revision, so shaders that
+   * bind it never relink when a domain changes.
+   */
+  gpu: ScaleBindingRefs;
 }
 
 /** The plotting panel as laid out. */

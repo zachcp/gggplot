@@ -221,8 +221,26 @@ try {
     const shared = await step(page, { mode: "shared" });
     const sharedFrame = await frameAfter(page, { pointColor: "#3b82f6" });
 
+    // GPU scale binding (gggplot-fbq): a color-domain change on a bound point
+    // layer is a uniform write: no mark upload, no shader or pipeline build.
+    await step(page, {
+      mode: "component",
+      scaled: true,
+      colorDomain: [10, 30],
+    });
+    const domainChange = await step(page, { colorDomain: [5, 40] });
+    const scaledComponent = await frameAfter(page, { colorDomain: [5, 41] });
+    const scaledCompile = await frameAfter(page, { mode: "compile" });
+    const parityScaled = await compare(
+      page,
+      "scaled",
+      scaledCompile,
+      scaledComponent,
+    );
+
     const report = {
       generatedAt: new Date().toISOString(),
+      scaled: { domainChange, parity: parityScaled },
       shared: { columnUploads: shared.columnUploads },
       parity: { two: parityTwo, three: parityThree },
       atlasHistory,
@@ -274,6 +292,23 @@ try {
     if (third.work.layerMounts !== 1 || third.work.statCalls !== 1) {
       failures.push(
         `third layer mounted ${third.work.layerMounts} layers, ran ${third.work.statCalls} stats (want 1, 1)`,
+      );
+    }
+    if (
+      domainChange.gpu.markBufferCreations || domainChange.gpu.markBufferWrites
+    ) {
+      failures.push(
+        `scaled: a domain change uploaded mark data (${domainChange.gpu.markBufferCreations} creations, ${domainChange.gpu.markBufferWrites} writes)`,
+      );
+    }
+    if (domainChange.newShaderModules || domainChange.newPipelines) {
+      failures.push(
+        `scaled: a domain change built ${domainChange.newShaderModules} shader modules, ${domainChange.newPipelines} pipelines`,
+      );
+    }
+    if (parityScaled.maxDifference > MAX_TEXT_AA_DIFFERENCE) {
+      failures.push(
+        `scaled: ${parityScaled.changed} pixels differ from compile, max ${parityScaled.maxDifference}`,
       );
     }
     const columnNames = Object.keys(shared.columnUploads);

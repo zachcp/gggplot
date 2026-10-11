@@ -47,6 +47,7 @@ import { cameraNearOrigin3d } from "../compile/guides_3d.ts";
 import { RotatedLabel } from "./rotated_label.tsx";
 import { ChunkedLine } from "./chunked_line.tsx";
 import { ChunkedFace } from "./chunked_face.tsx";
+import { BoundPoint } from "./bound_point.tsx";
 import {
   isInstrumentFlagSet,
   registerKnownMarkArray,
@@ -450,6 +451,7 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
   // theme-background panel (which always use component 'Polygon') are
   // unaffected by this addition.
   ChunkedFace,
+  BoundPoint,
   Label: (props: Record<string, unknown>) =>
     typeof props.angle === "number" && props.angle !== 0
       ? createElement(RotatedLabel, props)

@@ -8,6 +8,7 @@ import {
 } from "../../../packages/core/src/render/gpu_instrument.ts";
 import { componentProbe } from "../../../packages/core/src/components/probe.ts";
 import {
+  builds,
   columnUploads,
   ComponentRootScene,
   type ComponentRootState,
@@ -33,6 +34,8 @@ export interface StepCost {
   gpu: ReturnType<typeof getGpuMarkCounters>;
   /** Uploads of each frame column's typed array during the step. */
   columnUploads: Record<string, number>;
+  newShaderModules: number;
+  newPipelines: number;
 }
 
 const fonts = createFontResources([
@@ -82,6 +85,7 @@ export function ComponentRootProbe() {
         for (const name of Object.keys(columnUploads)) {
           delete columnUploads[name];
         }
+        const before = { ...builds };
         current = { ...current, ...change };
         setState(current);
         await frames(30);
@@ -96,6 +100,8 @@ export function ComponentRootProbe() {
           },
           gpu: getGpuMarkCounters(),
           columnUploads: { ...columnUploads },
+          newShaderModules: builds.shaderModules - before.shaderModules,
+          newPipelines: builds.pipelines - before.pipelines,
         };
       },
     };
