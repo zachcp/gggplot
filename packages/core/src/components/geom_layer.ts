@@ -5,11 +5,11 @@
 // reports it to the enclosing <GGPlot> through GGLayerPart. The root runs its
 // stat, trains across layers, and lowers it with the per-layer memo, binding
 // eligible scaled aesthetics on the GPU (gggplot-fbq) and CPU-packing the
-// rest. Tree order is z-order; `inheritAes={false}`, a layer `data` override
-// and `showLegend` behave as their ggplot2 counterparts.
+// rest. Tree order is z-order; `inheritAes={false}` and a layer `data`
+// override behave as their ggplot2 counterparts.
 //
-// Named geoms (<GeomPoint>, <GeomBar>, ..., gggplot-8hz) are thin wrappers
-// over this.
+// The named geoms (<GeomPoint>, <GeomBar>, ..., components/geoms.ts) are
+// typed wrappers over this.
 import type { LiveElement } from "@use-gpu/live";
 import { ingest, type IngestOptions, type InputData } from "../data/mod.ts";
 import { GEOM_REGISTRY } from "../geom/mod.ts";
