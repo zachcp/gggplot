@@ -14,8 +14,12 @@
 // writes the function into a ref the host owns. A ref rather than a callback
 // deliberately: React holds the identity, there is no subscription to tear
 // down, and a stale picker cannot outlive the scene that produced it.
-import { type LiveElement, useOne } from "@use-gpu/live";
-import { useViewContext } from "@use-gpu/workbench";
+import * as UseGpuLive from "@use-gpu/live";
+import type { LiveElement } from "@use-gpu/live";
+import * as UseGpuWorkbench from "@use-gpu/workbench";
+import { esm } from "../runtime/usegpu_compat.ts";
+const { useOne } = esm(UseGpuLive, "useMemo");
+const { useViewContext } = esm(UseGpuWorkbench, "LayoutContext");
 
 /** A world-space ray: a point and a direction, both unnormalized. */
 export interface SceneRay {

@@ -31,11 +31,7 @@
 // owns its y range reports its read-back summary, and the root trains y from
 // it, so a GPU-stat plot gets axes like any other.
 import type { LiveElement } from "@use-gpu/live";
-import {
-  LayoutContext,
-  useFontContext,
-  useNoDeviceContext,
-} from "@use-gpu/workbench";
+import * as UseGpuWorkbench from "@use-gpu/workbench";
 import {
   buildFacetPanels,
   type RowRemoval,
@@ -96,6 +92,11 @@ import {
   trainRoot,
   versionKey,
 } from "./root_assembly.ts";
+import { esm } from "../runtime/usegpu_compat.ts";
+const { LayoutContext, useFontContext, useNoDeviceContext } = esm(
+  UseGpuWorkbench,
+  "LayoutContext",
+);
 
 export { componentProbe };
 
