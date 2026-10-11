@@ -6,6 +6,9 @@ export const componentProbe = {
   lowerCalls: 0,
   /** Polar transforms actually computed (cache misses, gggplot-mqj). */
   polarCalls: 0,
+  /** Trainings (prepareRoot); a resize runs none. */
+  trainCalls: 0,
+  /** Layouts (layoutRoot); a resize runs one. */
   assembleCalls: 0,
   viewRenders: 0,
   /** Layer part mounts: a remount of an existing layer shows up here. */
@@ -18,6 +21,7 @@ export const componentProbe = {
     this.statCalls = 0;
     this.lowerCalls = 0;
     this.polarCalls = 0;
+    this.trainCalls = 0;
     this.assembleCalls = 0;
     this.viewRenders = 0;
     this.layerMounts = 0;

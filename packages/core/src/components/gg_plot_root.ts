@@ -3,21 +3,26 @@
 // Phase 1: the children render inline and report plot parts through Live
 // Capture (components/parts.ts): layers, scales, a coord, a facet, a theme,
 // labels. They render nothing themselves.
-// Phase 2: the capture's continuation assembles the plot from the parts with
-// the same assemblePlot the compile path uses, so guides and layout match it.
+// Phase 2 (PlotView): the capture's continuation prepares every layer and
+// trains the plot (prepareRoot, compile's trainPlot), layout-free, and
+// provides the scales. It reads no LayoutContext.
+// Phase 3 (PlotLayout): lays the trained plot out at the host's size with the
+// font measurer (layoutRoot, compile's layoutPlot), so guides and layout match
+// the compile path. Only this phase re-renders on a resize (gggplot-d14).
 //
 // What makes a change cheap is memoization keyed on what each step reads:
 // - each layer's row filtering and stat (prepareLayer) is memoized per layer
-//   and panel on its layer, data, mapping, scales and facet. The stat runs
-//   here rather than in the layer's own fiber because it reads sibling parts
-//   (a scale's limits censor rows before the stat).
+//   and panel on its layer, its panel rows and the slice of the spec it reads
+//   (prepareSignature, gggplot-2gu). The stat runs here rather than in the
+//   layer's own fiber because it reads sibling parts (a scale's limits censor
+//   rows before the stat).
 // - each layer's lowering is memoized on its inputs plus everything lowering
 //   reads from its LayerContext, and unchanged tensors keep their identity
 //   (reuseUnchanged), so only changed data re-uploads.
 // - marks are keyed by layer, so adding or removing a layer remounts nothing
 //   else.
-// A resize therefore re-runs guide layout only: no stat, no lowering, no mark
-// upload.
+// A resize therefore re-runs layout only: no stat, no training, no lowering
+// (layout-bound text, label and rug aside), no mark upload.
 //
 // GPU-eligible layers (stat_count / stat_bin through geom.residentPlan) become
 // resident products: the assembly collects one hoisted node per distinct
@@ -74,10 +79,12 @@ import {
 import { type PlotPart, PlotPartCapture } from "./parts.ts";
 import { componentProbe } from "./probe.ts";
 import {
-  assembleRoot,
   createRootCaches,
+  layoutRoot,
   plotSpec,
-  type RootAssembly,
+  type PreparedRoot,
+  prepareRoot,
+  type RootCaches,
 } from "./root_assembly.ts";
 
 export { componentProbe };
@@ -164,7 +171,11 @@ export const GGPlotRoot = (props: GGPlotRootProps): LiveElement => {
   );
 };
 
-/** Phase 2: train across the parts and assemble, memoized per layer. */
+/**
+ * Phase 2: prepare and train across the parts, layout-free, and provide the
+ * scales. Reads no LayoutContext, so a resize never re-renders it: only
+ * PlotLayout below re-lays out (gggplot-d14).
+ */
 const PlotView = (
   {
     data,
@@ -188,19 +199,6 @@ const PlotView = (
 ): LiveElement => {
   componentProbe.viewRenders++;
   useInstrumentation();
-  const rustText = useFontContext();
-  const measureText = useMemo(
-    () => createGlyphTextMeasurer(rustText),
-    [rustText],
-  );
-  const [left, top, right, bottom] = useContext(LayoutContext) as [
-    number,
-    number,
-    number,
-    number,
-  ];
-  const width = Math.max(right - left, 1);
-  const height = Math.max(bottom - top, 1);
 
   // The capture hands over a fresh array on every resume; each part inside it
   // keeps its identity unless its own inputs changed.
@@ -213,8 +211,7 @@ const PlotView = (
     [stableParts],
   );
   // Rebuilt whenever ANY part changes, so stabilized again by its own
-  // elements: a layer change must not look like a plot-level change, or every
-  // layer's stat memo (keyed on `base`) would miss.
+  // elements: a layer change must not look like a plot-level change.
   const specPartList = stableParts.flatMap((p) =>
     p.kind === "spec" ? [p.part as SpecPart] : []
   );
@@ -236,53 +233,79 @@ const PlotView = (
   const scalesRef = useOne(() => ({ value: null as GGScalesValue | null }));
   // One stable set of GPU refs for the root's lifetime (gggplot-fbq).
   const gpuRefs = useOne(() => createScaleBindingRefs());
-  const panelRef = useOne(() => ({ value: null as GGPanelValue | null }));
 
-  // Null while a layer is pending (vs7 trap 2); the last assembly is kept.
-  const lastRef = useOne(() => ({ value: null as RootAssembly | null }));
-  const assembled = useMemo(
-    () => {
-      const next = assembleRoot(
-        base,
-        layers,
-        panels,
-        { width, height, measureText },
-        caches,
-      );
-      if (next) lastRef.value = next;
-      return lastRef.value;
-    },
-    [base, layers, panels, width, height, measureText],
-  );
+  // Null while a layer is pending (vs7 trap 2); the last one is kept.
+  const lastRef = useOne(() => ({ value: null as PreparedRoot | null }));
+  const root = useMemo(() => {
+    const next = prepareRoot(base, layers, panels, caches);
+    if (next) lastRef.value = next;
+    return lastRef.value;
+  }, [base, layers, panels]);
   // Row removals: reported once per distinct set, not on every re-assembly.
   const reportedRef = useOne(() => ({ key: "[]" }));
-  if (assembled) {
-    const key = JSON.stringify(assembled.diagnostics);
+  if (root) {
+    const key = JSON.stringify(root.diagnostics);
     if (key !== reportedRef.key) {
       reportedRef.key = key;
-      warnRowRemovals(assembled.diagnostics);
-      onDiagnostics?.(assembled.diagnostics);
+      warnRowRemovals(root.diagnostics);
+      onDiagnostics?.(root.diagnostics);
     }
   }
+  if (!root) return null;
 
-  if (!assembled) return null;
-  const { tree, info, residentNodes } = assembled;
+  // One immutable value per distinct set of scales: only a retrain moves the
+  // revision, and a resize never reaches this component.
+  const scales = root.trained.guideScales;
+  const prev = scalesRef.value;
+  if (!prev || JSON.stringify(prev.scales) !== JSON.stringify(scales)) {
+    // Written in place before the marks render, so bound shaders draw this
+    // revision's domains in the same frame its guides do.
+    updateScaleBindingRefs(gpuRefs, scales);
+    scalesRef.value = {
+      scales,
+      revision: (prev?.revision ?? 0) + 1,
+      gpu: gpuRefs,
+    };
+    componentProbe.scalesRevision = scalesRef.value.revision;
+  }
+  return provide(
+    GGScalesContext,
+    scalesRef.value,
+    createElement(PlotLayout, { root, caches, interactive }) as LiveElement,
+  );
+};
 
-  // One immutable value per distinct set of scales: a resize keeps the
-  // identity, a retrain moves the revision.
+/**
+ * Phase 3: lay the trained plot out at the host's size with the font
+ * measurer: guides, grids, panel bounds, and marks (from cache unless
+ * layout-bound). The only part of the root a resize re-renders.
+ */
+const PlotLayout = (
+  { root, caches, interactive }: {
+    root: PreparedRoot;
+    caches: RootCaches;
+    interactive: boolean;
+  },
+): LiveElement => {
+  const rustText = useFontContext();
+  const measureText = useMemo(
+    () => createGlyphTextMeasurer(rustText),
+    [rustText],
+  );
+  const [left, top, right, bottom] = useContext(LayoutContext) as [
+    number,
+    number,
+    number,
+    number,
+  ];
+  const width = Math.max(right - left, 1);
+  const height = Math.max(bottom - top, 1);
+  const panelRef = useOne(() => ({ value: null as GGPanelValue | null }));
+  const { tree, info, residentNodes } = useMemo(
+    () => layoutRoot(root, { width, height, measureText }, caches),
+    [root, width, height, measureText],
+  );
   if (info) {
-    const prev = scalesRef.value;
-    if (!prev || JSON.stringify(prev.scales) !== JSON.stringify(info.scales)) {
-      // Written in place before the marks render, so bound shaders draw this
-      // revision's domains in the same frame its guides do.
-      updateScaleBindingRefs(gpuRefs, info.scales);
-      scalesRef.value = {
-        scales: info.scales,
-        revision: (prev?.revision ?? 0) + 1,
-        gpu: gpuRefs,
-      };
-      componentProbe.scalesRevision = scalesRef.value.revision;
-    }
     const panel = panelRef.value;
     if (
       !panel || panel.dimensions !== info.dimensions ||
@@ -294,24 +317,19 @@ const PlotView = (
       };
     }
   }
-
   const view = tree.component === "Scene3D"
     ? { ...tree, props: { ...tree.props, interactive } }
     : tree;
   return provide(
-    GGScalesContext,
-    scalesRef.value,
-    provide(
-      GGPanelContext,
-      panelRef.value,
-      // Products are built ABOVE the tree: <Plot>'s VirtualLayers boundary
-      // keeps a kernel below it from reaching a compute pass (see
-      // runtime/resident_host.tsx).
-      createElement(ResidentHost, {
-        nodes: residentNodes,
-        children: renderTree(view) as LiveElement,
-      }) as LiveElement,
-    ),
+    GGPanelContext,
+    panelRef.value,
+    // Products are built ABOVE the tree: <Plot>'s VirtualLayers boundary
+    // keeps a kernel below it from reaching a compute pass (see
+    // runtime/resident_host.tsx).
+    createElement(ResidentHost, {
+      nodes: residentNodes,
+      children: renderTree(view) as LiveElement,
+    }) as LiveElement,
   );
 };
 
