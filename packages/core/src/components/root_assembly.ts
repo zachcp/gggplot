@@ -37,7 +37,10 @@ import type {
   PlotLabels,
   Theme,
 } from "../ir/types.ts";
-import { isGpuBindable } from "../render/scale_bindings.ts";
+import {
+  isDiscreteGpuBindable,
+  isGpuBindable,
+} from "../render/scale_bindings.ts";
 import { type CpuStatCache, createCpuStatCache } from "../stat/mod.ts";
 import type { PlotPart } from "./parts.ts";
 import { componentProbe } from "./probe.ts";
@@ -66,7 +69,8 @@ export interface LoweredEntry {
 
 /** Which of a point layer's mapped aesthetics bind on the GPU (gggplot-fbq). */
 interface BoundPlan {
-  color?: { column: string; aes: "color" | "fill" };
+  /** `discrete`: a factor column through a level lookup (gggplot-81r). */
+  color?: { column: string; aes: "color" | "fill"; discrete: boolean };
   size?: string;
   alpha?: string;
 }
@@ -88,8 +92,14 @@ function boundPlan(args: LowerMarksArgs): BoundPlan | null {
   const colorAes = mapping.color ? "color" : mapping.fill ? "fill" : undefined;
   if (colorAes) {
     const column = mapping[colorAes] as string;
-    if (!numeric(column) || !isGpuBindable(ctx.scales[colorAes])) return null;
-    plan.color = { column, aes: colorAes };
+    const scale = ctx.scales[colorAes];
+    if (numeric(column) && isGpuBindable(scale)) {
+      plan.color = { column, aes: colorAes, discrete: false };
+    } else if (
+      data[column]?.type === "factor" && isDiscreteGpuBindable(scale)
+    ) {
+      plan.color = { column, aes: colorAes, discrete: true };
+    } else return null;
   }
   if (mapping.size) {
     if (!numeric(mapping.size) || !isGpuBindable(ctx.scales.size)) return null;
@@ -153,7 +163,7 @@ export function plotSpec(
 /** The bound aesthetics, as a key: a different set is a different hook layout. */
 function boundKey(bound: BoundPlan): string {
   return [
-    bound.color ? bound.color.aes : "",
+    bound.color ? bound.color.aes + (bound.color.discrete ? "-d" : "") : "",
     bound.size ? "size" : "",
     bound.alpha ? "alpha" : "",
   ].join(":");
@@ -184,7 +194,16 @@ function bindPoints(
         owners: mark.owners,
         ...(bound.color
           ? {
-            color: { values: values(bound.color.column), aes: bound.color.aes },
+            color: bound.color.discrete
+              ? {
+                codes: typedArrayForColumn(
+                  data[bound.color.column],
+                ) as Uint32Array,
+                levels: (data[bound.color.column] as { levels: string[] })
+                  .levels,
+                aes: bound.color.aes,
+              }
+              : { values: values(bound.color.column), aes: bound.color.aes },
           }
           : { fixedColor: (layer.params.color as string) ?? "#3b82f6" }),
         ...(bound.size
@@ -342,6 +361,14 @@ export function layoutRoot(
 ): LaidOutRoot {
   componentProbe.assembleCalls++;
   const { spec, layers } = root;
+  // A bound point draws as its own PointLayer, outside the VirtualLayers
+  // aggregation that orders CPU marks (faces, lines, then points), so it
+  // lands beneath them. Binding is therefore limited to where that order is
+  // provably the same (gggplot-wo0z lifts it): a plot of point layers only,
+  // bound in layer order until the first that cannot bind, after which CPU
+  // points draw above, as in the aggregate.
+  const pointsOnly = layers.every(({ layer }) => layer.geom === "point");
+  const unboundFrom = new Map<number, number>();
   const liveLowered = new Set<string>();
   const lowerMarks = (args: LowerMarksArgs): RenderNode[] => {
     const { layer, mapping, data, ctx, layerIndex, panelIndex } = args;
@@ -349,7 +376,11 @@ export function layoutRoot(
     const key = `${id}:${panelIndex}`;
     liveLowered.add(key);
     const layoutBound = LAYOUT_BOUND_GEOMS.has(layer.geom);
-    const bound = boundPlan(args);
+    const stop = unboundFrom.get(panelIndex);
+    const bound = pointsOnly && (stop === undefined || layerIndex < stop)
+      ? boundPlan(args)
+      : null;
+    if (!bound && stop === undefined) unboundFrom.set(panelIndex, layerIndex);
     const signature = contextSignature(args, layoutBound, bound);
     const prev = caches.lowered.get(key);
     if (

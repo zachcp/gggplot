@@ -15,6 +15,8 @@ import { withMarkAttribution } from "./gpu_instrument.ts";
 import {
   ALPHA_BINDING,
   COLOR_BINDING,
+  DISCRETE_COLOR_BINDING,
+  discreteColorLookup,
   type ScaleBindingRefs,
   SIZE_BINDING,
 } from "./scale_bindings.ts";
@@ -38,8 +40,14 @@ import { componentProbe } from "../components/probe.ts";
 export interface BoundPointProps {
   positions: FlatTensor;
   owners: Uint32Array;
-  /** Mapped color values per prepared row, and which scale they use. */
-  color?: { values: Float32Array; aes: "color" | "fill" };
+  /**
+   * Mapped color per prepared row and which scale it uses: numeric values
+   * through the continuous ramp, or a factor's level codes (and the data's
+   * levels) through a lookup (gggplot-81r).
+   */
+  color?:
+    | { values: Float32Array; aes: "color" | "fill" }
+    | { codes: Uint32Array; levels: string[]; aes: "color" | "fill" };
   size?: { values: Float32Array };
   alpha?: { values: Float32Array };
   /** Unmapped fallbacks. */
@@ -99,7 +107,32 @@ export const BoundPoint = (props: BoundPointProps): LiveElement => {
     : ONE;
 
   let colorProp: Record<string, unknown>;
-  if (color) {
+  if (color && "codes" in color) {
+    // A level reorder or palette swap rebuilds this small lookup, written on
+    // its own; the codes, owners and positions are mark data and stay put.
+    const colorRefs = refs[color.aes];
+    const codes = useMarkSource(color.codes, "u32");
+    const scale = scales!.scales[color.aes];
+    const lookupKey = JSON.stringify([scale?.domain, scale?.range]);
+    const lookup = useMemo(
+      () => discreteColorLookup(scale, color.levels),
+      [lookupKey, color.levels],
+    );
+    const lookupSource = useRawSource(lookup, "vec4<f32>");
+    const lookupLength = useMemo(
+      () => ({ current: color.levels.length }),
+      [color.levels],
+    );
+    const bound = useShader(DISCRETE_COLOR_BINDING, [
+      codes,
+      ownerSource,
+      lookupSource,
+      lookupLength,
+      alphaFn,
+      colorRefs.naColor,
+    ]);
+    colorProp = { colors: useLambdaSource(bound, lambdaProps) };
+  } else if (color) {
     const colorRefs = refs[color.aes];
     const values = useMarkSource(color.values, "f32");
     const palette = useRawSource(colorRefs.palette, "vec4<f32>");

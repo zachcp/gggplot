@@ -241,9 +241,39 @@ try {
       scaledComponent,
     );
 
+    // Discrete scales on the GPU (gggplot-81r): a palette swap and a level
+    // reorder rewrite the lookup only; no mark data moves.
+    const discreteMount = await step(page, {
+      mode: "component",
+      scaled: false,
+      discrete: true,
+    });
+    const paletteSwap = await step(page, {
+      palette: ["#ef4444", "#a855f7", "#22c55e"],
+    });
+    const levelReorder = await step(page, {
+      levels: ["heavy", "mid", "light"],
+    });
+    const discreteComponent = await frameAfter(page, {
+      palette: ["#f97316", "#0ea5e9", "#facc15"],
+    });
+    const discreteCompile = await frameAfter(page, { mode: "compile" });
+    const parityDiscrete = await compare(
+      page,
+      "discrete",
+      discreteCompile,
+      discreteComponent,
+    );
+
     const report = {
       generatedAt: new Date().toISOString(),
       scaled: { scaledMount, scaledResize, domainChange, parity: parityScaled },
+      discrete: {
+        discreteMount,
+        paletteSwap,
+        levelReorder,
+        parity: parityDiscrete,
+      },
       shared: { columnUploads: shared.columnUploads },
       parity: { two: parityTwo, three: parityThree },
       atlasHistory,
@@ -323,6 +353,33 @@ try {
     if (domainChange.newShaderModules || domainChange.newPipelines) {
       failures.push(
         `scaled: a domain change built ${domainChange.newShaderModules} shader modules, ${domainChange.newPipelines} pipelines`,
+      );
+    }
+    if (discreteMount.work.boundRenders < 1) {
+      failures.push(
+        "discrete: the point layer did not take the GPU lookup path",
+      );
+    }
+    for (
+      const [name, cost] of [["palette swap", paletteSwap], [
+        "level reorder",
+        levelReorder,
+      ]] as const
+    ) {
+      if (cost.gpu.markBufferCreations || cost.gpu.markBufferWrites) {
+        failures.push(
+          `discrete: a ${name} uploaded mark data (${cost.gpu.markBufferCreations} creations, ${cost.gpu.markBufferWrites} writes)`,
+        );
+      }
+      if (cost.work.lowerCalls || cost.work.statCalls) {
+        failures.push(
+          `discrete: a ${name} ran ${cost.work.statCalls} stats, ${cost.work.lowerCalls} lowers`,
+        );
+      }
+    }
+    if (parityDiscrete.maxDifference > MAX_TEXT_AA_DIFFERENCE) {
+      failures.push(
+        `discrete: ${parityDiscrete.changed} pixels differ from compile, max ${parityDiscrete.maxDifference}`,
       );
     }
     if (parityScaled.maxDifference > MAX_TEXT_AA_DIFFERENCE) {

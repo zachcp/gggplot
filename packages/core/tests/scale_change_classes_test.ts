@@ -10,7 +10,7 @@ import {
   type RootCaches,
 } from "../src/components/root_assembly.ts";
 import { layerFromProps } from "../src/components/geom_layer.ts";
-import { GeomLine, GeomPoint } from "../src/components/geoms.ts";
+import { GeomPoint } from "../src/components/geoms.ts";
 import {
   CoordCartesian,
   Labs,
@@ -38,11 +38,13 @@ const data = ingest({
   g: ["a", "b", "c", "a", "b", "c"],
 });
 const MAPPING: Aes = { x: "x", y: "y" };
-// Fill on points is a continuous, GPU-bindable aesthetic (gggplot-fbq); color
-// on lines is discrete and CPU-packed.
+// A points-only plot, so both layers bind on the GPU: fill continuously
+// (gggplot-fbq), color through a factor lookup (gggplot-81r).
 const point = layerFromProps(GeomPoint.layerProps({ mapping: { fill: "v" } }));
-const line = layerFromProps(GeomLine.layerProps({ mapping: { color: "g" } }));
-const LAYERS: Layer[] = [point, line];
+const dots = layerFromProps(
+  GeomPoint.layerProps({ mapping: { color: "g" }, size: 2 }),
+);
+const LAYERS: Layer[] = [point, dots];
 
 const LAYOUT = {
   width: 640,
@@ -124,12 +126,13 @@ const ROWS: Row[] = [
     uploads: 0,
   },
   {
-    // Level order rewrites the line's color lookup; nothing is filtered.
+    // Level order rewrites the bound color lookup; nothing is filtered or
+    // re-lowered.
     change: "discrete color level order",
     tier: "lookup",
     parts: [ScaleColor.part({ domain: ["c", "b", "a"] })],
     stats: 0,
-    lowered: 1,
+    lowered: 0,
     uploads: 0,
   },
   {
@@ -178,7 +181,7 @@ for (const row of ROWS) {
 }
 
 Deno.test("the stat tier is exactly prepareSignature", () => {
-  const sig = (parts: SpecPart[], layer: Layer = line) =>
+  const sig = (parts: SpecPart[], layer: Layer = dots) =>
     prepareSignature(
       plotSpec(data, MAPPING, undefined, undefined, parts),
       layer,
