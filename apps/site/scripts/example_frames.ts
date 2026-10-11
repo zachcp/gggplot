@@ -4,6 +4,7 @@
 //   deno run -A scripts/example_frames.ts capture-component <outDir> <ExampleId>...
 //   deno run -A scripts/example_frames.ts capture-chart <outDir> <ExampleId>...
 //   deno run -A scripts/example_frames.ts compare <dirA> <dirB>
+//   deno run -A scripts/example_frames.ts check-goldens <goldenDir>
 //
 // For refactors that must not change output: capture before, capture after,
 // compare. Each example mounts alone on a 640x400 canvas (?capture=<id>), and a
@@ -72,18 +73,13 @@ const dataUrl = (bytes: Uint8Array) =>
   "data:image/png;base64," +
   btoa(Array.from(bytes, (c) => String.fromCharCode(c)).join(""));
 
-if (
-  mode === "capture" || mode === "capture-component" || mode === "capture-chart"
-) {
-  // capture-component renders each example through the component root
-  // (?capture=<id>&path=component) instead of compile().
-  // capture-chart renders each example's hand-written JSX (DocExample.chart).
-  const pathQuery = mode === "capture-component"
-    ? "&path=component"
-    : mode === "capture-chart"
-    ? "&path=chart"
-    : "";
-  const [outDir, ...ids] = rest;
+/** Captures each example's settled frame into `outDir`; returns the ids missed. */
+async function captureFrames(
+  ids: readonly string[],
+  outDir: string,
+  pathQuery: string,
+): Promise<string[]> {
+  const missed: string[] = [];
   await Deno.mkdir(outDir, { recursive: true });
   await buildGate("frames");
   const host = "127.0.0.1";
@@ -115,6 +111,7 @@ if (
           );
         } catch (error) {
           console.log(`NO FRAME ${id}: ${(error as Error).message}`);
+          missed.push(id);
           continue;
         }
         await Deno.writeFile(
@@ -128,6 +125,88 @@ if (
     server.kill("SIGTERM");
     await server.status;
   }
+  return missed;
+}
+
+/**
+ * Glyph anti-aliasing depends on atlas packing order, which depends on mount
+ * history: the same chart can differ from itself by up to ~24 per channel in
+ * text pixels. Marks and grids that move or recolor differ by far more.
+ */
+const MAX_AA_DIFFERENCE = 32;
+
+/** Every doc example id in the example sources (2D examples, 3D showcases). */
+async function exampleIds(): Promise<string[]> {
+  const docs = new URL("../src/docs/", import.meta.url);
+  const ids = new Set<string>();
+  for (const entry of Deno.readDirSync(docs)) {
+    if (
+      !/^(examples_|geom_examples_|example_3d|compose_example)/.test(entry.name)
+    ) {
+      continue;
+    }
+    const text = await Deno.readTextFile(new URL(entry.name, docs));
+    for (const m of text.matchAll(/^\s+id: "([A-Z]\w*)"/gm)) ids.add(m[1]);
+    for (const m of text.matchAll(/(?:Example|showcase)\("([A-Z]\w*)"/g)) {
+      ids.add(m[1]);
+    }
+  }
+  return [...ids].sort();
+}
+
+if (
+  mode === "capture" || mode === "capture-component" || mode === "capture-chart"
+) {
+  // capture-component renders each example through the component root
+  // (?capture=<id>&path=component) instead of compile().
+  // capture-chart renders each example's hand-written JSX (DocExample.chart).
+  const pathQuery = mode === "capture-component"
+    ? "&path=component"
+    : mode === "capture-chart"
+    ? "&path=chart"
+    : "";
+  const [outDir, ...ids] = rest;
+  await captureFrames(ids, outDir, pathQuery);
+} else if (mode === "check-goldens") {
+  // gggplot-w8zq: every doc example's JSX against the compile-path golden
+  // committed before compile() was retired.
+  const [goldenDir] = rest;
+  const ids = await exampleIds();
+  const goldens = new Set(
+    [...Deno.readDirSync(goldenDir)].map((e) => e.name.replace(/\.png$/, "")),
+  );
+  const failures: string[] = ids.filter((id) => !goldens.has(id)).map((id) =>
+    `${id}: no golden (capture one with \`capture-chart\` once it is right)`
+  );
+  const outDir = await Deno.makeTempDir({ prefix: "gggplot-goldens-" });
+  const missed = await captureFrames(
+    ids.filter((id) => goldens.has(id)),
+    outDir,
+    "&path=chart",
+  );
+  failures.push(...missed.map((id) => `${id}: no frame captured`));
+  await withBrowser(async (page) => {
+    for (const id of ids) {
+      if (!goldens.has(id) || missed.includes(id)) continue;
+      const result = await decodePixels(
+        page,
+        dataUrl(Deno.readFileSync(`${goldenDir}/${id}.png`)),
+        dataUrl(Deno.readFileSync(`${outDir}/${id}.png`)),
+      );
+      console.log(`${id}: ${JSON.stringify(result)}`);
+      if (result.changed < 0) failures.push(`${id}: frame size changed`);
+      else if (result.maxDifference > MAX_AA_DIFFERENCE) {
+        failures.push(
+          `${id}: ${result.changed} pixels differ, max ${result.maxDifference} (> ${MAX_AA_DIFFERENCE})`,
+        );
+      }
+    }
+  });
+  if (failures.length) {
+    console.error(failures.join("\n"));
+    Deno.exit(1);
+  }
+  console.log(`Golden-frame gate passed for ${ids.length} examples.`);
 } else if (mode === "compare") {
   const [dirA, dirB] = rest;
   const names = [...Deno.readDirSync(dirA)].map((e) => e.name).filter((n) =>
