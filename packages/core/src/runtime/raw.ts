@@ -1,7 +1,7 @@
 import { type Column, typedArrayForColumn } from "../data/mod.ts";
 
 /**
- * Stable CPU lowering for the mounted backend's RawData source.
+ * Stable CPU lowering for the mounted backend's raw sources (runtime/live.tsx).
  * A column identity change produces a new array and therefore one upload;
  * view-only updates retain the cached array and do not upload.
  *

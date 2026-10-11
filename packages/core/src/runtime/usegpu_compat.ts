@@ -95,6 +95,12 @@ export type UseRawTensorSource = (data: {
   version: number;
 }) => unknown;
 export type UseNoRawTensorSource = () => void;
+/** Uploads `array` once per identity and returns its storage source. */
+export type UseRawSource = (
+  array: Float32Array | Uint32Array,
+  format: string,
+) => GPUStorageSource;
+export type UseNoRawSource = () => void;
 
 export type UseShader = (shader: unknown, values: unknown[]) => unknown;
 export type UseShaderRef = (value: unknown) => unknown;
@@ -103,13 +109,6 @@ export interface MaterialContextValue {
   [key: string]: unknown;
 }
 export type UseMaterialContext = () => MaterialContextValue;
-
-/** RawData mounts a typed column and yields its GPU storage source. */
-export type RawDataComponent = LiveComponent<{
-  data: Float32Array | Uint32Array;
-  format: "f32" | "u32";
-  children: (source: GPUStorageSource) => LiveElement;
-}>;
 
 /**
  * Picks the namespace that actually carries the API.
@@ -156,7 +155,6 @@ const workbench = interop<{
   Stage: LiveComponent;
   Kernel: LiveComponent;
   Readback: LiveComponent;
-  RawData: RawDataComponent;
   FaceLayer: LiveComponent;
   useDeviceContext: UseDeviceContext;
   useSource: UseSource;
@@ -168,6 +166,9 @@ const workbench = interop<{
   useLineSegmentsSource: UseLineSegmentsSource;
   useRawTensorSource: UseRawTensorSource;
   useNoRawTensorSource: UseNoRawTensorSource;
+  useRawSource: UseRawSource;
+  useNoRawSource: UseNoRawSource;
+  QueueReconciler: { signal: () => LiveElement };
   LoopContext: unknown;
   useShader: UseShader;
   useShaderRef: UseShaderRef;
@@ -230,7 +231,6 @@ export const Kernel = workbench.Kernel;
  * allocated once, not one per call. See runtime/resident_readback.tsx.
  */
 export const Readback = workbench.Readback;
-export const RawData = workbench.RawData;
 export const FaceLayer = workbench.FaceLayer;
 export const useDeviceContext = workbench.useDeviceContext;
 export const useSource = workbench.useSource;
@@ -244,6 +244,15 @@ export const LineLayer = workbench.LineLayer;
 export const useLineSegmentsSource = workbench.useLineSegmentsSource;
 export const useRawTensorSource = workbench.useRawTensorSource;
 export const useNoRawTensorSource = workbench.useNoRawTensorSource;
+export const useRawSource = workbench.useRawSource;
+export const useNoRawSource = workbench.useNoRawSource;
+/**
+ * `QueueReconciler.signal()` is an element that, when (re)rendered, tells the
+ * frame queue to run again. <RawData> renders one whenever its source version
+ * moves; a flat raw-source hook does not, so a component built on hooks must
+ * render its own or compute that reads the new data never dispatches.
+ */
+export const QueueReconciler = workbench.QueueReconciler;
 /**
  * SyncLoop's frame request, `(fiber?) => time`. Called with no fiber it just
  * enqueues one animation frame, and it is safe to call outside render. The

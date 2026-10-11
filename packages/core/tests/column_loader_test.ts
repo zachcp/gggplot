@@ -1,6 +1,6 @@
 import { assert, assertEquals, assertExists, assertThrows } from "@std/assert";
 import { ingest, typedArrayForColumn } from "../src/data/mod.ts";
-import { GPUDataProvider } from "../src/runtime/live.tsx";
+import { type ColumnMount, planColumnMounts } from "../src/runtime/live.tsx";
 import {
   createResidentColumn,
   destroyResidentColumns,
@@ -11,18 +11,15 @@ import {
   isResidentColumn,
   type MountedDataFrame,
 } from "../src/runtime/types.ts";
-import { RawData } from "../src/runtime/usegpu_compat.ts";
 import type { FieldSpec } from "../src/plan/mod.ts";
 
 // The column half of the loader tier (gggplot-vs7.10). Two claims are under
-// test: a resident column mounts with NO upload node at all, and the mount
-// chain's DEPTH no longer depends on which columns happen to be present.
+// test: a resident column mounts with NO upload at all, and every requested
+// field occupies exactly one mount slot whether or not its column is present.
 //
-// GPUDataProvider is a plain function returning a Live element tree, so the
-// chain can be walked directly -- no device and no mounted tree needed. The one
-// node we must not actually invoke is RawData itself (it allocates); at that
-// level the walker calls its `children` with a stand-in source, which is exactly
-// what RawData does once it has uploaded.
+// planColumnMounts is the pure decision GPUDataProvider makes before its one
+// flat raw-source hook per field (gggplot-vnh.17), so it is tested directly --
+// no device and no mounted tree needed.
 
 const requireWebGpu = Deno.env.get("GGGPLOT_REQUIRE_WEBGPU") === "1";
 
@@ -41,56 +38,20 @@ async function requestTestDevice(): Promise<GPUDevice | null> {
 }
 
 interface Walk {
-  /** One entry per mounted level, in order. */
-  levels: ("RawData" | "hold")[];
-  /** Typed arrays RawData was asked to upload, by field name. */
+  /** One entry per mount slot, in order. */
+  levels: ColumnMount["kind"][];
+  /** Typed arrays that would be uploaded, by field name. */
   uploads: Record<string, Float32Array | Uint32Array>;
+  /** The sources that reach the consumer for resident fields. */
   sources: Record<string, GPUStorageSource>;
 }
 
-// deno-lint-ignore no-explicit-any
-const any = (value: unknown): any => value;
-
-function stubSource(name: string, length: number): GPUStorageSource {
-  return {
-    buffer: { __stub: name } as unknown as GPUBuffer,
-    format: "f32",
-    length,
-    size: [length],
-    version: 1,
-  };
-}
-
-function walk(
-  data: MountedDataFrame,
-  fields: FieldSpec[],
-): Walk {
+function walk(data: MountedDataFrame, fields: FieldSpec[]): Walk {
   const result: Walk = { levels: [], uploads: {}, sources: {} };
-  let element = any(GPUDataProvider)({
-    data,
-    fields,
-    children: (sources: Record<string, GPUStorageSource>) => {
-      result.sources = sources;
-      return null;
-    },
-  });
-  let guard = 0;
-  while (element && any(element).f && guard++ < 64) {
-    const node = any(element);
-    const props = node.args[0];
-    if (node.f === RawData) {
-      result.levels.push("RawData");
-      // Whichever field this level is for is the one not yet in `uploads`.
-      const field = fields.find((f) =>
-        !(f.name in result.uploads) && data[f.name] &&
-        !isResidentColumn(data[f.name])
-      )!;
-      result.uploads[field.name] = props.data;
-      element = props.children(stubSource(field.name, props.data.length));
-    } else {
-      result.levels.push("hold");
-      element = node.f(props);
-    }
+  for (const mount of planColumnMounts(data, fields)) {
+    result.levels.push(mount.kind);
+    if (mount.kind === "upload") result.uploads[mount.name] = mount.array;
+    if (mount.kind === "resident") result.sources[mount.name] = mount.source;
   }
   return result;
 }
@@ -109,19 +70,19 @@ Deno.test("the mount chain is one level per requested field, present or not", ()
   }, { columns: { g: { type: "factor" } } });
 
   const all = walk(full, FIELDS);
-  assertEquals(all.levels, ["RawData", "RawData", "RawData"]);
+  assertEquals(all.levels, ["upload", "upload", "upload"]);
 
-  // Drop the middle column. Before gggplot-vs7.10 this collapsed the chain to
-  // two levels, which moved `y`'s RawData UP a level and remounted it -- a
-  // re-upload caused purely by an unrelated field going missing.
+  // Drop the middle column. Before gggplot-vs7.10 this collapsed the mount
+  // to two slots, which moved `y` UP a slot and remounted it -- a re-upload
+  // caused purely by an unrelated field going missing.
   const partial = { ...full };
   delete (partial as Record<string, unknown>).g;
   const some = walk(partial, FIELDS);
-  assertEquals(some.levels, ["RawData", "hold", "RawData"]);
-  assertEquals(Object.keys(some.sources).sort(), ["x", "y"]);
+  assertEquals(some.levels, ["upload", "absent", "upload"]);
+  assertEquals(Object.keys(some.uploads).sort(), ["x", "y"]);
 
-  // The depth is a function of fields.length alone, which is the property that
-  // makes a level's position stable.
+  // The slot count is a function of fields.length alone, which is the property
+  // that keeps each field's hook slot stable.
   assertEquals(all.levels.length, FIELDS.length);
   assertEquals(some.levels.length, FIELDS.length);
 });
@@ -141,10 +102,10 @@ Deno.test("a resident column mounts with no upload node at all", async () => {
   ];
 
   const walked = walk(frame, fields);
-  // The resident field's level holds depth without mounting RawData -- that
-  // absence IS the zero-upload claim, since RawData is the only thing in this
-  // chain that allocates or writes.
-  assertEquals(walked.levels, ["hold", "RawData"]);
+  // The resident field holds its slot without an upload -- that absence IS the
+  // zero-upload claim, since the raw-source hook is the only thing here that
+  // allocates or writes.
+  assertEquals(walked.levels, ["resident", "upload"]);
   assertEquals(Object.keys(walked.uploads), ["y"]);
   // And the source that reaches the consumer is the caller's own buffer, by
   // identity -- not a copy of it.

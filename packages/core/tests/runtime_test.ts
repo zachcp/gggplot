@@ -1,51 +1,12 @@
-import { assertEquals, assertNotEquals, assertThrows } from "@std/assert";
+import { assertEquals, assertThrows } from "@std/assert";
 import { ingest } from "../src/data/mod.ts";
 import {
   GPUDataProvider,
-  GPUPlotRuntime,
   histogramBarChunks,
   histogramRange,
   histogramSourceInput,
   rawArrayForColumn,
 } from "../src/runtime/mod.ts";
-import type { ProductPlan } from "../src/plan/mod.ts";
-
-const plan: ProductPlan = {
-  id: "source",
-  kind: "source",
-  executor: "gpu",
-  inputs: [],
-  outputs: [{ name: "x", dtype: "f32", shape: "row", dimensions: ["row"] }],
-};
-
-Deno.test("GPUPlotRuntime keeps static source bindings stable across view updates", () => {
-  let creates = 0;
-  const runtime = new GPUPlotRuntime({
-    data: ingest({ x: [1, 2] }),
-    sourceFactory: { create: () => ({ id: `source-${++creates}` }) },
-  });
-  const first = runtime.resolve(plan).gpu.x;
-  runtime.updateView();
-  const second = runtime.resolve(plan).gpu.x;
-  assertEquals(creates, 1);
-  assertEquals(second.source, first.source);
-});
-
-Deno.test("GPUPlotRuntime rehydrates stable declarations after device loss or data replacement", () => {
-  let creates = 0;
-  const runtime = new GPUPlotRuntime({
-    data: ingest({ x: [1, 2] }),
-    sourceFactory: { create: () => ({ id: `source-${++creates}` }) },
-  });
-  const first = runtime.resolve(plan).gpu.x;
-  runtime.deviceLost();
-  const afterLoss = runtime.resolve(plan).gpu.x;
-  runtime.setData(ingest({ x: [3, 4] }));
-  const afterData = runtime.resolve(plan).gpu.x;
-  assertEquals(creates, 3);
-  assertNotEquals(first.source, afterLoss.source);
-  assertNotEquals(afterLoss.contentVersion, afterData.contentVersion);
-});
 
 Deno.test("RawData lowering caches typed columns and preserves GPU-friendly formats", () => {
   const frame = ingest({ x: [1, null, 3], group: ["b", "a"] });

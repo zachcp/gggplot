@@ -203,6 +203,25 @@ landing.
 held. The measured deletion was 328 lines, with no new abstractions and no pixel
 change.
 
+### Landed (gggplot-wwu)
+
+The landed version differs from the spike's in three places:
+
+- **The flat mount renders `QueueReconciler.signal()`** whenever an upload's
+  version moves, as `<RawData>` did, so a data replacement schedules the frame
+  that re-dispatches kernels reading it. `gggplot-eudx` (a gate proving that end
+  to end) stays open.
+- **`FacetPanel` stays exported**, re-implemented over `<Transform>`. Removing a
+  public export waits for sign-off.
+- **The decision is a pure `planColumnMounts()`**, so the slot-stability and
+  resident zero-upload tests run headless. The spike's empty-column fix (a
+  one-element placeholder reporting length 0) is adopted.
+
+Parity at landing: 7 doc examples captured with `example_frames.ts`
+(`PolarPoints`, `PolarThetaY`, `ScatterLine`, `FlippedBars`, `ZoomedPanel`,
+`FacetedScatter`, `ResidentInlineBars`) are pixel-identical to the tree before
+the landing.
+
 ## 7. Recommendations
 
 1. **Adopt "one versioning mechanism: Use.GPU's `version`"** as an explicit
