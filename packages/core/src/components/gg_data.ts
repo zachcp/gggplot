@@ -50,7 +50,8 @@ export interface GGDataValue {
   columns: Record<string, GGDataColumn>;
 }
 
-export const GGDataContext = makeContext<GGDataValue | null>(
+/** A Live context (the compat surface types contexts as opaque). */
+export const GGDataContext: unknown = makeContext<GGDataValue | null>(
   null,
   "GGDataContext",
 );

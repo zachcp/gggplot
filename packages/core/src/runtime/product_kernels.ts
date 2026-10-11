@@ -21,6 +21,7 @@ import {
   evalSize,
   type KernelSpec,
   linkSource,
+  productPassPlan,
   type ProductSpec,
   type Symbols,
   validateProductSpec,
@@ -166,53 +167,42 @@ export const ProductKernels = (props: ProductKernelsProps): LiveElement => {
   const { spec, buffers, lengths, generation } = allocation;
   const device = useDeviceContext();
 
+  // One resolved plan per shape: sizes, args in kernel order, and ports by
+  // name (productPassPlan, shared with the link tests).
+  const symbolKey = JSON.stringify(symbols);
+  const plan = useMemo(() => productPassPlan(spec, symbols), [spec, symbolKey]);
+  const sizes = useMemo(() => plan.map((p) => [p.size, 1]), [plan]);
+
   // Views per pass, by port name. Keyed on the buffers and input buffers so
   // they are identity-stable across versions (a version bump re-dispatches,
   // never relinks).
   const inputKey = spec.inputs.map((port) => inputs[port.name]?.buffer);
-  const passes = useMemo(() =>
-    spec.passes.map((pass) => {
-      const portOf = (name: string): GPUStorageSource => {
-        const owned = buffers[name];
-        if (owned) return owned;
-        const input = inputs[name];
-        if (!input) {
-          throw new Error(`[gggplot] ${spec.id}: input ${name} unbound`);
-        }
-        return input;
-      };
-      const write = pass.kernel.write;
-      const target = portOf(pass.write);
-      const length = lengths[pass.write] ?? target.length;
+  const passes = useMemo(() => {
+    const portOf = (name: string): GPUStorageSource => {
+      const owned = buffers[name];
+      if (owned) return owned;
+      const input = inputs[name];
+      if (!input) {
+        throw new Error(`[gggplot] ${spec.id}: input ${name} unbound`);
+      }
+      return input;
+    };
+    return plan.map((pass) => {
+      const target = portOf(pass.write.port);
       return {
         shader: linkedShader(pass.kernel),
         target: storageTarget(
           target.buffer,
-          write.atomic ? `atomic<${write.format}>` : write.format,
-          length,
+          pass.write.format,
+          lengths[pass.write.port] ?? target.length,
         ),
-        sources: pass.kernel.reads.map((read) => {
-          const port = portOf(pass.reads![read.name]);
+        sources: pass.reads.map((read) => {
+          const port = portOf(read.port);
           return storageSource(port.buffer, read.format, port.length);
         }),
       };
-    }), [spec, buffers, lengths, ...inputKey]);
-
-  // Sizes and args are scalars: <Kernel> takes them as values and re-reads
-  // args as uniforms, so these may change without relinking. Memoized on the
-  // symbols' values so an unchanged shape keeps the same arrays.
-  const symbolKey = JSON.stringify(symbols);
-  const dispatch = useMemo(() =>
-    spec.passes.map((pass) => ({
-      size: evalSize(pass.size, symbols),
-      args: pass.kernel.args.map((arg) =>
-        evalSize(pass.args![arg.name], symbols)
-      ),
-    })), [spec, symbolKey]);
-  const sizes = useMemo(
-    () => dispatch.map((d) => [d.size, 1]),
-    [dispatch],
-  );
+    });
+  }, [plan, buffers, lengths, ...inputKey]);
 
   // Pending init: arm the summary's marker once per version, before this
   // version dispatches (reconciliation precedes the frame's submit).
@@ -237,14 +227,14 @@ export const ProductKernels = (props: ProductKernelsProps): LiveElement => {
     [decide, generation, version],
   );
 
-  const kernels = spec.passes.flatMap((_, i) =>
-    dispatch[i].size === 0 ? [] : [
+  const kernels = plan.flatMap((pass, i) =>
+    pass.size === 0 ? [] : [
       createElement(
         Stage,
         { target: passes[i].target },
         createElement(Kernel, {
           shader: passes[i].shader,
-          args: dispatch[i].args,
+          args: pass.args,
           sources: passes[i].sources,
           size: sizes[i],
           initial: true,

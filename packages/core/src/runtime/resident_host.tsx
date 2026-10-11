@@ -42,11 +42,7 @@ import {
   RESIDENT_STAT_COUNT_PRODUCT,
 } from "../compile/resident.ts";
 import { GPUDataProvider } from "./live.tsx";
-import {
-  type ResidentCountProduct,
-  ResidentCountProvider,
-} from "./resident_count_live.tsx";
-import { CountKernels } from "./resident_count_kernel_live.tsx";
+import { type CountProductOptions, useCountProduct } from "./count_product.ts";
 import {
   decideGridSummary,
   type GridSummary,
@@ -223,7 +219,24 @@ export function collectResidentNodes(
   return { tree: visit(tree), nodes };
 }
 
-/** Builds one node's kernel and yields its product. */
+/**
+ * Builds one stat_count node's product through the ProductSpec adapter
+ * (gggplot-034) and yields it with the elements for the frame's <Compute>.
+ */
+const CountProductNode = (
+  { x, group, options, summary, children }: {
+    x: GPUStorageSource;
+    group?: GPUStorageSource;
+    options: CountProductOptions;
+    summary: SummaryChannel;
+    children: (result: HoistedResult) => LiveElement;
+  },
+): LiveElement => {
+  const { product, computes } = useCountProduct({ x, group, options, summary });
+  return children({ product, computes });
+};
+
+/** Builds one node's product and yields it. */
 const HoistedCount = (
   { props, children }: {
     props: Record<string, unknown>;
@@ -235,11 +248,20 @@ const HoistedCount = (
   const paletteColors = props.paletteColors as string[] | undefined;
   const opacity = props.opacity as number | undefined;
   const base = props.options as Record<string, unknown>;
-  // Matches ResidentCountView's own palette handling so the hoisted kernel is
-  // built from identical options; a palette change re-keys the provider.
-  const options = paletteColors
-    ? { ...base, palette: paletteToRgbaF32(paletteColors, opacity ?? 1) }
-    : base;
+  // Matches ResidentCountView's own palette handling. Memoized on the colors:
+  // the palette is an input port uploaded per identity, so a fresh array each
+  // render would re-upload it every frame.
+  const palette = useMemo(
+    () =>
+      paletteColors ? paletteToRgbaF32(paletteColors, opacity ?? 1) : undefined,
+    [paletteColors?.join(","), opacity],
+  );
+  const options = useMemo((): CountProductOptions => ({
+    valuesCount: base.valuesCount as number,
+    groupsCount: base.groupsCount as number,
+    position: base.position as CountPosition | undefined,
+    ...(palette ? { palette } : {}),
+  }), [base.valuesCount, base.groupsCount, base.position, palette]);
   const fields = [
     { name: x, dtype: "u32", shape: "row", dimensions: ["row"] },
     ...(group
@@ -251,38 +273,12 @@ const HoistedCount = (
     data: props.data,
     fields,
     children: (sources: Record<string, GPUStorageSource>) =>
-      createElement(ResidentCountProvider, {
+      createElement(CountProductNode, {
         x: sources[x],
         group: group ? sources[group] : undefined,
         options,
-        // The frame owns submission now; see the module doc.
-        defer: true,
-        readSummary: summary.read,
-        children: (product: ResidentCountProduct) =>
-          children({
-            product,
-            // Real <Kernel>s rather than a recorded command buffer: this node's
-            // five passes are dispatched from the frame's compute pass by
-            // Use.GPU's own linker and dispatch gating (gggplot-vs7.7). The
-            // kernel object built by the provider above contributes only its
-            // buffers now — with `defer` set nothing ever calls its encode(),
-            // so its raw pipelines are never built. The readback rides in the
-            // same pass; it is declared after the kernels only for reading, as
-            // ReadbackPass sequences it regardless of tree order.
-            computes: [
-              createElement(CountKernels, {
-                product,
-                values: sources[x],
-                groups: group ? sources[group] : undefined,
-                position: (options as { position?: CountPosition }).position ??
-                  "stack",
-              }),
-              createElement(GridSummaryReadback, {
-                product,
-                channel: summary.channel,
-              }),
-            ],
-          }),
+        summary,
+        children,
       }),
   }) as LiveElement;
 };

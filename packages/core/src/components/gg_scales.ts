@@ -33,12 +33,14 @@ export interface GGPanelValue {
   dimensions: 2 | 3;
 }
 
-export const GGScalesContext = makeContext<GGScalesValue | null>(
+/** A Live context (the compat surface types contexts as opaque). */
+export const GGScalesContext: unknown = makeContext<GGScalesValue | null>(
   null,
   "GGScalesContext",
 );
 
-export const GGPanelContext = makeContext<GGPanelValue | null>(
+/** A Live context (the compat surface types contexts as opaque). */
+export const GGPanelContext: unknown = makeContext<GGPanelValue | null>(
   null,
   "GGPanelContext",
 );
