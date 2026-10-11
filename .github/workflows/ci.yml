@@ -89,9 +89,12 @@ jobs:
           GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
         run: deno task --cwd apps/site test:pixels
       # The component-first root against compile() (gggplot-2bj): pixel parity
-      # plus the work counters for resize, a fixed-aesthetic change and an
-      # inserted layer. Draws WebGPU, so informational until a GPU runner.
-      - name: Component root
+      # plus the component-path invariants (gggplot-bv0, docs/ARCHITECTURE.md):
+      # resize, a fixed aesthetic beside a GPU-bound one, an inserted layer, a
+      # touched column. It fails on any regression, but draws WebGPU, so it is
+      # non-blocking here until a GPU runner; the CPU half of each invariant is
+      # pinned by blocking headless tests in `deno task test`.
+      - name: Component root and invariants
         continue-on-error: true
         env:
           GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"

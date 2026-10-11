@@ -289,6 +289,29 @@ revisions, and pack keys remain unchanged. The
 [residency matrix](./RESIDENCY_MATRIX.md) is the authoritative detailed list of
 which operations currently take each flow.
 
+### Component-path invariants (gggplot-bv0)
+
+The component root (`components/gg_plot_root.ts`, `root_assembly.ts`) makes four
+performance promises, held by a standing gate:
+
+| Change                                    | Promise                                                                               |
+| ----------------------------------------- | ------------------------------------------------------------------------------------- |
+| Resize                                    | 0 stats, 0 trainings, 0 lowerings (layout-bound text/label/rug aside), 0 mark uploads |
+| A fixed aesthetic beside a GPU-bound one  | 0 mark uploads (uniform writes only)                                                  |
+| Adding a layer                            | only that layer mounts; no sibling remounts                                           |
+| A column touched in place (`touchColumn`) | exactly that column uploads, and the layers reading it re-prepare                     |
+
+`apps/site/scripts/component_root_check.ts`
+(`deno task --cwd apps/site
+test:component-root`) measures each in the browser
+through the GPU instrumentation and the root's work counters (`componentProbe`),
+and fails on any regression. It runs in CI's browser job, which is non-blocking
+until a GPU runner exists (SwiftShader cannot draw WebGPU; see the job comment
+in `.github/workflows/ci.yml`). The CPU side of each promise is also pinned by
+blocking headless tests: `component_resize_test.ts` (resize, touched columns),
+`scale_change_classes_test.ts` (what each scale change invalidates),
+`component_tensor_reuse_test.ts` and `discrete_binding_test.ts`.
+
 ### Two compiler products
 
 - **Semantic plan (CPU, serializable).** The durable intermediate: effective

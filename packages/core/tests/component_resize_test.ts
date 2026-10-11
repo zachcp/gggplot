@@ -13,7 +13,7 @@ import { GeomLine, GeomPoint, GeomText } from "../src/components/geoms.ts";
 import { Labs } from "../src/components/plot_parts.ts";
 import { componentProbe } from "../src/components/probe.ts";
 import { buildFacetPanels, type RenderNode } from "../src/compile/mod.ts";
-import { ingest } from "../src/data/mod.ts";
+import { ingest, touchColumn } from "../src/data/mod.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
 
 const data = ingest({
@@ -106,4 +106,43 @@ Deno.test("layout-bound geoms re-lower on a resize; the rest do not", () => {
   // Text places glyphs in panel pixels, so it alone lowers again.
   assertEquals(componentProbe.lowerCalls, 1);
   assertEquals(componentProbe.trainCalls, 0);
+});
+
+Deno.test("a column touched in place re-prepares and re-packs what read it", () => {
+  const frame = ingest({ x: [1, 2, 3], y: [3, 1, 2], z: [5, 6, 7] });
+  const base = plotSpec(frame, { x: "x", y: "y" }, undefined, undefined, []);
+  const layers = [{
+    kind: "layer" as const,
+    id: 1,
+    layer: layerFromProps(GeomPoint.layerProps({})),
+  }];
+  const caches = createRootCaches();
+  const panels = () => buildFacetPanels(base.facet, base.data, base.labels);
+  const layout = {
+    width: 500,
+    height: 400,
+    measureText: approximateTextMeasurer,
+  };
+  const first = layoutRoot(
+    prepareRoot(base, layers, panels(), caches)!,
+    layout,
+    caches,
+  );
+  // Same frame, same column objects: only y's version moves.
+  frame.y.values[0] = 9;
+  touchColumn(frame.y);
+  componentProbe.reset();
+  const second = layoutRoot(
+    prepareRoot(base, layers, panels(), caches)!,
+    layout,
+    caches,
+  );
+  assertEquals(componentProbe.statCalls, 1, "the layer re-prepared");
+  assertEquals(componentProbe.lowerCalls, 1, "and re-lowered");
+  const ys = (tree: RenderNode) => {
+    const [array] = marks(tree).values() as IterableIterator<Float32Array>;
+    return Array.from(array).filter((_, i) => i % 2 === 1);
+  };
+  assertEquals(ys(first.tree)[0], 3);
+  assertEquals(ys(second.tree)[0], 9);
 });

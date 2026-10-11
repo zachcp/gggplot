@@ -27,7 +27,7 @@ import {
 } from "../compile/mod.ts";
 import { reuseUnchanged } from "../compile/stable_tensors.ts";
 import { GG, type SpecPart } from "../dsl/base.ts";
-import { typedArrayForColumn } from "../data/mod.ts";
+import { columnVersion, typedArrayForColumn } from "../data/mod.ts";
 import { LAYOUT_BOUND_GEOMS, lowerLayer } from "../geom/mod.ts";
 import type {
   Aes,
@@ -54,6 +54,8 @@ export interface PreparedEntry {
   data: DataFrame;
   /** What prepareLayer read off the spec (prepareSignature, gggplot-2gu). */
   signature: string;
+  /** The content versions of the rows it read (gggplot-67c). */
+  versions: string;
   prepared: PreparedLayer;
   removed: LayerRemovals;
 }
@@ -62,6 +64,8 @@ export interface LoweredEntry {
   layer: Layer;
   mapping: Aes;
   data: DataFrame;
+  /** The content versions of the rows it lowered. */
+  versions: string;
   signature: string;
   measureText: unknown;
   nodes: RenderNode[];
@@ -303,8 +307,11 @@ export function prepareRoot(
       // spec its signature names: a theme, labels, coord limits or a scale's
       // range leave the prepared rows (and the stat) alone.
       const signature = prepareSignature(spec, layer, { faceted, standalone });
+      // A column touched in place (touchColumn) keeps the frame's identity
+      // and moves only its version, so the versions are part of the key.
+      const versions = versionKey(layer.data ?? panel.data);
       let entry = prev && prev.layer === layer && prev.data === panel.data &&
-          prev.signature === signature
+          prev.signature === signature && prev.versions === versions
         ? prev
         : undefined;
       if (!entry) {
@@ -316,7 +323,14 @@ export function prepareRoot(
           // root hosts (gggplot-280); the rest take their CPU stat.
           resident: true,
         });
-        entry = { layer, data: panel.data, signature, prepared, removed };
+        entry = {
+          layer,
+          data: panel.data,
+          signature,
+          versions,
+          prepared,
+          removed,
+        };
         caches.prepared.set(key, entry);
       }
       recordRemovals(removals, layerIndex, layer.geom, entry.removed);
@@ -340,6 +354,13 @@ export function prepareRoot(
     trained: trainPlot(spec, prepared),
     diagnostics: sortedRemovals(removals),
   };
+}
+
+/** Every column's content version, as one comparable key. */
+export function versionKey(frame: DataFrame): string {
+  return Object.entries(frame).map(([name, column]) =>
+    `${name}:${columnVersion(column)}`
+  ).join("|");
 }
 
 /** The layout half of an assembly: the tree for one size. */
@@ -384,10 +405,12 @@ export function layoutRoot(
       : null;
     if (!bound && stop === undefined) unboundFrom.set(panelIndex, layerIndex);
     const signature = contextSignature(args, layoutBound, bound);
+    const versions = versionKey(data);
     const prev = caches.lowered.get(key);
     if (
       prev && prev.layer === layer && prev.mapping === mapping &&
-      prev.data === data && prev.signature === signature &&
+      prev.data === data && prev.versions === versions &&
+      prev.signature === signature &&
       (!layoutBound || prev.measureText === ctx.measureText)
     ) return prev.nodes;
     componentProbe.lowerCalls++;
@@ -406,6 +429,7 @@ export function layoutRoot(
       layer,
       mapping,
       data,
+      versions,
       signature,
       measureText: ctx.measureText,
       nodes,

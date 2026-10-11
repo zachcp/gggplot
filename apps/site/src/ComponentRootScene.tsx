@@ -30,6 +30,7 @@ import {
   type Layer,
   scaleColor,
   type SpecPart,
+  touchColumn,
   typedArrayForColumn,
   useGGColors,
   useGGSizes,
@@ -49,7 +50,7 @@ export interface ComponentRootState {
    * (gggplot-y43). "resident": a resident stat_count plot under <GGData>,
    * whose product must read the data tier's column, not upload its own.
    */
-  mode: "compile" | "component" | "shared" | "loaded" | "resident";
+  mode: "compile" | "component" | "shared" | "loaded" | "resident" | "bump";
   pointColor: string;
   /** Adds a third layer BEFORE the first two, the harder case for keyed reconciliation. */
   third: boolean;
@@ -77,6 +78,13 @@ export interface ComponentRootState {
   custom?: boolean;
   /** Shifts the custom points in y: the check that they render at all. */
   customOffset?: number;
+  /**
+   * With `scaled`: drop the size mapping and draw at this fixed size, beside
+   * the GPU-bound color (gggplot-bv0's fixed-aesthetic invariant).
+   */
+  fixedSize?: number;
+  /** In "bump" mode: each increment touches one column in place. */
+  bump?: number;
 }
 
 const data = scatterLine.spec!.data;
@@ -192,6 +200,25 @@ const RESIDENT_DATA = ingest({
   ),
 });
 const RESIDENT_LAYER = geomBar({ fill: "#2563eb" }).value as Layer;
+// Its own column objects, so touching one never disturbs the other modes.
+const BUMP_DATA = ingest(
+  Object.fromEntries(
+    Object.entries(data).map(([name, column]) => [
+      name,
+      [...(column.values as unknown[])],
+    ]),
+  ),
+);
+const BUMP_LAYER = geomPoint({ size: 6 }).value as Layer;
+const fixedSizeLayers = new Map<number, Layer>();
+const fixedSizeLayer = (size: number) => {
+  if (!fixedSizeLayers.has(size)) {
+    fixedSizeLayers.set(size, geomPoint({ size }).value as Layer);
+  }
+  return fixedSizeLayers.get(size)!;
+};
+const COLOR_ONLY_MAPPING = { x: "wt", y: "mpg", color: "mpg" };
+
 /** A stable producer: a new function would be a new load. */
 const LOAD = () => Promise.resolve(data);
 
@@ -222,9 +249,13 @@ function Instrumented({ children }: { children: LiveElement }): LiveElement {
     };
     const write = device.queue.writeBuffer.bind(device.queue);
     device.queue.writeBuffer = ((buffer, offset, payload, ...rest) => {
-      const name = columnBuffers.get(
-        ArrayBuffer.isView(payload) ? payload.buffer : payload,
-      );
+      const bytes = ArrayBuffer.isView(payload) ? payload.buffer : payload;
+      // A touched column lowers to a NEW typed array, so the bump frame is
+      // matched against its columns' current arrays at write time.
+      const name = columnBuffers.get(bytes) ??
+        Object.entries(BUMP_DATA).find(([, column]) =>
+          typedArrayForColumn(column).buffer === bytes
+        )?.[0];
       if (name) columnUploads[name] = (columnUploads[name] ?? 0) + 1;
       return write(buffer, offset, payload, ...rest);
     }) as GPUQueue["writeBuffer"];
@@ -246,6 +277,9 @@ function Plot(
         </GGPlot>
       </GGData>
     );
+  }
+  if (state.mode === "bump") {
+    return <BumpPlot bump={state.bump ?? 0} fonts={fonts} />;
   }
   if (state.mode === "loaded") {
     return (
@@ -276,6 +310,19 @@ function Plot(
       >
         <GGLayerPart layer={DISCRETE_LAYER} />
         <GGPart part={discretePart(state)} />
+      </GGPlot>
+    );
+  }
+  if (state.mode === "component" && state.scaled && state.fixedSize) {
+    return (
+      <GGPlot
+        data={data}
+        mapping={COLOR_ONLY_MAPPING}
+        theme={theme}
+        fontResources={fonts}
+      >
+        <GGLayerPart layer={fixedSizeLayer(state.fixedSize)} />
+        <GGPart part={colorPart(state.colorDomain ?? [10, 30])} />
       </GGPlot>
     );
   }
@@ -311,6 +358,22 @@ function Plot(
       <GGLayerPart key="points" layer={pointLayer(state.pointColor)} />
       <GGLayerPart key="line" layer={LINE_LAYER} />
     </GGPlot>
+  );
+}
+
+/** Touches BUMP_DATA.mpg once per increment, then plots the shared frame. */
+function BumpPlot(
+  { bump, fonts }: { bump: number; fonts: FontResources },
+): LiveElement {
+  useOne(() => {
+    if (bump) touchColumn(BUMP_DATA.mpg);
+  }, bump);
+  return (
+    <GGData data={BUMP_DATA}>
+      <GGPlot mapping={mapping} theme={theme} fontResources={fonts}>
+        <GGLayerPart layer={BUMP_LAYER} />
+      </GGPlot>
+    </GGData>
   );
 }
 
