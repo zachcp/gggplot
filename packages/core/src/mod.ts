@@ -29,6 +29,11 @@ export {
 } from "./components/gg_data.ts";
 export { GGLayerPart, GGPart, type PlotPart } from "./components/parts.ts";
 export {
+  GeomLayer,
+  type GeomLayerProps,
+  layerFromProps,
+} from "./components/geom_layer.ts";
+export {
   GGPanelContext,
   type GGPanelValue,
   GGScalesContext,
