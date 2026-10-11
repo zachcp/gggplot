@@ -241,6 +241,34 @@ try {
       scaledComponent,
     );
 
+    // Data producers (gggplot-y43): the same plot with its frame from
+    // <GGData load> renders identically to the direct frame.
+    const directFrame = await frameAfter(page, {
+      mode: "component",
+      scaled: false,
+      discrete: false,
+      third: false,
+      pointColor: "#3b82f6",
+      width: 600,
+    });
+    const loadedFrame = await frameAfter(page, { mode: "loaded" });
+    const loadedPixels = await compare(
+      page,
+      "loaded",
+      directFrame,
+      loadedFrame,
+    );
+    // A resident product under <GGData> reads the data tier's column: the
+    // category column uploads once, at mount, not again for the product.
+    const residentMount = await step(page, { mode: "resident" });
+    const residentFrame = await frameAfter(page, { width: 601 });
+    const residentPixels = await compare(
+      page,
+      "resident",
+      residentFrame,
+      residentFrame,
+    );
+
     // Custom primitives (gggplot-7j9): the point layer swapped for a custom
     // PointLayer inside <GGPanel>, bound through useGGColors/useGGSizes,
     // changes no pixel, before and after a domain change.
@@ -297,6 +325,11 @@ try {
     const report = {
       generatedAt: new Date().toISOString(),
       scaled: { scaledMount, scaledResize, domainChange, parity: parityScaled },
+      producers: {
+        loaded: loadedPixels,
+        residentUploads: residentMount.columnUploads,
+        residentVisible: residentPixels.visibleFraction,
+      },
       custom: {
         before: customPixels,
         shifted: customShiftPixels,
@@ -388,6 +421,21 @@ try {
       failures.push(
         `scaled: a domain change built ${domainChange.newShaderModules} shader modules, ${domainChange.newPipelines} pipelines`,
       );
+    }
+    if (loadedPixels.maxDifference > MAX_TEXT_AA_DIFFERENCE) {
+      failures.push(
+        `loaded: <GGData load> differs from the direct frame (${loadedPixels.changed} pixels, max ${loadedPixels.maxDifference})`,
+      );
+    }
+    if (residentMount.columnUploads.category !== 1) {
+      failures.push(
+        `resident: the category column uploaded ${
+          residentMount.columnUploads.category ?? 0
+        } times under <GGData> (want 1)`,
+      );
+    }
+    if (residentPixels.visibleFraction < 0.02) {
+      failures.push("resident: the resident plot under <GGData> drew nothing");
     }
     if (customShiftPixels.changed < 50) {
       failures.push(

@@ -81,3 +81,31 @@ Deno.test("a late column mounts only itself; a touched column re-uploads only it
   assertEquals(seen.value!.columns.x.source.version, xVersion);
   device.destroy();
 });
+
+// gggplot-y43: an async producer ends in the same column contract.
+Deno.test("GGData's load mounts nothing until it resolves, then mounts once", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+  const harness = liveGpuHarness(device);
+  const seen: { value: GGDataValue | null } = { value: null };
+  const Probe = () => {
+    seen.value = useContext<GGDataValue | null>(GGDataContext);
+    return null;
+  };
+  const frame = ingest({ x: [1, 2, 3], g: ["a", "b", "a"] });
+  let resolve: (data: typeof frame) => void = () => {};
+  const load = () => new Promise<typeof frame>((r) => (resolve = r));
+  harness.render(createElement(GGData, { load }, createElement(Probe)));
+  assertEquals(seen.value, null, "nothing below mounts while loading");
+  assertEquals(harness.writes.length, 0);
+  resolve(frame);
+  // Live re-renders the loader on its own schedule once the promise settles.
+  for (let i = 0; i < 50 && !seen.value; i++) {
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  assert(seen.value, "the loaded frame is provided");
+  assert(seen.value.frame === frame);
+  assertEquals(Object.keys(seen.value.columns).sort(), ["g", "x"]);
+  assertEquals(harness.writes.length, 2, "each column uploads once");
+  device.destroy();
+});

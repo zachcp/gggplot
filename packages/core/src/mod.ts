@@ -23,6 +23,7 @@ export {
   GGData,
   type GGDataColumn,
   GGDataContext,
+  type GGDataLoad,
   type GGDataProps,
   type GGDataValue,
   useGGData,

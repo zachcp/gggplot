@@ -9,6 +9,14 @@ import { Scene } from "./scene.tsx";
 import { ComponentScene } from "./component_scene.tsx";
 import { ChartScene } from "./chart_scene.tsx";
 import { useResolvedExample } from "./hooks.ts";
+import { loadStaticDataset } from "./docs/data/real.ts";
+
+/** One stable producer per dataset: a new function would be a new load. */
+const loaders = new Map<string, () => ReturnType<typeof loadStaticDataset>>();
+const datasetLoader = (id: "mpg" | "mtcars" | "iris") => {
+  if (!loaders.has(id)) loaders.set(id, () => loadStaticDataset(id));
+  return loaders.get(id)!;
+};
 
 /**
  * `?capture=<ExampleId>`: one doc example alone on a fixed-size canvas, so a
@@ -48,11 +56,17 @@ function CaptureExample(
       <LiveCanvas>
         {(canvas: HTMLCanvasElement) =>
           // `&path=component` renders the same spec through the component
-          // root (gggplot-b7f), for frame-by-frame parity.
-          liveElement(path === "component" ? ComponentScene : Scene, {
-            canvas,
-            spec,
-          })}
+          // root (gggplot-b7f), for frame-by-frame parity; a dataset
+          // example's frame then comes through <GGData load> (gggplot-y43).
+          path === "component"
+            ? liveElement(ComponentScene, {
+              canvas,
+              spec,
+              ...(example.dataSource
+                ? { load: datasetLoader(example.dataSource.id) }
+                : {}),
+            })
+            : liveElement(Scene, { canvas, spec })}
       </LiveCanvas>
     </div>
   );
