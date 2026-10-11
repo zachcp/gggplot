@@ -66,8 +66,6 @@ export type ComponentName =
   | "RadialViewport"
   /** Two-pass 3D scene: child 0 is orbit-camera content, child 1 flat overlay. */
   | "Scene3D"
-  /** Runtime-only host extension injected into the live 3D Cartesian scene. */
-  | "SceneExtras"
   /**
    * Component path only (gggplot-7j9): a <GGPanel>'s Live children, drawn in
    * each panel's data coordinates after its marks. Never emitted.

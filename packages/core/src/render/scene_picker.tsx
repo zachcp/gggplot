@@ -45,9 +45,9 @@ export type ScenePickPublish = (pick: ScenePickFn | null) => void;
 /**
  * Publish the scene's pointer-to-ray function to the host.
  *
- * Renders nothing. Mount it through GGPlot's sceneExtras, which places it
- * inside the panel's Cartesian node and therefore inside the 3D camera's
- * ViewContext — the flat overlay would resolve to the wrong camera.
+ * Renders nothing. Mount it inside <GGPanel>, which places it in the 3D
+ * scene's Cartesian and therefore inside the 3D camera's ViewContext — the
+ * flat overlay would resolve to the wrong camera.
  */
 export const ScenePicker = (
   { publish }: { publish: ScenePickPublish },

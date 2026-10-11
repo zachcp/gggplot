@@ -393,10 +393,6 @@ export const Scene3D = (
   );
 };
 
-/** Render a host-supplied live element inside the active Cartesian scene. */
-const SceneExtras = ({ content }: { content?: unknown }) =>
-  content == null ? null : createElement(Fragment, {}, content);
-
 /**
  * vec4 point tensors are handed to plot's <Point> as a raw source rather than
  * a plain positions prop. No format translation any more: FlatTensor.format is
@@ -453,7 +449,8 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
   ChunkedFace,
   BoundPoint,
   // A <GGPanel>'s children (gggplot-7j9), already Live elements.
-  PanelContent: ({ content }: { content: unknown }) => content,
+  PanelContent: ({ content }: { content: unknown[] }) =>
+    createElement(Fragment, {}, ...content),
   Label: (props: Record<string, unknown>) =>
     typeof props.angle === "number" && props.angle !== 0
       ? createElement(RotatedLabel, props)
@@ -474,7 +471,6 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
   PanelViewport,
   RadialViewport,
   Scene3D,
-  SceneExtras,
 };
 
 /** Mark-tensor prop names carried by Point-family RenderNodes (see
