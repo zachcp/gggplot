@@ -54,3 +54,27 @@ createElement(GGPlot, { spec }); // a wrong or missing prop is a type error
 
 `apps/site/src/live_jsx_example.tsx` holds the checked examples, including the
 wrong-prop cases that must keep failing; it is part of `deno task check`.
+
+## Layers as components (`<GeomLayer>`)
+
+A layer is now a child of the component root, in z-order:
+
+```tsx
+<GGPlot data={mpg} mapping={{ x: "displ", y: "hwy", color: "drv" }}>
+  <GeomLayer geom="point" size={3} opacity={0.55} />
+  <GeomLayer geom="smooth" method="loess" se={false} />
+</GGPlot>;
+```
+
+`<GeomLayer geom>` takes what the DSL's `geomX(opts)` took: `mapping`, a
+layer-only `data` (with `dataOptions`), `stat`, `position`, `inheritAes`, and
+every other prop as a geom/stat parameter. Defaults for `stat` and `position`
+come from the geom registry, as before, so `geomBar()` and
+`<GeomLayer geom="bar" />` build the same layer. Scales, coords, facets and
+themes are still passed as `<GGPart part>` until their own components land.
+
+Parity: of the 65 doc examples in the basics, stats, intervals and shapes pages,
+every example rendered through `<GeomLayer>` matches the compile path pixel for
+pixel, with two exceptions. Jittered examples vary run to run on either path
+(`gggplot-plrj`). Resident-eligible examples still take the CPU stats on the
+component path until the product tier arrives there (`gggplot-280`).

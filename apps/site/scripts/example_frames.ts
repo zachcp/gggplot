@@ -1,6 +1,7 @@
 // Capture doc examples' swap-chain frames, or compare two captured sets.
 //
 //   deno run -A scripts/example_frames.ts capture <outDir> <ExampleId>...
+//   deno run -A scripts/example_frames.ts capture-component <outDir> <ExampleId>...
 //   deno run -A scripts/example_frames.ts compare <dirA> <dirB>
 //
 // For refactors that must not change output: capture before, capture after,
@@ -70,7 +71,10 @@ const dataUrl = (bytes: Uint8Array) =>
   "data:image/png;base64," +
   btoa(Array.from(bytes, (c) => String.fromCharCode(c)).join(""));
 
-if (mode === "capture") {
+if (mode === "capture" || mode === "capture-component") {
+  // capture-component renders each example through the component root
+  // (?capture=<id>&path=component) instead of compile().
+  const pathQuery = mode === "capture-component" ? "&path=component" : "";
   const [outDir, ...ids] = rest;
   await Deno.mkdir(outDir, { recursive: true });
   await buildGate("frames");
@@ -91,7 +95,7 @@ if (mode === "capture") {
     }
     await withBrowser(async (page) => {
       for (const id of ids) {
-        await page.goto(`http://${host}:${port}/?capture=${id}`, {
+        await page.goto(`http://${host}:${port}/?capture=${id}${pathQuery}`, {
           waitUntil: "networkidle",
         });
         // The newest frame is kept; once the chart settles it is final.

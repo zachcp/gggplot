@@ -18,7 +18,7 @@ interface Props {
   spec: GGSpec;
 }
 
-const fontResources = createFontResources([
+export const fontResources = createFontResources([
   {
     family: "Basic",
     weight: 400,

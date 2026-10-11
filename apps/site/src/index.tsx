@@ -113,7 +113,10 @@ createRoot(root).render(
   query.has("capture")
     ? (
       <Suspense fallback={<p>Loading…</p>}>
-        <CaptureProbe id={query.get("capture")!} />
+        <CaptureProbe
+          id={query.get("capture")!}
+          path={query.get("path") ?? "compile"}
+        />
       </Suspense>
     )
     : query.has("component-root")
