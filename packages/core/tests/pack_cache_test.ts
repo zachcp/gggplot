@@ -20,7 +20,7 @@ import {
 import { compile, createPackCache } from "../src/compile/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import type { FlatTensor, MarkTopology } from "../src/compile/rendertree.ts";
-import { ingest } from "../src/data/mod.ts";
+import { ingest, touchColumn } from "../src/data/mod.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
 
 function findNodes(
@@ -225,7 +225,7 @@ Deno.test("pack cache: concave ChunkedFace loops are reference-identical across 
 // internal packing calls). What IS guaranteed, and asserted below: (1) the
 // color tensor's identity changes; (2) an UNRELATED layer (never mapped to
 // the invalidated column) is completely unaffected.
-Deno.test("pack cache: invalidate(colorColumn) misses only entries depending on it — unrelated layer's tensors stay ===", () => {
+Deno.test("pack cache: touchColumn(colorColumn) misses only entries depending on it — unrelated layer's tensors stay ===", () => {
   const typed = ingest({
     x: [0, 1, 2, 3],
     y: [0, 1, 4, 9],
@@ -248,13 +248,14 @@ Deno.test("pack cache: invalidate(colorColumn) misses only entries depending on 
   const sizes1 = point1.props.sizes as FlatTensor;
   const linePositions1 = positionsOf(line1);
 
-  cache.invalidate(typed.c);
+  // gggplot-67c: the column's version is the one change signal.
+  touchColumn(typed.c);
 
   const tree2 = compile(spec, { packCache: cache });
   const point2 = findNodes(tree2, "Point")[0];
   const line2 = findNodes(tree2, "ChunkedLine")[0];
 
-  // (1) The invalidated aesthetic's tensor changes identity...
+  // (1) The touched aesthetic's tensor changes identity...
   assertEquals(
     (point2.props.colors as FlatTensor).array === colors1.array,
     false,

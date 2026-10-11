@@ -120,8 +120,7 @@
                     "length": 16,
                     "size": [
                       16
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "loops",
@@ -209,8 +208,7 @@
                     "length": 16,
                     "size": [
                       16
-                    ],
-                    "version": 0
+                    ]
                   },
                   "concave": false
                 },
@@ -520,8 +518,7 @@
                     "length": 16,
                     "size": [
                       16
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "loops",
@@ -609,8 +606,7 @@
                     "length": 16,
                     "size": [
                       16
-                    ],
-                    "version": 0
+                    ]
                   },
                   "concave": false
                 },

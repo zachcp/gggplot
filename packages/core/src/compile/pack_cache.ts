@@ -29,15 +29,13 @@
 // ---------------------------------------------------------------------------
 // INVALIDATION STRUCTURE (the load-bearing choice)
 // ---------------------------------------------------------------------------
-// `revisions` is a WeakMap<Column | Float32Array, number> — one revision
-// counter per data column (a data/mod.ts NumericColumn/FactorColumn object)
-// or per Stage-A-output tensor array (used as Stage B's own dependency).
-// Every stage's cache key is a STRING that folds in the CURRENT revision of
-// every column/tensor it depends on (0 when the dependency has never been
-// invalidated, i.e. absent from the WeakMap — see revisionOf). invalidate()
-// simply increments that one entry; every lookup that used the old value
-// naturally builds a DIFFERENT key string next time and misses. No reverse
-// index from column -> cache entries is needed or maintained.
+// A column's revision is its content version (Column.version, bumped by
+// data/mod.ts's touchColumn: gggplot-67c's one versioning mechanism). Every
+// stage's cache key is a STRING that folds in the CURRENT revision of every
+// column it depends on (see revisionOf). Touching a column changes its
+// version, so every lookup that used the old value naturally builds a
+// DIFFERENT key string next time and misses. No reverse index from column ->
+// cache entries is needed or maintained.
 //
 // The cache STORE itself is a WeakMap<RevisionKey, Map<string, V>> — one
 // string-keyed Map of entries per "primary" column/tensor, reachable ONLY
@@ -54,7 +52,7 @@
 //       (e.g. a color column for a position-primaried entry) are NEVER
 //       stored by reference at all — only their revision NUMBER is read via
 //       revisionOf() and folded into the key string.
-//   (b) invalidate(column) MISSES ALL DEPENDENT ENTRIES: any cache key whose
+//   (b) touchColumn(column) MISSES ALL DEPENDENT ENTRIES: any cache key whose
 //       string included that column's old revision no longer matches the
 //       string built from its new (incremented) revision, so every future
 //       lookup for an entry that depended on it recomputes. This holds
@@ -120,7 +118,7 @@
 // Key = Stage A output tensor IDENTITY (used as the WeakMap ROOT, not part
 // of the string — object identity isn't meaningfully stringifiable, and
 // rooting on it means a Stage A cache MISS automatically produces a fresh
-// WeakMap key, so Stage B never needs its own invalidate() hook: Stage A
+// WeakMap key, so Stage B never needs its own invalidation hook: Stage A
 // identity changing IS Stage B's invalidation signal) + coord kind + theta
 // axis + theta domain/start/end + a fixed munch-policy version tag.
 //
@@ -130,7 +128,7 @@
 // identity transforms MUST reuse Stage A tensors unchanged (===, no copy)"
 // by construction, with no extra caching layer required. stageBTransformedMark
 // only ever runs for Polar views.
-import type { Column } from "../data/mod.ts";
+import { type Column, columnVersion } from "../data/mod.ts";
 import type { Aes, AesName, DataFrame, GeomKind, Layer } from "../ir/types.ts";
 import type { TrainedScale } from "../scale/mod.ts";
 import type { RenderNode } from "./rendertree.ts";
@@ -159,7 +157,6 @@ export const UNCACHEABLE_GEOMS: ReadonlySet<GeomKind> = new Set([
  * exactly as uncached as before this bead.
  */
 export class PackCache {
-  private readonly revisions = new WeakMap<RevisionKey, number>();
   private readonly stageAStore = new WeakMap<
     RevisionKey,
     Map<string, RenderNode[]>
@@ -171,20 +168,15 @@ export class PackCache {
     Map<string, RenderNode>
   >();
 
-  /** Current revision of `column`, or 0 if it has never been invalidated. */
-  revisionOf(column: RevisionKey | undefined): number {
-    if (!column) return 0;
-    return this.revisions.get(column) ?? 0;
-  }
-
   /**
-   * Bump a column/tensor's revision so every cache key that folded in its
-   * OLD revision misses on the next lookup. The escape hatch for hosts that
-   * mutate ingested data in place instead of rebuilding a spec (see
-   * data/mod.ts's immutability jsdoc).
+   * Current revision of `column`: its content version (gggplot-67c). A host
+   * that mutates a column in place calls data/mod.ts's touchColumn, and every
+   * key that folded in the old version misses. Stage-A output tensors never
+   * change in place, so a tensor's revision is always 0.
    */
-  invalidate(column: RevisionKey): void {
-    this.revisions.set(column, (this.revisions.get(column) ?? 0) + 1);
+  revisionOf(column: RevisionKey | undefined): number {
+    if (!column || column instanceof Float32Array) return 0;
+    return columnVersion(column);
   }
 
   /** Stage A: pack. `primary` roots collectibility (see module doc); may be

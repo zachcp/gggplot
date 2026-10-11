@@ -297,7 +297,6 @@ export function munchFlatNode(n: RenderNode): RenderNode {
     dims,
     length: newArray.length / dims,
     size: [newArray.length / dims],
-    version: positions.version,
   };
   const sourceIndex = Uint32Array.from(outSource);
 

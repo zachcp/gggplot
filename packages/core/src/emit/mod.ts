@@ -304,7 +304,7 @@ const useOptionalTensorSource = (tensor: any): any => {
       array: tensor.array,
       format: tensor.format,
       size: tensor.size,
-      version: tensor.version,
+      version: 0,
     });
   }
   useNoRawTensorSource();
@@ -397,7 +397,7 @@ function packDashUniforms(dash: any): any {
 }
 
 function computeArcLengths(positions: any, chunks: any): any {
-  const { array, dims, length, version } = positions;
+  const { array, dims, length } = positions;
   const out = new Float32Array(length);
   let vertex = 0;
   for (const chunkLength of chunks) {
@@ -414,7 +414,7 @@ function computeArcLengths(positions: any, chunks: any): any {
       out[vertex] = acc;
     }
   }
-  return { array: out, format: "f32", dims: 1, length, size: [length], version };
+  return { array: out, format: "f32", dims: 1, length, size: [length] };
 }
 
 const ChunkedLine = (props: any): any => {

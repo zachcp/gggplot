@@ -150,8 +150,7 @@
                     "size": [
                       2,
                       9
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -193,8 +192,7 @@
                     "size": [
                       2,
                       1
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -493,8 +491,7 @@
                     "size": [
                       2,
                       9
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -536,8 +533,7 @@
                     "size": [
                       2,
                       1
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",

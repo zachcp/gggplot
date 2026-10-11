@@ -168,7 +168,7 @@ export function computeArcLengths(
   positions: FlatTensor,
   chunks: Uint32Array,
 ): FlatTensor {
-  const { array, dims, length, version } = positions;
+  const { array, dims, length } = positions;
   const out = new Float32Array(length);
   let vertex = 0;
   for (const chunkLength of chunks) {
@@ -192,7 +192,6 @@ export function computeArcLengths(
     dims: 1,
     length,
     size: [length],
-    version,
   };
 }
 
@@ -217,7 +216,8 @@ function useOptionalTensorSource(tensor: FlatTensor | undefined): unknown {
         array: tensor.array,
         format: tensor.format,
         size: tensor.size,
-        version: tensor.version,
+        // Array identity decides the upload; a changed tensor is a new array.
+        version: 0,
       })
     );
   }

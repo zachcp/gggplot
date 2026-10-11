@@ -46,10 +46,7 @@ function assertFloat32Equivalent(actual: number[], expectedF64: number[]) {
   }
 }
 
-function flatPositions(
-  pts: [number, number][],
-  version = 0,
-): FlatTensor {
+function flatPositions(pts: [number, number][]): FlatTensor {
   const array = new Float32Array(pts.length * 2);
   pts.forEach(([x, y], i) => {
     array[i * 2] = x;
@@ -61,7 +58,6 @@ function flatPositions(
     dims: 2,
     length: pts.length,
     size: [pts.length],
-    version,
   };
 }
 
@@ -207,7 +203,6 @@ Deno.test("companion (2-color) repetition stays aligned through loop munching", 
     dims: 4,
     length: 4,
     size: [4],
-    version: 0,
   };
   const flat = node("Polygon", {
     positions: flatPositions(square),
@@ -283,7 +278,7 @@ Deno.test("munchFlatNode transforms a node by topology shape, independent of com
 Deno.test("polarizeNode transforms a FlatTensor+MarkTopology node regardless of component name", () => {
   const pts: [number, number][] = [[0, 10], [1, 20], [2, 30]];
   const flat = node("Face", {
-    positions: flatPositions(pts, 7),
+    positions: flatPositions(pts),
     topology: { kind: "points" },
   });
 
@@ -294,8 +289,8 @@ Deno.test("polarizeNode transforms a FlatTensor+MarkTopology node regardless of 
     Array.from(pos.array),
     [0, -Math.PI, 1, 0, 2, Math.PI],
   );
-  // Output version tracks input version (pointwise remap; same vertex set).
-  assertEquals(pos.version, 7);
+  // FlatTensor carries no version (gggplot-67c): identity decides uploads.
+  assertEquals("version" in pos, false);
   // A brand-new array — never mutates the (possibly cached/shared) input.
   const originalArray = (flat.props.positions as FlatTensor).array;
   assertEquals(Array.from(originalArray), [0, 10, 1, 20, 2, 30]);

@@ -129,8 +129,7 @@
                     "length": 8,
                     "size": [
                       8
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "loops",
@@ -183,8 +182,7 @@
                     "length": 8,
                     "size": [
                       8
-                    ],
-                    "version": 0
+                    ]
                   },
                   "concave": true
                 },
@@ -211,8 +209,7 @@
                     "length": 4,
                     "size": [
                       4
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -249,8 +246,7 @@
                     "length": 4,
                     "size": [
                       4
-                    ],
-                    "version": 0
+                    ]
                   },
                   "widths": {
                     "array": {
@@ -266,8 +262,7 @@
                     "length": 4,
                     "size": [
                       4
-                    ],
-                    "version": 0
+                    ]
                   }
                 },
                 "children": []
@@ -299,8 +294,7 @@
                     "length": 7,
                     "size": [
                       7
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -349,8 +343,7 @@
                     "length": 7,
                     "size": [
                       7
-                    ],
-                    "version": 0
+                    ]
                   },
                   "widths": {
                     "array": {
@@ -369,8 +362,7 @@
                     "length": 7,
                     "size": [
                       7
-                    ],
-                    "version": 0
+                    ]
                   }
                 },
                 "children": []
@@ -627,8 +619,7 @@
                     "length": 8,
                     "size": [
                       8
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "loops",
@@ -681,8 +672,7 @@
                     "length": 8,
                     "size": [
                       8
-                    ],
-                    "version": 0
+                    ]
                   },
                   "concave": true
                 },
@@ -709,8 +699,7 @@
                     "length": 4,
                     "size": [
                       4
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -747,8 +736,7 @@
                     "length": 4,
                     "size": [
                       4
-                    ],
-                    "version": 0
+                    ]
                   },
                   "widths": {
                     "array": {
@@ -764,8 +752,7 @@
                     "length": 4,
                     "size": [
                       4
-                    ],
-                    "version": 0
+                    ]
                   }
                 },
                 "children": []
@@ -797,8 +784,7 @@
                     "length": 7,
                     "size": [
                       7
-                    ],
-                    "version": 0
+                    ]
                   },
                   "topology": {
                     "kind": "polyline",
@@ -847,8 +833,7 @@
                     "length": 7,
                     "size": [
                       7
-                    ],
-                    "version": 0
+                    ]
                   },
                   "widths": {
                     "array": {
@@ -867,8 +852,7 @@
                     "length": 7,
                     "size": [
                       7
-                    ],
-                    "version": 0
+                    ]
                   }
                 },
                 "children": []
