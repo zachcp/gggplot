@@ -22,7 +22,7 @@ import {
 import { ProductKernels, useProductAllocation } from "./product_kernels.ts";
 import { DOMAIN_FRAME_BUDGET } from "./resident_domain_kernel_live.tsx";
 import type { GridSummary } from "./resident_grid_pending.ts";
-import type { ResidentHistogramProduct } from "./resident_live.tsx";
+import type { ResidentGridProduct } from "./resident_products.ts";
 import type { ReadbackChannel } from "./resident_readback.tsx";
 import type { GPUStorageSource } from "./types.ts";
 import { dispatchVersion, stamped } from "./generation_gate.ts";
@@ -46,7 +46,7 @@ export interface HistogramProductOptions {
 
 /** What the node yields: a null product while the bounds are in flight. */
 export interface HistogramProductResult {
-  product: (ResidentHistogramProduct & { hoistedBounds: unknown }) | null;
+  product: ResidentGridProduct | null;
   computes: LiveElement[];
 }
 

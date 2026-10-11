@@ -77,7 +77,7 @@ export const residentCategoricalCount: DocExample = {
   description:
     "Twenty thousand factor ids are counted into a compact GPU grid and consumed directly by bar topology.",
   whatChanged:
-    "stat_count keeps its u32 count grid resident; only bounded y-domain metadata crosses back for the standalone view.",
+    "stat_count keeps its u32 count grid resident; only its bounded summary (the stacked maximum) crosses back, and the root trains the y axis from it.",
   executionDetail:
     "The root hosts a resident product for this eligible unweighted factor count. Default-scale factor fill or color grouping can use the same path.",
   jsxSource: `<GGPlot data={residentCountData} mapping={{ x: "category" }}>
@@ -98,9 +98,9 @@ export const residentInlineBars: DocExample = {
   visualSummary:
     "Four equal blue bars, one per category, reaching five-sixths of the way up a y axis that runs to 6000.",
   whatChanged:
-    "Pinning y with <ScaleYContinuous> switches the resident product from its standalone VIEW form to its inline MARK form. The view resolves its own y range from a stacked-maximum summary read back off the GPU; the mark cannot, because the panel already has a trained y domain, so it contributes bar topology only and reads nothing back. Same kernel, same resident grid — the difference is who owns the scale.",
+    "Pinning y with <ScaleYContinuous> means the root no longer needs the product's summary. Unpinned, the root waits for the stacked maximum read back off the GPU and trains y from it; pinned, it trains y from the declared domain, and the product contributes bar topology only and reads nothing back. Same kernel, same resident grid, same mark: the difference is who owns the scale.",
   executionDetail:
-    "barResidentPlan sets standaloneView from autoYDomain, so an explicit y domain is exactly what selects the mark form. This is the form a multi-layer or faceted panel would use, which is why it is documented next to the view rather than left implicit.",
+    "barResidentPlan sets autoYDomain only when no y domain is declared, and the root reads a summary back only for a plan that asks for it. A declared domain is also what lets a resident layer share its panel with other layers, which is why this case is documented next to the unpinned one rather than left implicit.",
   jsxSource: `<GGPlot data={residentCountData} mapping={{ x: "category" }}>
   <GeomBar fill="#2563eb" />
   <ScaleYContinuous domain={[0, 6000]} />
@@ -254,9 +254,9 @@ export const residentTileStrip: DocExample = {
   visualSummary:
     "Three stacked rows of tiles, one row per iris species, each row a twenty-bin strip across sepal length.",
   whatChanged:
-    "<GeomTile stat=\"bin\"> with a numeric x, a factor fill and NO y mapping selects the dense [group, bin] tile product. The kernel writes every cell into its own tileVertices buffer, so no count crosses back to the CPU — and unlike the bar views this one reads nothing back at all, because the y range is simply the group-row count. Each cell shades by its OWN count, not its row's palette color: a fixed five-stop ramp baked into the color pass reads the same resident counts grid and the same stacked-maximum summary slot the bar views already compute, normalizes on the GPU, and writes a per-cell RGBA — so a species' peak bin is visibly darker than its sparse ones, with no fill scale evaluated on the shader and no readback added.",
+    "<GeomTile stat=\"bin\"> with a numeric x, a factor fill and NO y mapping selects the dense [group, bin] tile product. The kernel writes every cell into its own tileVertices buffer, so no count crosses back to the CPU — and unlike the bar products this one reads nothing back at all, because the y range is simply the group-row count. Each cell shades by its OWN count, not its row's palette color: a fixed five-stop ramp baked into the color pass reads the same resident counts grid and the same stacked-maximum summary slot the bar products already compute, normalizes on the GPU, and writes a per-cell RGBA — so a species' peak bin is visibly darker than its sparse ones, with no fill scale evaluated on the shader and no readback added.",
   executionDetail:
-    "The combination is an explicit opt-in: no geom defaults a tile layer to stat \"bin\", so its `bins` goes through `params`. It is offered only as a standalone view, because the strip's y range is the statically known [0, groups] and an inline panel mark would fight the panel's trained y domain. With <Execution resident={false} /> the same plot routes through statBin into lowerTile and draws (bin center, count) cells instead of a per-group strip, so the resident path is the authoritative renderer for this plot rather than an optimization of it.",
+    "The combination is an explicit opt-in: no geom defaults a tile layer to stat \"bin\", so its `bins` goes through `params`. It is offered only for a lone layer, because the root trains the strip's y range as the statically known [0, groups], which another layer's y would fight. With <Execution resident={false} /> the same plot routes through statBin into lowerTile and draws (bin center, count) cells instead of a per-group strip, so the resident path is the authoritative renderer for this plot rather than an optimization of it.",
   jsxSource: `<GGData load={loadIris}>
   <GGPlot mapping={{ x: "Sepal.Length", fill: "Species" }}>
     <GeomTile stat="bin" params={{ bins: 20 }} />

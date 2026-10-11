@@ -32,6 +32,7 @@ import {
   scaleYContinuous,
 } from "../packages/core/src/dsl/mod.ts";
 import { compile } from "../packages/core/src/compile/mod.ts";
+import { residentTreeOf } from "../packages/core/tests/support/resident_root.ts";
 import { approximateTextMeasurer } from "../packages/core/src/render/font_resources.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -300,10 +301,9 @@ function treeFor(build: () => Spec): unknown {
 }
 
 function treeForResident(build: () => Spec): unknown {
-  return {
-    plain: compile(build(), { resident: true }),
-    laidOut: compile(build(), { resident: true, layout }),
-  };
+  // Resident layers exist only on the component root (gggplot-vnh.5.1), which
+  // always lays out: its tree, with each product's summary read back.
+  return { laidOut: residentTreeOf(build()) };
 }
 
 /** Compiles every case and serializes it exactly as the saved fixtures are

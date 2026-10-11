@@ -1,6 +1,9 @@
 /** @jsxRuntime classic */
 /** @jsx createElement */
-// Lifts GPU-resident kernel construction OUT of the plot subtree.
+// Mounts the GPU-resident products the component root plans, OUTSIDE the plot
+// subtree (gggplot-280, -vnh.5.1). The root collects one ProductPlan per
+// distinct product from its prepared layers; each mark (product_mark.tsx)
+// finds its product by key.
 //
 // WHY THIS EXISTS. A resident mark used to build its kernel where it renders,
 // deep inside <Plot>. That is the one place a kernel cannot usefully live:
@@ -10,7 +13,7 @@
 // is not a workaround either — its Resume returns pass elements, which land in
 // the layer tree and corrupt rendering. Both were tried; see gggplot-vs7.1.
 //
-// So construction moves ABOVE the compiled tree. The kernel and its buffers are
+// So construction moves ABOVE the plot. The kernel and its buffers are
 // built here, the resulting product is handed down by context, and the mark
 // below only consumes it. That puts the kernel somewhere a sibling <Compute>
 // can reach, which is the prerequisite for the <Kernel> port (gggplot-vs7.5).
@@ -35,12 +38,7 @@ import type {
   CountPosition,
   ResidentDomain1DResult,
 } from "@gggplot/reductions";
-import type { RenderNode } from "../compile/rendertree.ts";
-import {
-  RESIDENT_STAT_BIN_PRODUCT,
-  RESIDENT_STAT_BIN_TILES_PRODUCT,
-  RESIDENT_STAT_COUNT_PRODUCT,
-} from "../compile/resident.ts";
+import { RESIDENT_STAT_COUNT_PRODUCT } from "../geom/resident_plans.ts";
 import { GPUDataProvider } from "./live.tsx";
 import { type GGDataValue, useGGData } from "../components/gg_data.ts";
 import { type CountProductOptions, useCountProduct } from "./count_product.ts";
@@ -50,10 +48,11 @@ import {
   type ReadbackChannel,
 } from "./resident_readback.tsx";
 import {
-  RESIDENT_ID_PROP,
+  type ResidentGridProduct,
   type ResidentProducts,
   ResidentProductsContext,
 } from "./resident_products.ts";
+import { type Generation, stamped } from "./generation_gate.ts";
 import {
   HistogramProductNode,
   type HistogramProductOptions,
@@ -65,6 +64,7 @@ import {
   createElement,
   Fragment,
   provide,
+  useAwait,
   useMemo,
   useOne,
 } from "./usegpu_compat.ts";
@@ -101,28 +101,6 @@ export interface HoistedResult {
   computes: LiveElement[];
 }
 
-export interface HoistedNode {
-  id: number;
-  props: Record<string, unknown>;
-}
-
-/**
- * Product ids whose construction is lifted above the plot.
- *
- * Deliberately a small allowlist rather than "everything resident": a product
- * is added here only once BOTH of its consumers — the standalone view and the
- * inline mark — can take a hoisted product, so the two halves of the migration
- * never disagree. Anything absent keeps building its own kernel in place.
- */
-const HOISTED_PRODUCTS = new Set<string>([
-  RESIDENT_STAT_COUNT_PRODUCT,
-  RESIDENT_STAT_BIN_PRODUCT,
-  // The dense tile strip runs the SAME stat_bin kernel and the same auto-domain
-  // stage, differing only in which of its buffers the mark draws, so it hoists
-  // through HoistedHistogram unchanged (gggplot-vs7.12).
-  RESIDENT_STAT_BIN_TILES_PRODUCT,
-]);
-
 /** Identity tokens for the data frames products read, held weakly. */
 const frameTokens = new WeakMap<object, number>();
 let nextFrameToken = 1;
@@ -134,16 +112,17 @@ let nextFrameToken = 1;
  * palette input. Everything else on a node (its mark color, `view`, axes,
  * theme) belongs to the consumer.
  */
-function productKey(props: Record<string, unknown>): string {
+export function productKey(
+  product: string,
+  props: Record<string, unknown>,
+): string {
   const data = props.data;
   let token = 0;
   if (data && typeof data === "object") {
     token = frameTokens.get(data) ?? 0;
     if (!token) frameTokens.set(data, token = nextFrameToken++);
   }
-  const family = props.product === RESIDENT_STAT_COUNT_PRODUCT
-    ? "count"
-    : "bin";
+  const family = product === RESIDENT_STAT_COUNT_PRODUCT ? "count" : "bin";
   return JSON.stringify([
     family,
     token,
@@ -153,47 +132,6 @@ function productKey(props: Record<string, unknown>): string {
     props.paletteColors ?? null,
     props.opacity ?? null,
   ]);
-}
-
-/**
- * Stamps a `residentId` on every hoistable ResidentProduct node and returns
- * one hoisted node per distinct product alongside the rewritten tree.
- *
- * Fan-out (gggplot-280): consumers of the same product (productKey) share
- * one id, so the product is built and dispatched once however many marks
- * read it. The tree is copied, never mutated: the compiled tree is cached and
- * shared across re-renders.
- */
-export function collectResidentNodes(
-  tree: RenderNode,
-): { tree: RenderNode; nodes: HoistedNode[] } {
-  const nodes: HoistedNode[] = [];
-  const ids = new Map<string, number>();
-  const visit = (node: RenderNode): RenderNode => {
-    // Both forms hoist. The `view` flag used to gate this, back when only the
-    // view components could consume a hoisted product; now that grid.Mark can
-    // too (gggplot-vs7.1), an inline mark is hoistable on the same terms and
-    // the flag only selects which component renders the result.
-    const hoistable = node.component === "ResidentProduct" &&
-      HOISTED_PRODUCTS.has(node.props.product as string);
-    const children = node.children.map(visit);
-    if (!hoistable) {
-      return children === node.children ? node : { ...node, children };
-    }
-    const key = productKey(node.props);
-    let id = ids.get(key);
-    if (id === undefined) {
-      id = nodes.length;
-      ids.set(key, id);
-      nodes.push({ id, props: node.props });
-    }
-    return {
-      ...node,
-      props: { ...node.props, [RESIDENT_ID_PROP]: id },
-      children,
-    };
-  };
-  return { tree: visit(tree), nodes };
 }
 
 /**
@@ -362,55 +300,114 @@ const HoistedHistogram = (
   }) as LiveElement;
 };
 
+/** One distinct product the root asks for (root_assembly.ts residentPlans). */
+export interface ProductPlan {
+  /** productKey(product, props): consumers of one product share it. */
+  key: string;
+  /** The product id (geom/resident_plans.ts). */
+  product: string;
+  props: Record<string, unknown>;
+  /** Report the product's summary: the root reads its y range from it. */
+  summary?: boolean;
+}
+
+/** A summary read back for a product, stamped with its data version. */
+export type SummaryReport = (
+  key: string,
+  summary: Generation<GridSummary>,
+) => void;
+
 /**
- * Mounts every hoisted node's kernel above `children` and provides the
- * resulting products by id.
+ * Reads a product's summary for each version it dispatches and reports it.
+ * Deferred to a microtask: the root it reports to is an ancestor mid-render.
+ */
+const ReportSummary = (
+  { productKey, product, onSummary }: {
+    productKey: string;
+    product: ResidentGridProduct;
+    onSummary: SummaryReport;
+  },
+): LiveElement => {
+  const [awaited, error] = useAwait(
+    stamped(product.version, () => product.readSummary()),
+    [product.version, product],
+  );
+  if (error) throw error;
+  useOne(() => {
+    if (awaited) queueMicrotask(() => onSummary(productKey, awaited));
+  }, awaited);
+  return null;
+};
+
+/**
+ * Mounts each planned product once above `children` and provides them by key
+ * (gggplot-280, -vnh.5.1). The kernels and readbacks run in a sibling
+ * <Compute>; <Plot>'s VirtualLayers would swallow them below the plot.
  *
- * The nesting is a fold rather than a flat list because each provider hands its
- * product to a callback; the same shape GPUDataProvider already uses for its
+ * The nesting is a fold rather than a flat list because each product hands
+ * its result to a callback, the same shape GPUDataProvider uses for its
  * per-field raw-source hooks.
  */
-export const ResidentHost = (
-  { nodes, children }: { nodes: HoistedNode[]; children: LiveElement },
+export const ProductHost = (
+  { plans, onSummary, children }: {
+    plans: readonly ProductPlan[];
+    onSummary?: SummaryReport;
+    children: LiveElement;
+  },
 ): LiveElement => {
-  if (!nodes.length) return children;
+  if (!plans.length) return children;
   interface Built {
-    id: number;
+    plan: ProductPlan;
     result: HoistedResult;
   }
   const bind = (index: number, built: Built[]): LiveElement => {
-    if (index === nodes.length) {
+    if (index === plans.length) {
       const products: ResidentProducts = new Map(
         built
           .filter((entry) => entry.result.product != null)
-          .map((entry) => [entry.id, entry.result.product]),
+          .map((entry) => [
+            entry.plan.key,
+            entry.result.product as ResidentGridProduct,
+          ]),
       );
       const computes = built.flatMap((entry) => entry.result.computes);
+      const reports = onSummary
+        ? built.filter((entry) => entry.plan.summary && entry.result.product)
+          .map((entry) =>
+            createElement(ReportSummary, {
+              key: entry.plan.key,
+              productKey: entry.plan.key,
+              product: entry.result.product as ResidentGridProduct,
+              onSummary,
+            })
+          )
+        : [];
       return createElement(
         Fragment,
         {},
         // <Compute> gathers the recorded commands and runs them in the frame's
         // compute pass. It is a SIBLING of the plot, never an ancestor: its
         // Resume returns pass elements, which must not land in the layer tree.
-        createElement(
-          Compute,
-          {},
-          ...computes,
-        ),
+        createElement(Compute, {}, ...computes),
         // Live contexts are supplied with provide(), not a .Provider element.
-        provide(ResidentProductsContext, products, children),
+        provide(
+          ResidentProductsContext,
+          products,
+          createElement(Fragment, {}, children, ...reports) as LiveElement,
+        ),
       ) as LiveElement;
     }
-    const node = nodes[index];
+    const plan = plans[index];
     // Both stat_bin products share HoistedHistogram: same kernel, same
     // auto-domain stage. Only stat_count has its own node.
-    const Hoisted = node.props.product === RESIDENT_STAT_COUNT_PRODUCT
+    const Hoisted = plan.product === RESIDENT_STAT_COUNT_PRODUCT
       ? HoistedCount
       : HoistedHistogram;
     return createElement(Hoisted, {
-      props: node.props,
+      key: plan.key,
+      props: plan.props,
       children: (result: HoistedResult) =>
-        bind(index + 1, [...built, { id: node.id, result }]),
+        bind(index + 1, [...built, { plan, result }]),
     }) as LiveElement;
   };
   return bind(0, []);

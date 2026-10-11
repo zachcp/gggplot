@@ -1,23 +1,25 @@
 // gggplot-280: products are addressable, so consumers of the same product
-// share one hoisted node: one build, one dispatch per version.
+// share one plan: one build, one dispatch per version (vnh.5.1: the root
+// plans them; each mark finds its product by key).
 import { assertEquals } from "@std/assert";
-import { node, type RenderNode } from "../src/compile/rendertree.ts";
+import type { RenderNode } from "../src/compile/rendertree.ts";
 import {
   RESIDENT_STAT_BIN_PRODUCT,
   RESIDENT_STAT_BIN_TILES_PRODUCT,
   RESIDENT_STAT_COUNT_PRODUCT,
-} from "../src/compile/resident.ts";
-import { collectResidentNodes } from "../src/runtime/resident_host.tsx";
-import { RESIDENT_ID_PROP } from "../src/runtime/resident_products.ts";
+} from "../src/geom/resident_plans.ts";
+import { productKey } from "../src/runtime/product_host.tsx";
 import {
   assembleRoot as assembleRootOrNull,
   createRootCaches,
   plotSpec,
+  prepareLayers,
+  residentPlans,
 } from "../src/components/root_assembly.ts";
 import { layerFromProps } from "../src/components/geom_layer.ts";
 import { GeomBar, GeomHistogram } from "../src/components/geoms.ts";
 import { ScaleYContinuous } from "../src/components/plot_parts.ts";
-import { buildFacetPanels } from "../src/compile/mod.ts";
+import { buildFacetPanels, type PreparedPlot } from "../src/compile/mod.ts";
 import { ingest } from "../src/data/mod.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
 
@@ -28,66 +30,89 @@ const assembleRoot = (
 
 const frame = ingest({ x: [0.5, 1.5, 2.5, 3.5], g: ["a", "b", "a", "b"] });
 
-const product = (props: Record<string, unknown>) =>
-  node("ResidentProduct", {
-    product: RESIDENT_STAT_BIN_PRODUCT,
-    data: frame,
-    x: "x",
-    options: { bins: 4, autoDomain: true, position: "stack" },
-    ...props,
-  });
+const props = (extra: Record<string, unknown>) => ({
+  data: frame,
+  x: "x",
+  options: { bins: 4, autoDomain: true, position: "stack" },
+  ...extra,
+});
 
-/** Every hoisted mark's resident id, in tree order. */
-function ids(tree: RenderNode): number[] {
-  const out: number[] = [];
+/** A prepared plot whose single panel holds these resident layers. */
+const preparedOf = (
+  residents: { product: string; props: Record<string, unknown> }[],
+): PreparedPlot => ({
+  panels: [],
+  nrow: 1,
+  ncol: 1,
+  removals: new Map(),
+  panelLayers: [
+    residents.map((resident) => ({ resident }) as never),
+  ],
+});
+
+/** Every ProductMark's product key, in tree order. */
+function markKeys(tree: RenderNode): string[] {
+  const out: string[] = [];
   const walk = (n: RenderNode) => {
-    if (n.component === "ResidentProduct") {
-      out.push(n.props[RESIDENT_ID_PROP] as number);
-    }
+    if (n.component === "ProductMark") out.push(n.props.productKey as string);
     n.children.forEach(walk);
   };
   walk(tree);
   return out;
 }
 
-Deno.test("consumers of one product share one hoisted node", () => {
+Deno.test("consumers of one product share one plan", () => {
   // Two marks over the same grid: their mark colors are consumer props.
-  const { tree, nodes } = collectResidentNodes(
-    node("Plot", {}, [
-      product({ color: "#ff0000" }),
-      product({ color: "#0000ff", view: false }),
-    ]),
-  );
-  assertEquals(nodes.length, 1);
-  assertEquals(ids(tree), [0, 0]);
+  const plans = residentPlans(preparedOf([
+    { product: RESIDENT_STAT_BIN_PRODUCT, props: props({ color: "#ff0000" }) },
+    { product: RESIDENT_STAT_BIN_PRODUCT, props: props({ color: "#0000ff" }) },
+  ]));
+  assertEquals(plans.length, 1);
 });
 
 Deno.test("both stat_bin forms run one kernel", () => {
-  const { tree, nodes } = collectResidentNodes(
-    node("Plot", {}, [
-      product({}),
-      product({ product: RESIDENT_STAT_BIN_TILES_PRODUCT }),
-    ]),
+  const plans = residentPlans(preparedOf([
+    { product: RESIDENT_STAT_BIN_PRODUCT, props: props({}) },
+    { product: RESIDENT_STAT_BIN_TILES_PRODUCT, props: props({}) },
+  ]));
+  assertEquals(plans.length, 1);
+  assertEquals(
+    productKey(RESIDENT_STAT_BIN_PRODUCT, props({})),
+    productKey(RESIDENT_STAT_BIN_TILES_PRODUCT, props({})),
   );
-  assertEquals(nodes.length, 1);
-  assertEquals(ids(tree), [0, 0]);
 });
 
 Deno.test("different inputs are different products", () => {
   const other = ingest({ x: [0.5, 1.5, 2.5, 3.5], g: ["a", "b", "a", "b"] });
-  const { tree, nodes } = collectResidentNodes(
-    node("Plot", {}, [
-      product({}),
-      // Another frame, even with equal values: a different source.
-      product({ data: other }),
-      product({ options: { bins: 8, autoDomain: true, position: "stack" } }),
-      product({ group: "g" }),
-      product({ paletteColors: ["#000000", "#ffffff"] }),
-      product({ product: RESIDENT_STAT_COUNT_PRODUCT }),
-    ]),
-  );
-  assertEquals(nodes.length, 6);
-  assertEquals(ids(tree), [0, 1, 2, 3, 4, 5]);
+  const plans = residentPlans(preparedOf([
+    { product: RESIDENT_STAT_BIN_PRODUCT, props: props({}) },
+    // Another frame, even with equal values: a different source.
+    { product: RESIDENT_STAT_BIN_PRODUCT, props: props({ data: other }) },
+    {
+      product: RESIDENT_STAT_BIN_PRODUCT,
+      props: props({
+        options: { bins: 8, autoDomain: true, position: "stack" },
+      }),
+    },
+    { product: RESIDENT_STAT_BIN_PRODUCT, props: props({ group: "g" }) },
+    {
+      product: RESIDENT_STAT_BIN_PRODUCT,
+      props: props({ paletteColors: ["#000000", "#ffffff"] }),
+    },
+    { product: RESIDENT_STAT_COUNT_PRODUCT, props: props({}) },
+  ]));
+  assertEquals(plans.length, 6);
+});
+
+Deno.test("a plan reports its summary when any consumer owns the y range", () => {
+  const plans = residentPlans(preparedOf([
+    { product: RESIDENT_STAT_BIN_PRODUCT, props: props({ color: "#ff0000" }) },
+    {
+      product: RESIDENT_STAT_BIN_PRODUCT,
+      props: props({ color: "#0000ff", autoYDomain: true }),
+    },
+  ]));
+  assertEquals(plans.map((plan) => plan.summary), [true]);
 });
 
 Deno.test("two histogram layers on the component path dispatch once", () => {
@@ -100,21 +125,24 @@ Deno.test("two histogram layers on the component path dispatch once", () => {
     layerFromProps(GeomHistogram.layerProps({ bins: 8, fill: "#2563eb" })),
     layerFromProps(GeomHistogram.layerProps({ bins: 8, fill: "#f97316" })),
   ].map((layer, i) => ({ kind: "layer" as const, id: i + 1, layer }));
-  const { tree, residentNodes } = assembleRoot(
+  const panels = buildFacetPanels(base.facet, base.data, base.labels);
+  const caches = createRootCaches();
+  const { plans } = prepareLayers(base, layers, panels, caches)!;
+  const { tree } = assembleRoot(
     base,
     layers,
-    buildFacetPanels(base.facet, base.data, base.labels),
+    panels,
     { width: 640, height: 400, measureText: approximateTextMeasurer },
-    createRootCaches(),
+    caches,
   );
-  assertEquals(residentNodes.length, 1);
-  assertEquals(ids(tree), [0, 0]);
+  assertEquals(plans.length, 1);
+  assertEquals(markKeys(tree), [plans[0].key, plans[0].key]);
 });
 
 Deno.test("a cached plan does not outlive the layer count it assumed", () => {
-  // Without an explicit y domain only a LONE count layer is resident (its
-  // standalone view reads the y range off the GPU); beside a second layer it
-  // falls back to the CPU. Adding a layer over the same caches must not keep
+  // Without an explicit y domain only a LONE count layer is resident (the
+  // root reads its y range off the GPU); beside a second layer it falls back
+  // to the CPU. Adding a layer over the same caches must not keep
   // the first assembly's standalone plan.
   const data = ingest({ c: ["a", "b", "a", "c"] });
   const base = plotSpec(data, { x: "c" }, undefined, undefined, []);
@@ -130,9 +158,21 @@ Deno.test("a cached plan does not outlive the layer count it assumed", () => {
     id: 1,
     layer: layerFromProps(GeomBar.layerProps({})),
   };
-  const one = assembleRoot(base, [bar], panels, layout, caches);
-  assertEquals(one.residentNodes.length, 1);
-  assertEquals(ids(one.tree), [0]);
+  const one = prepareLayers(base, [bar], panels, caches)!;
+  assertEquals(one.plans.length, 1);
+  assertEquals(one.plans[0].summary, true);
+  // Nothing trains until the product's summary is read back.
+  assertEquals(assembleRootOrNull(base, [bar], panels, layout, caches), null);
+  const readbacks = new Map([[one.plans[0].key, {
+    version: 1,
+    value: {
+      groupTotals: new Uint32Array(0),
+      stackedMaximum: 2,
+      byteLength: 0,
+    },
+  }]]);
+  const first = assembleRoot(base, [bar], panels, layout, caches, readbacks);
+  assertEquals(markKeys(first.tree), [one.plans[0].key]);
   const two = assembleRoot(
     base,
     [bar, { ...bar, id: 2 }],
@@ -140,6 +180,10 @@ Deno.test("a cached plan does not outlive the layer count it assumed", () => {
     layout,
     caches,
   );
-  assertEquals(two.residentNodes.length, 0);
-  assertEquals(ids(two.tree), []);
+  assertEquals(
+    prepareLayers(base, [bar, { ...bar, id: 2 }], panels, caches)!.plans
+      .length,
+    0,
+  );
+  assertEquals(markKeys(two.tree), []);
 });

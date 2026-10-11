@@ -37,17 +37,14 @@ export interface LayerContext {
 /**
  * A geom's declaration that an eligible layer can be rendered by a GPU-resident
  * product instead of CPU-lowered marks. Returned by GeomDefinition.residentPlan
- * and carried, fully serializable, on a generic "ResidentProduct" RenderNode:
- * the live backend resolves `product` (a plan id string, never a component
- * reference) to a concrete component through the runtime resident registry.
+ * and hosted by the component root (runtime/product_host.tsx), which mounts
+ * the product once and draws it with a ProductMark (gggplot-vnh.5.1).
  */
 export interface ResidentProductProps {
-  /** Plan id resolving to a runtime component, e.g. "@gggplot/core:stat_bin@1". */
+  /** The product id, e.g. "@gggplot/core:stat_bin@1" (geom/resident_plans.ts). */
   product: string;
-  /** Serializable node props for the resolved product (today's ResidentHistogramNodeProps). */
+  /** The product's and its mark's props (ResidentHistogramPlanProps, ...). */
   props: Record<string, unknown>;
-  /** True for the standalone auto-y-domain "view" form (else the inline mark form). */
-  standaloneView?: boolean;
 }
 
 /** Inputs a domainContribution hook needs to widen a panel's trained x/y domains. */
@@ -175,13 +172,13 @@ export interface GeomDefinition {
     ctx: DomainContributionCtx,
   ): Partial<Record<PositionAxis, [number, number]>> | undefined;
   /**
-   * Optional per-geom GPU-resident capability declaration. When compile() is
-   * asked for resident lowering (CompileOptions.resident), it consults this
-   * hook per layer instead of any product-specific branch: a returned
-   * ResidentProductProps replaces CPU marks with a generic "ResidentProduct"
-   * node; undefined keeps the CPU path (fallback when eligibility gates fail).
-   * `opts.standalone` is true only for an unfaceted single-layer plot, which
-   * enables the automatic-y-domain "view" form.
+   * Optional per-geom GPU-resident capability declaration. The component
+   * root consults this hook per layer instead of any product-specific branch
+   * (gggplot-vnh.5.1): a returned ResidentProductProps becomes a product the
+   * root hosts and a "ProductMark" node that draws it; undefined keeps the
+   * CPU path (fallback when eligibility gates fail). `opts.standalone` is true
+   * only for an unfaceted single-layer plot, the one case where the root may
+   * train y from the product's read-back maximum (autoYDomain).
    */
   residentPlan?(
     spec: GGSpec,

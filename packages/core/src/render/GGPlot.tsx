@@ -21,10 +21,6 @@ import {
   useFontContext,
   useNoDeviceContext,
 } from "@use-gpu/workbench";
-import {
-  collectResidentNodes,
-  ResidentHost,
-} from "../runtime/resident_host.tsx";
 import type { GGSpec } from "../ir/types.ts";
 import { compile, createPackCache } from "../compile/mod.ts";
 import {
@@ -121,7 +117,6 @@ const GlyphMeasuredPlot = (
   const tree = useMemo(
     () =>
       compile(spec, {
-        resident: true,
         packCache,
         layout: { width, height, measureText },
       }),
@@ -130,16 +125,9 @@ const GlyphMeasuredPlot = (
   const interactiveTree = tree.component === "Scene3D"
     ? { ...tree, props: { ...tree.props, interactive } }
     : tree;
-  // Resident kernels are built ABOVE the compiled tree and handed down by
-  // context; <Plot>'s VirtualLayers boundary makes below-the-tree construction
-  // a dead end for compute. See runtime/resident_host.tsx.
-  const { tree: hostedTree, nodes: residentNodes } = collectResidentNodes(
-    interactiveTree,
-  );
-  return createElement(ResidentHost, {
-    nodes: residentNodes,
-    children: renderTree(hostedTree) as LiveElement,
-  }) as LiveElement;
+  // The spec path takes every stat on the CPU: GPU-resident products are the
+  // component root's (gggplot-vnh.5.1).
+  return renderTree(interactiveTree) as LiveElement;
 };
 
 /**

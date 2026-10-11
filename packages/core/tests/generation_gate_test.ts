@@ -123,11 +123,11 @@ Deno.test("only opted-in kernels bind a live domain slot", () => {
   assertEquals(readsDomain, [...LIVE_DOMAIN_KERNELS].sort());
 });
 
-Deno.test("the tile heatmap's view reads no readback", async () => {
-  // The opt-in's condition: no guide reads the live domain, so the tile strip
-  // view awaits nothing at all.
+Deno.test("the tile heatmap's mark reads no readback", async () => {
+  // The opt-in's condition: no guide reads the live domain, so the mark that
+  // draws the tile strip awaits nothing at all.
   const source = await Deno.readTextFile(
-    new URL("../src/runtime/resident_tile_view.tsx", import.meta.url),
+    new URL("../src/runtime/product_mark.tsx", import.meta.url),
   );
   const code = source.split("\n").filter((line) =>
     !line.trim().startsWith("//") && !line.trim().startsWith("*")

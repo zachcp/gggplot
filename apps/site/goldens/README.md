@@ -21,3 +21,20 @@ chart and capture its golden:
 ```sh
 deno run -A scripts/example_frames.ts capture-chart goldens <ExampleId>
 ```
+
+## Re-captured goldens
+
+- **The five resident examples** (CountStackedBar, GroupedHistogram,
+  ResidentCategoricalCount, ResidentInlineBars, ResidentTileStrip), at
+  gggplot-vnh.5.1. That change gave the component root the resident products, so
+  every resident plot now gets y-axis labels. The standalone views it replaced
+  drew no labels.
+  - Against the same chart with `<Execution resident={false} />`:
+    - ResidentInlineBars is identical. Its old golden had no trained y, so the
+      bars ran to the top of the panel instead of five-sixths of the way up
+      to 6000.
+    - CountStackedBar and ResidentCategoricalCount differ only at edges. The
+      re-leveled count grid (gggplot-mos5) put CountStackedBar's suv and pickup
+      bars back under their own labels.
+  - GroupedHistogram keeps the resident bar width and x domain (gggplot-py8d).
+  - ResidentTileStrip has no CPU equivalent (examples_stats.tsx).

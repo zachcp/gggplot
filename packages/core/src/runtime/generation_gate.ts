@@ -70,9 +70,10 @@ export function dispatchVersion(
  *
  * grid_heatmap_colors normalizes tile colors by the grid maximum in the same
  * dispatch that computed it, so the colors can never be a generation behind.
- * It is allowed because no guide reads that domain: the tile strip view
- * awaits nothing (runtime/resident_tile_view.tsx). A kernel joins this list
- * only on the same terms.
+ * It is allowed because no guide reads that domain: the tile strip's mark
+ * awaits nothing (runtime/product_mark.tsx), and its y range is its group
+ * count, known without a readback. A kernel joins this list only on the same
+ * terms.
  */
 export const LIVE_DOMAIN_KERNELS: ReadonlySet<string> = new Set([
   "@gggplot/reductions:grid_heatmap_colors@1",

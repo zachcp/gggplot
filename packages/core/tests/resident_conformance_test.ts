@@ -14,35 +14,25 @@ import {
 } from "../src/dsl/mod.ts";
 import { asFactor } from "../src/data/mod.ts";
 import { CATEGORICAL_PALETTE } from "../src/scale/palette.ts";
-import { compile } from "../src/compile/mod.ts";
-import type { RenderNode } from "../src/compile/rendertree.ts";
+import type { GGSpec } from "../src/ir/types.ts";
+import {
+  findNodes as nodes,
+  residentPlansOf,
+  residentTreeOf,
+} from "./support/resident_root.ts";
 
-function nodes(
-  tree: RenderNode,
-  component: RenderNode["component"],
-): RenderNode[] {
-  return [
-    ...(tree.component === component ? [tree] : []),
-    ...tree.children.flatMap((child) => nodes(child, component)),
-  ];
-}
-
-/** Generic resident-product nodes, optionally filtered to the standalone view form. */
-function residentNodes(
-  tree: RenderNode,
-  view?: boolean,
-): RenderNode[] {
-  return nodes(tree, "ResidentProduct").filter((n) =>
-    view === undefined ? true : Boolean(n.props.view) === view
-  );
+/** The products the component root would host, as {product, ...props}. */
+function residentNodes(spec: GGSpec) {
+  return residentPlansOf(spec).map((plan) => ({
+    props: { product: plan.product, ...plan.props } as Record<string, unknown>,
+  }));
 }
 
 Deno.test("resident conformance: automatic histogram has no CPU stat rows", () => {
   const spec = ggplot({ x: [0, 1, 2, 3, null] }, { x: "x" })
     .add(geomHistogram({ binwidth: 2 }))
     .build();
-  const tree = compile(spec, { resident: true });
-  const view = residentNodes(tree, true);
+  const view = residentNodes(spec);
 
   assertEquals(view.length, 1);
   assertEquals(
@@ -61,8 +51,7 @@ Deno.test("resident conformance: declared factor group preserves dense grid shap
     { x: "x", group: "group" },
     { columns: { group: asFactor(["a", "b", "c"]) } },
   ).add(geomHistogram({ bins: 2 })).build();
-  const tree = compile(spec, { resident: true });
-  const view = residentNodes(tree, true);
+  const view = residentNodes(spec);
 
   assertEquals(view.length, 1);
   assertEquals(
@@ -82,7 +71,7 @@ Deno.test("resident conformance: categorical stat_count keeps factor ids residen
       },
     },
   ).add(geomBar({ position: "dodge" })).build();
-  const view = residentNodes(compile(spec, { resident: true }), true);
+  const view = residentNodes(spec);
   assertEquals(view.length, 1);
   assertEquals(view[0].props.product, "@gggplot/core:stat_count@1");
   assertEquals(
@@ -105,7 +94,7 @@ Deno.test("resident conformance: default-scaled factor fill is resident-eligible
     fill: "fill",
   })
     .add(geomBar()).build();
-  const view = residentNodes(compile(spec, { resident: true }), true);
+  const view = residentNodes(spec);
   assertEquals(view.length, 1);
   assertEquals(view[0].props.product, "@gggplot/core:stat_count@1");
   // fill drives grouping: one group per factor level, one palette color each.
@@ -120,7 +109,7 @@ Deno.test("resident conformance: default-scaled factor fill is resident-eligible
 Deno.test("resident conformance: weighted bars keep stat_count on CPU", () => {
   const weighted = ggplot({ x: ["a", "b"], weight: [1, 2] }, { x: "x" })
     .add(geomBar({ weight: "weight" })).build();
-  assertEquals(residentNodes(compile(weighted, { resident: true })).length, 0);
+  assertEquals(residentNodes(weighted).length, 0);
 });
 
 Deno.test("resident conformance: a custom fill scale forces CPU fallback", () => {
@@ -130,7 +119,7 @@ Deno.test("resident conformance: a custom fill scale forces CPU fallback", () =>
   })
     .add(geomBar(), scaleFill({ range: ["#111111", "#222222"] }))
     .build();
-  assertEquals(residentNodes(compile(spec, { resident: true })).length, 0);
+  assertEquals(residentNodes(spec).length, 0);
 });
 
 Deno.test("resident conformance: facets and polar remain CPU fallback", () => {
@@ -144,8 +133,7 @@ Deno.test("resident conformance: facets and polar remain CPU fallback", () => {
     .build();
 
   for (const spec of [faceted, polar]) {
-    const tree = compile(spec, { resident: true });
-    assertEquals(residentNodes(tree).length, 0);
+    assertEquals(residentNodes(spec).length, 0);
   }
 });
 
@@ -158,7 +146,7 @@ Deno.test("resident conformance: histogram fill palette follows trained level or
     { x: [0, 1, 2, 3], cohort: ["b", "b", "a", "a"] },
     { x: "x", fill: "cohort" },
   ).add(geomHistogram({ binwidth: 2 })).build();
-  const view = residentNodes(compile(spec, { resident: true }), true);
+  const view = residentNodes(spec);
   assertEquals(view.length, 1);
   assertEquals(view[0].props.group, "cohort");
   // group id 0 = "b" (appearance-first) → trained domain index 1 → palette[1];
@@ -178,9 +166,9 @@ Deno.test("resident conformance: weighted histogram deliberately selects CPU", (
     scaleXContinuous({ domain: [0, 2] }),
     scaleYContinuous({ domain: [0, 3] }),
   ).build();
-  const tree = compile(spec, { resident: true });
+  const tree = residentTreeOf(spec);
 
-  assertEquals(residentNodes(tree).length, 0);
+  assertEquals(residentNodes(spec).length, 0);
   // gggplot-tzc.4: geom_histogram's CPU-fallback bars are a ChunkedFace node.
   assertEquals(nodes(tree, "ChunkedFace").length > 0, true);
 });
@@ -190,9 +178,9 @@ Deno.test("resident conformance: unrelated layered marks preserve CPU render tre
     .add(geomHistogram({ bins: 2 }))
     .add(geomPoint({ mapping: { y: "y" } }))
     .build();
-  const tree = compile(spec, { resident: true });
+  const tree = residentTreeOf(spec);
 
-  assertEquals(residentNodes(tree).length, 0);
+  assertEquals(residentNodes(spec).length, 0);
   assertEquals(nodes(tree, "Point").length, 1);
 });
 
@@ -202,7 +190,7 @@ Deno.test("resident conformance: binned tile strip is resident-eligible standalo
     fill: "row",
   })
     .add(geomTile({ stat: "bin", bins: 2 })).build();
-  const view = residentNodes(compile(spec, { resident: true }), true);
+  const view = residentNodes(spec);
   assertEquals(view.length, 1);
   assertEquals(view[0].props.product, "@gggplot/core:stat_bin_tiles@1");
   assertEquals(view[0].props.group, "row");
@@ -218,7 +206,7 @@ Deno.test("resident conformance: binned tile strip is resident-eligible standalo
   );
   // No CPU tile lowering remains in the tree.
   assertEquals(
-    nodes(compile(spec, { resident: true }), "ChunkedFace").length,
+    nodes(residentTreeOf(spec), "ChunkedFace").length,
     0,
   );
 });
@@ -229,7 +217,7 @@ Deno.test("resident conformance: tile strip falls back to CPU when ineligible", 
     { x: [0, 1, 2, 3], y: ["a", "b", "a", "b"] },
     { x: "x", y: "y", fill: "y" },
   ).add(geomTile({ stat: "bin", bins: 2 })).build();
-  assertEquals(residentNodes(compile(mappedY, { resident: true })).length, 0);
+  assertEquals(residentNodes(mappedY).length, 0);
 
   // Custom fill scale: palette authority stays with the CPU compiler.
   const customScale = ggplot(
@@ -242,21 +230,21 @@ Deno.test("resident conformance: tile strip falls back to CPU when ineligible", 
     )
     .build();
   assertEquals(
-    residentNodes(compile(customScale, { resident: true })).length,
+    residentNodes(customScale).length,
     0,
   );
 
   // No factor grouping at all: a group-less strip is just a histogram.
   const ungrouped = ggplot({ x: [0, 1, 2, 3] }, { x: "x" })
     .add(geomTile({ stat: "bin", bins: 2 })).build();
-  assertEquals(residentNodes(compile(ungrouped, { resident: true })).length, 0);
+  assertEquals(residentNodes(ungrouped).length, 0);
 
   // Default identity stat: plain geom_tile never takes the resident path.
   const identity = ggplot(
     { x: [0, 1], y: [0, 1], fill: ["a", "b"] },
     { x: "x", y: "y", fill: "fill" },
   ).add(geomTile()).build();
-  assertEquals(residentNodes(compile(identity, { resident: true })).length, 0);
+  assertEquals(residentNodes(identity).length, 0);
 });
 
 Deno.test("resident conformance: execution({ resident: false }) is the typed opt-out", () => {
@@ -264,7 +252,7 @@ Deno.test("resident conformance: execution({ resident: false }) is the typed opt
     .add(geomHistogram({ bins: 2 }), execution({ resident: false }))
     .build();
   assertEquals(optOut.execution?.resident, false);
-  assertEquals(residentNodes(compile(optOut, { resident: true })).length, 0);
+  assertEquals(residentNodes(optOut).length, 0);
 
   // The former stringly theme key is inert: execution policy no longer
   // lives in the styling object (gggplot-4se).
@@ -273,7 +261,37 @@ Deno.test("resident conformance: execution({ resident: false }) is the typed opt
     .build();
   themeKey.theme = { ...themeKey.theme, resident: false };
   assertEquals(
-    residentNodes(compile(themeKey, { resident: true }), true).length,
+    residentNodes(themeKey).length,
     1,
   );
+});
+
+Deno.test("resident conformance: the root trains y from the product's read-back maximum", () => {
+  // gggplot-vnh.5.1: the standalone views that used to size their own y range
+  // are gone; the root reads the summary and trains the panel's y axis.
+  const spec = ggplot({ x: [0, 1, 2, 3] }, { x: "x" })
+    .add(geomHistogram({ binwidth: 2 }))
+    .build();
+  const yRange = (tree: ReturnType<typeof residentTreeOf>) =>
+    (nodes(tree, "Cartesian")[0].props.range as number[][])[1];
+  assertEquals(yRange(residentTreeOf(spec, 4)), [0, 4]);
+  assertEquals(yRange(residentTreeOf(spec, 5000)), [0, 5000]);
+  assertEquals(nodes(residentTreeOf(spec), "Axis").length, 2);
+  const mark = nodes(residentTreeOf(spec), "ProductMark")[0];
+  // Drawn only at the data version whose maximum trained the axis.
+  assertEquals(mark.props.domainVersion, 1);
+
+  // position fill owns [0, 1] whatever the maximum.
+  const fill = ggplot(
+    { x: [0, 1, 2, 3], g: ["a", "b", "a", "b"] },
+    { x: "x", fill: "g" },
+  ).add(geomHistogram({ binwidth: 2, position: "fill" })).build();
+  assertEquals(yRange(residentTreeOf(fill, 5000)), [0, 1]);
+
+  // A declared domain needs no summary.
+  const pinned = ggplot({ x: [0, 1, 2, 3] }, { x: "x" })
+    .add(geomHistogram({ binwidth: 2 }), scaleYContinuous({ domain: [0, 9] }))
+    .build();
+  assertEquals(residentPlansOf(pinned).map((plan) => plan.summary), [false]);
+  assertEquals(yRange(residentTreeOf(pinned)), [0, 9]);
 });

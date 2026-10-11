@@ -6,8 +6,8 @@ import { scalePosition } from "../scale/mod.ts";
 import { widenForTileAxis } from "../compile/coordinates.ts";
 import {
   RESIDENT_STAT_BIN_TILES_PRODUCT,
-  type ResidentTileNodeProps,
-} from "../compile/resident.ts";
+  type ResidentHistogramPlanProps,
+} from "./resident_plans.ts";
 import type {
   DomainContributionCtx,
   LayerContext,
@@ -114,7 +114,7 @@ export function tileResidentPlan(
     // Tiles are a dense grid; bar-position layout does not apply.
     position: "identity" as const,
   };
-  const nodeProps: ResidentTileNodeProps = {
+  const nodeProps: ResidentHistogramPlanProps = {
     data,
     x,
     group,
@@ -129,7 +129,6 @@ export function tileResidentPlan(
   return {
     product: RESIDENT_STAT_BIN_TILES_PRODUCT,
     props: nodeProps as unknown as Record<string, unknown>,
-    standaloneView: true,
   };
 }
 

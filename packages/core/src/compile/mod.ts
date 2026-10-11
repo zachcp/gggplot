@@ -67,8 +67,6 @@ export { buildFacetPanels } from "./facets.ts";
 export { createPackCache, PackCache } from "./pack_cache.ts";
 
 export interface CompileOptions {
-  /** Enable runtime-only GPU products; source emission keeps portable CPU nodes. */
-  resident?: boolean;
   /** Concrete host geometry and glyph metrics for guide-aware panel layout. */
   layout?: {
     width: number;
@@ -94,6 +92,15 @@ export interface CompileOptions {
    * data coordinates: the component root's <GGPanel> content (gggplot-7j9).
    */
   panelContent?: (panelIndex: number) => RenderNode[];
+  /**
+   * The mark for a layer whose stat runs on the GPU: the component root's
+   * ProductMark over the product it hosts (gggplot-vnh.5.1).
+   */
+  residentMark?: (args: {
+    resident: ResidentProductProps;
+    layerIndex: number;
+    panelIndex: number;
+  }) => RenderNode[];
   /**
    * Component path (gggplot-vnh.3): lowers one layer's marks in place of the
    * built-in lowerLayer/pack-cache call. The component root passes a per-layer
@@ -493,10 +500,7 @@ export function recordRemovals(
  * within each panel independently (ggplot2's default). A layer with its own
  * data override bypasses faceting — it renders unfiltered into every panel.
  */
-export function preparePlot(
-  spec: GGSpec,
-  options: CompileOptions = {},
-): PreparedPlot {
+export function preparePlot(spec: GGSpec): PreparedPlot {
   const { panels, nrow, ncol } = buildFacetPanels(
     spec.facet,
     spec.data,
@@ -509,7 +513,6 @@ export function preparePlot(
   const panelLayers = panels.map((panel) =>
     spec.layers.map((layer, layerIndex) => {
       const { prepared, removed } = prepareLayer(spec, layer, panel.data, {
-        resident: options.resident,
         faceted,
       });
       recordRemovals(removals, layerIndex, layer.geom, removed);
@@ -523,9 +526,37 @@ export function compile(
   spec: GGSpec,
   options: CompileOptions = {},
 ): RenderNode {
-  const tree = assemblePlot(spec, preparePlot(spec, options), options);
+  const tree = assemblePlot(spec, preparePlot(spec), options);
   warnRowRemovals(rowRemovalsOf(tree));
   return tree;
+}
+
+/**
+ * What the component root learned off the GPU for its resident layers: the y
+ * range (a stacked maximum read back, or a tile strip's row count) and, for a
+ * strip, the breaks to draw (none).
+ */
+export interface ResidentDomains {
+  y?: { domain: [number, number]; breaks?: number[] };
+}
+
+/** The y scale a resident-only plot trains: declared, else read back. */
+function residentYScale(
+  spec: GGSpec,
+  resident: ResidentDomains,
+): TrainedScale | undefined {
+  const declared = spec.scales.find((scale) => scale.aes === "y");
+  if (declared?.domain) {
+    return { ...declared, kind: declared.kind ?? "continuous" } as TrainedScale;
+  }
+  if (!resident.y) return undefined;
+  return {
+    ...(declared ?? {}),
+    aes: "y",
+    kind: "continuous",
+    domain: resident.y.domain,
+    ...(resident.y.breaks ? { breaks: resident.y.breaks } : {}),
+  } as TrainedScale;
 }
 
 /** One panel's trained position scales and view domains (layout-free). */
@@ -560,12 +591,23 @@ export interface TrainedPlot {
  * free per-panel position scales for facets) and resolve each panel's view
  * domains. Layout-free: the half of assemblePlot a resize never re-runs.
  */
-export function trainPlot(spec: GGSpec, prepared: PreparedPlot): TrainedPlot {
+export function trainPlot(
+  spec: GGSpec,
+  prepared: PreparedPlot,
+  resident: ResidentDomains = {},
+): TrainedPlot {
   const { panelLayers } = prepared;
   // ② train scales across all panels combined → shared x/y domains for every
   // panel's view range.
   const allPerLayer = panelLayers.flat();
   const scales = trainScales(spec, allPerLayer);
+  // A layer whose stat runs on the GPU has no y rows to train on. Its y scale
+  // is the declared one, or the range the component root read back off the
+  // GPU (gggplot-vnh.5.1), so its axis is trained and labeled like any other.
+  if (!scales.get("y") && allPerLayer.some((layer) => layer.resident)) {
+    const y = residentYScale(spec, resident);
+    if (y) scales.set("y", y);
+  }
   const xScale = scales.get("x");
   const yScale = scales.get("y");
   if (resolvePlotDimension(spec).dimensions === 3) {
@@ -771,13 +813,11 @@ export function layoutPlot(
     // packCache -> byte-identical to the pre-tzc.5 uncached path.
     const marks = perLayer.flatMap(
       ({ layer, data, mapping, resident }, layerIndex) => {
+        // A layer whose stat runs on the GPU is drawn by the component root's
+        // ProductMark (gggplot-vnh.5.1); compile() plans none.
         if (resident) {
-          return [
-            node("ResidentProduct", {
-              product: resident.product,
-              ...resident.props,
-            }),
-          ];
+          return options.residentMark?.({ resident, layerIndex, panelIndex }) ??
+            [];
         }
         if (options.lowerMarks) {
           return options.lowerMarks({
@@ -1022,47 +1062,6 @@ export function layoutPlot(
   // Embedded also establishes the Plot wrapper (font/virtual-layers) itself,
   // so it replaces our own explicit root Plot node rather than nesting inside it.
   if (!faceted) {
-    const standaloneResident = panelLayers[0].length === 1
-      ? panelLayers[0][0].resident
-      : undefined;
-    if (standaloneResident?.standaloneView) {
-      return node("Embedded", {
-        normalize: true,
-        ...removalProps(removalTotals),
-      }, [
-        node("PanelViewport", { bounds: panelBounds }, [
-          node("ResidentProduct", {
-            product: standaloneResident.product,
-            view: true,
-            ...standaloneResident.props,
-            axes,
-            theme,
-          }),
-        ]),
-        axisGuideOverlay(
-          labels,
-          spec.mapping,
-          theme,
-          xGuideScale,
-          yGuideScale,
-          axes,
-          panelBounds,
-          tickCount,
-        ),
-        ...plotLabelNodes(labels, theme),
-        // A fill/color-mapped resident bar chart trains a discrete fill scale
-        // exactly like the CPU path; emit the same legend so a standalone
-        // resident view shows the swatches its bar colors correspond to.
-        ...legendNodes(
-          guideScales,
-          labels,
-          theme,
-          panelBounds,
-          options.layout?.width,
-          options.layout?.height,
-        ),
-      ]);
-    }
     return node("Embedded", {
       normalize: true,
       ...removalProps(removalTotals),

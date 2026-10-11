@@ -23,6 +23,7 @@
 //     uses for the checked-in fixture set ("the fixture spec set"), asserting
 //     only the closed set of expected mark component names ever appears.
 import { assertEquals } from "@std/assert";
+import { residentTreeOf } from "./support/resident_root.ts";
 import {
   aes,
   annotate,
@@ -360,7 +361,7 @@ Deno.test("node budget: a 2-layer spec (point + grouped line) totals exactly 1 P
 // 4. Fixture-spec-set sweep: every case capture_geom_fixtures.ts builds (the
 // SAME spec-building functions the checked-in fixtures were generated from)
 // only ever emits mark nodes from the closed component set, and resident
-// cases never leak a CPU mark node alongside their ResidentProduct.
+// cases never leak a CPU mark node alongside their ProductMark.
 // ---------------------------------------------------------------------------
 
 Deno.test("node budget: every fixture-set spec's mark nodes are drawn from the known component set", () => {
@@ -388,7 +389,7 @@ Deno.test("node budget: every fixture-set spec's mark nodes are drawn from the k
           "PanelViewport",
           "RadialViewport",
           "FacetGrid",
-          "ResidentProduct",
+          "ProductMark",
         ].includes(n.component)
       ) {
         unexpected.add(n.component);
@@ -403,12 +404,12 @@ Deno.test("node budget: every fixture-set spec's mark nodes are drawn from the k
   }
 });
 
-Deno.test("node budget: every resident-eligible fixture-set spec emits ResidentProduct with NO sibling CPU mark node for the same layer", () => {
+Deno.test("node budget: every resident-eligible fixture-set spec emits ProductMark with NO sibling CPU mark node for the same layer", () => {
   for (const { name, build } of residentCases) {
-    const tree = compile(build(), { resident: true });
+    const tree = residentTreeOf(build());
     const residentCount = countBy(
       tree,
-      (n) => n.component === "ResidentProduct",
+      (n) => n.component === "ProductMark",
     );
     const markCount = findAll(tree, "Point").length +
       findAll(tree, "ChunkedLine").length + findAll(tree, "ChunkedFace").length;
@@ -420,7 +421,7 @@ Deno.test("node budget: every resident-eligible fixture-set spec emits ResidentP
     assertEquals(
       residentCount >= 1,
       true,
-      `${name}: expected a ResidentProduct node`,
+      `${name}: expected a ProductMark node`,
     );
     assertEquals(
       markCount,

@@ -3,7 +3,7 @@
 // A direct Use.GPU Face mark over resident histogram bar vertices.
 
 import type { LiveElement } from "@use-gpu/live";
-import type { ResidentHistogramProduct } from "./resident_live.tsx";
+import type { ResidentGridProduct } from "./resident_products.ts";
 import type { GPUStorageSource } from "./types.ts";
 import { parseColorRGBA } from "../color/mod.ts";
 import {
@@ -16,14 +16,14 @@ import {
 
 /** One four-corner face per logical [group, bin] cell. */
 export function histogramBarChunks(
-  product: ResidentHistogramProduct,
+  product: ResidentGridProduct,
 ): number[] {
   return Array.from({ length: product.bins * product.groupsCount }, () => 4);
 }
 
 /** Two triangles per four-corner resident bar, without cross-bin segments. */
 export function histogramBarIndices(
-  product: ResidentHistogramProduct,
+  product: ResidentGridProduct,
 ): Uint32Array {
   const cells = product.bins * product.groupsCount;
   const indices = new Uint32Array(cells * 6);
@@ -43,7 +43,7 @@ export function histogramBarIndices(
 }
 
 export interface ResidentHistogramBarsProps {
-  product: ResidentHistogramProduct;
+  product: ResidentGridProduct;
   color?: string;
   opacity?: number;
   /**

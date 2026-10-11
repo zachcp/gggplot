@@ -25,9 +25,11 @@
 // (layout-bound text, label and rug aside), no mark upload.
 //
 // GPU-eligible layers (stat_count / stat_bin through geom.residentPlan) become
-// resident products: the assembly collects one hoisted node per distinct
-// product and ResidentHost mounts each once in a sibling <Compute>, handing it
-// to every mark that reads it (gggplot-280).
+// resident products: the assembly plans one product per distinct productKey,
+// ProductHost mounts each once in a sibling <Compute> ABOVE the plot, and every
+// mark that reads it finds it by key (gggplot-280, -vnh.5.1). A product that
+// owns its y range reports its read-back summary, and the root trains y from
+// it, so a GPU-stat plot gets axes like any other.
 import type { LiveElement } from "@use-gpu/live";
 import {
   LayoutContext,
@@ -58,7 +60,9 @@ import {
   isInstrumentFlagSet,
   resetGpuMarkCounters,
 } from "../render/gpu_instrument.ts";
-import { ResidentHost } from "../runtime/resident_host.tsx";
+import type { Generation } from "../runtime/generation_gate.ts";
+import { ProductHost } from "../runtime/product_host.tsx";
+import type { GridSummary } from "../runtime/resident_grid_pending.ts";
 import { isResidentColumn } from "../runtime/types.ts";
 import {
   capture,
@@ -68,6 +72,7 @@ import {
   useDeviceContext,
   useMemo,
   useOne,
+  useState,
 } from "../runtime/usegpu_compat.ts";
 import { useGGData } from "./gg_data.ts";
 import {
@@ -82,9 +87,13 @@ import {
   createRootCaches,
   layoutRoot,
   plotSpec,
+  type PreparedLayers,
   type PreparedRoot,
-  prepareRoot,
+  prepareLayers,
+  type ResidentReadbacks,
+  residentTraining,
   type RootCaches,
+  trainRoot,
   versionKey,
 } from "./root_assembly.ts";
 
@@ -244,12 +253,41 @@ const PlotView = (
   const gpuRefs = useOne(() => createScaleBindingRefs());
 
   // Null while a layer is pending (vs7 trap 2); the last one is kept.
+  const lastLayersRef = useOne(() => ({
+    value: null as PreparedLayers | null,
+  }));
+  const prepared = useMemo(() => {
+    const next = prepareLayers(base, layers, panels, caches);
+    if (next) lastLayersRef.value = next;
+    return lastLayersRef.value;
+  }, [base, layers, panels, dataVersion]);
+  // Summaries the hosted products read back, by product key. A product that
+  // owns its y range trains it from here; until its first summary lands the
+  // previous trained plot stays on screen (or nothing, on the first frame).
+  const [readbacks, setReadbacks] = useState<ResidentReadbacks>(
+    () => new Map(),
+  );
+  const onSummary = useOne(
+    () => (key: string, summary: Generation<GridSummary>) =>
+      setReadbacks((prev) => {
+        const old = prev.get(key);
+        if (
+          old && old.version === summary.version &&
+          old.value.stackedMaximum === summary.value.stackedMaximum
+        ) return prev;
+        const next = new Map(prev);
+        next.set(key, summary);
+        return next;
+      }),
+  );
   const lastRef = useOne(() => ({ value: null as PreparedRoot | null }));
   const root = useMemo(() => {
-    const next = prepareRoot(base, layers, panels, caches);
-    if (next) lastRef.value = next;
+    if (!prepared) return lastRef.value;
+    const resident = residentTraining(prepared.plans, readbacks);
+    if (!resident.pending) lastRef.value = trainRoot(prepared, resident);
     return lastRef.value;
-  }, [base, layers, panels, dataVersion]);
+  }, [prepared, readbacks]);
+  const plans = prepared?.plans ?? [];
   // Row removals: reported once per distinct set, not on every re-assembly.
   const reportedRef = useOne(() => ({ key: "[]" }));
   if (root) {
@@ -260,7 +298,12 @@ const PlotView = (
       onDiagnostics?.(root.diagnostics);
     }
   }
-  if (!root) return null;
+  // Products are built ABOVE the tree: <Plot>'s VirtualLayers boundary keeps
+  // a kernel below it from reaching a compute pass (runtime/product_host.tsx).
+  // They mount before the first training, which may wait on their summaries.
+  const host = (children: LiveElement) =>
+    createElement(ProductHost, { plans, onSummary, children }) as LiveElement;
+  if (!root) return host(null);
 
   // One immutable value per distinct set of scales: only a retrain moves the
   // revision, and a resize never reaches this component.
@@ -277,7 +320,7 @@ const PlotView = (
     };
     componentProbe.scalesRevision = scalesRef.value.revision;
   }
-  return provide(
+  return host(provide(
     GGScalesContext,
     scalesRef.value,
     createElement(PlotLayout, {
@@ -286,7 +329,7 @@ const PlotView = (
       interactive,
       panelContent,
     }) as LiveElement,
-  );
+  ));
 };
 
 /**
@@ -316,7 +359,7 @@ const PlotLayout = (
   const width = Math.max(right - left, 1);
   const height = Math.max(bottom - top, 1);
   const panelRef = useOne(() => ({ value: null as GGPanelValue | null }));
-  const { tree, info, residentNodes } = useMemo(
+  const { tree, info } = useMemo(
     () =>
       layoutRoot(root, { width, height, measureText }, caches, panelContent),
     [root, width, height, measureText, panelContent],
@@ -339,13 +382,7 @@ const PlotLayout = (
   return provide(
     GGPanelContext,
     panelRef.value,
-    // Products are built ABOVE the tree: <Plot>'s VirtualLayers boundary
-    // keeps a kernel below it from reaching a compute pass (see
-    // runtime/resident_host.tsx).
-    createElement(ResidentHost, {
-      nodes: residentNodes,
-      children: renderTree(view) as LiveElement,
-    }) as LiveElement,
+    renderTree(view) as LiveElement,
   );
 };
 

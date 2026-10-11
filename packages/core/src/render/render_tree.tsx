@@ -39,7 +39,7 @@ import {
 } from "@use-gpu/workbench";
 import { OrbitControls } from "@use-gpu/interact";
 import { RangeContext } from "@use-gpu/plot/mjs/providers/range-provider.mjs";
-import { resolveResidentProduct } from "../runtime/mod.ts";
+import { ProductMark } from "../runtime/product_mark.tsx";
 import type { ComponentName, RenderNode } from "../compile/rendertree.ts";
 import type { FlatTensor } from "../compile/rendertree.ts";
 import type { Camera3D } from "../ir/types.ts";
@@ -455,15 +455,8 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
     typeof props.angle === "number" && props.angle !== 0
       ? createElement(RotatedLabel, props)
       : createElement(Label, props),
-  // Generic resident node: resolve product id → live component through the
-  // runtime registry, then mount it with the node's remaining (serializable)
-  // props. `view` selects the standalone auto-domain form.
-  ResidentProduct: (props: Record<string, unknown>) => {
-    const { product, view, ...rest } = props;
-    const component = resolveResidentProduct(product as string, view === true);
-    // deno-lint-ignore no-explicit-any
-    return createElement(component as any, rest);
-  },
+  // A layer whose stat runs on the GPU (gggplot-vnh.5.1).
+  ProductMark,
   FacetGrid,
   // FacetGrid consumes this transparent grouping and mounts a normalized
   // PanelViewport around each group inside the outer Embedded.

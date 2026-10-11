@@ -117,7 +117,8 @@ import {
   nudge,
   stackBars,
 } from "../src/position/mod.ts";
-import type { DataFrame, Layer } from "../src/ir/types.ts";
+import type { DataFrame, GGSpec, Layer } from "../src/ir/types.ts";
+import { residentPlansOf, residentTreeOf } from "./support/resident_root.ts";
 
 const data = { x: [0, 1, 2], y: [10, 20, 30] };
 const values = (frame: DataFrame, column: string) =>
@@ -266,6 +267,13 @@ function decodeColors(tensor: unknown, withAlpha = false): string[] {
     );
   }
   return out;
+}
+
+/** The products the component root would host for `spec`, as {props}. */
+function residentOf(spec: GGSpec): { props: Record<string, unknown> }[] {
+  return residentPlansOf(spec).map((plan) => ({
+    props: { product: plan.product, ...plan.props },
+  }));
 }
 
 Deno.test("compile builds an Embedded > Cartesian tree with a Point mark", () => {
@@ -1113,7 +1121,7 @@ Deno.test("2D summary binwidth precedence, boundaries, constants, empties, and r
   assertEquals(values(result.data, "x"), [0.5, 1.5]);
   assertEquals(values(result.data, "value"), [3, 3]);
   assertEquals(
-    findNodes(compile(spec, { resident: true }), "ResidentProduct").length,
+    residentOf(spec).length,
     0,
   );
 
@@ -2693,8 +2701,7 @@ Deno.test("resident compile lowers an eligible histogram without stat rows", () 
     .add(geomHistogram({ binwidth: 2, fill: "#ff0000" }))
     .add(scaleYContinuous({ domain: [0, 4] }))
     .build();
-  const tree = compile(spec, { resident: true });
-  const resident = findNodes(tree, "ResidentProduct");
+  const resident = residentOf(spec);
 
   assertEquals(resident.length, 1);
   assertEquals(resident[0].props.product, "@gggplot/core:stat_bin@1");
@@ -2719,10 +2726,7 @@ Deno.test("resident compile preserves declared dodge and fill grid layouts", () 
       geomHistogram({ binwidth: 2, position }),
       scaleYContinuous({ domain: [0, 4] }),
     ).build();
-    const resident = findNodes(
-      compile(spec, { resident: true }),
-      "ResidentProduct",
-    );
+    const resident = residentOf(spec);
     assertEquals(resident.length, 1);
     assertEquals(
       (resident[0].props.options as { position: string }).position,
@@ -2731,16 +2735,14 @@ Deno.test("resident compile preserves declared dodge and fill grid layouts", () 
   }
 });
 
-Deno.test("resident compile uses a bounded-summary view for automatic y domains", () => {
+Deno.test("resident root reads automatic y domains back as a summary", () => {
   const spec = ggplot({ x: [0, 1, 2, 3] }, { x: "x" })
     .add(geomHistogram({ binwidth: 2 }))
     .build();
-  const tree = compile(spec, { resident: true });
-
-  const view = findNodes(tree, "ResidentProduct").filter((n) =>
-    n.props.view === true
-  );
-  assertEquals(view.length, 1);
+  const plans = residentPlansOf(spec);
+  assertEquals(plans.map((plan) => plan.summary), [true]);
+  const tree = residentTreeOf(spec);
+  assertEquals(findNodes(tree, "ProductMark").length, 1);
   assertEquals(findNodes(tree, "Polygon").length, 0);
 });
 
@@ -2749,9 +2751,9 @@ Deno.test("resident compile preserves CPU fallback outside the standalone cartes
     .add(geomHistogram({ binwidth: 2 }))
     .add(coordPolar())
     .build();
-  const tree = compile(spec, { resident: true });
+  const tree = residentTreeOf(spec);
 
-  assertEquals(findNodes(tree, "ResidentProduct").length, 0);
+  assertEquals(residentOf(spec).length, 0);
   // gggplot-tzc.4: geom_histogram's CPU-fallback bars are a ChunkedFace node.
   assertEquals(findNodes(tree, "ChunkedFace").length > 0, true);
 });
@@ -2761,13 +2763,11 @@ Deno.test("default-scaled factor fills go resident with a matching palette and l
     { x: [0, 1, 2, 3], cohort: ["a", "a", "b", "b"] },
     { x: "x", fill: "cohort" },
   ).add(geomHistogram({ binwidth: 2 })).build();
-  const tree = compile(spec, {
-    resident: true,
-    layout: { width: 640, height: 480, measureText: approximateTextMeasurer },
-  });
+  const tree = residentTreeOf(spec);
 
-  const resident = findNodes(tree, "ResidentProduct");
+  const resident = residentOf(spec);
   assertEquals(resident.length, 1);
+  assertEquals(findNodes(tree, "ProductMark").length, 1);
   assertEquals(findNodes(tree, "ChunkedFace").length, 0);
   // Palette is in factor-level order and matches the trained fill scale.
   assertEquals(resident[0].props.paletteColors, [
@@ -2785,9 +2785,9 @@ Deno.test("a custom fill scale keeps mapped histogram fills on the CPU path", ()
     { x: "x", fill: "cohort" },
   ).add(geomHistogram({ binwidth: 2 }), scaleFill({ range: ["#111", "#222"] }))
     .build();
-  const tree = compile(spec, { resident: true });
+  const tree = residentTreeOf(spec);
 
-  assertEquals(findNodes(tree, "ResidentProduct").length, 0);
+  assertEquals(residentOf(spec).length, 0);
   assertEquals(findNodes(tree, "ChunkedFace").length > 0, true);
 });
 

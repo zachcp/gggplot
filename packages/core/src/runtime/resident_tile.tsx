@@ -3,7 +3,7 @@
 // A direct Use.GPU Face mark over dense resident histogram-grid tile vertices.
 
 import type { LiveElement } from "@use-gpu/live";
-import type { ResidentHistogramProduct } from "./resident_live.tsx";
+import type { ResidentGridProduct } from "./resident_products.ts";
 import type { GPUStorageSource } from "./types.ts";
 import { parseColorRGBA } from "../color/mod.ts";
 import { histogramBarChunks } from "./resident_bar.tsx";
@@ -23,7 +23,7 @@ import {
 } from "./usegpu_compat.ts";
 
 export interface ResidentHistogramTilesProps {
-  product: ResidentHistogramProduct;
+  product: ResidentGridProduct;
   color?: string;
   opacity?: number;
   /**
