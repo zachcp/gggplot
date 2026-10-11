@@ -1,35 +1,14 @@
-/** @jsxRuntime classic */
-/** @jsx createElement */
-// The finite-domain reduction as real Use.GPU <Kernel>s (gggplot-vs7.5).
-//
-// This replaces the hand-rolled pipeline in @gggplot/reductions for the MOUNTED
-// path only; the standalone executor there is untouched and still backs the
-// headless CPU/GPU parity tests. Both compile from the same pass bodies — see
-// render/resident_domain_kernel.ts for the two binding preambles.
+// Readiness for the finite-domain reduction (gggplot-vs7.5): decoding its
+// ordered-float accumulator and deciding when a copy of it is the answer.
+// The reduction itself is DOMAIN_1D_PRODUCT, mounted through the ProductSpec
+// adapter (runtime/histogram_product.ts, gggplot-0rv).
 
-import type { LiveElement } from "@use-gpu/live";
 import {
   floatFromOrdered,
   isEmptyDomain,
   type ResidentDomain1DResult,
 } from "@gggplot/reductions";
-import {
-  DOMAIN_CLEAR_KERNEL,
-  FINITE_DOMAIN_1D_KERNEL,
-} from "../render/resident_domain_kernel.ts";
-import {
-  type ReadbackChannel,
-  type ReadbackDecision,
-  ResidentReadback,
-} from "./resident_readback.tsx";
-import type { GPUStorageSource } from "./types.ts";
-import {
-  createElement,
-  Fragment,
-  Kernel,
-  Stage,
-  useMemo,
-} from "./usegpu_compat.ts";
+import type { ReadbackDecision } from "./resident_readback.tsx";
 
 /** The two-word ordered-bit accumulator both passes share. */
 export const DOMAIN_ACCUMULATOR_LENGTH = 2;
@@ -122,73 +101,3 @@ export function decideDomain(
  * one readback whose slowness is a blank chart rather than a late one.
  */
 export const DOMAIN_FRAME_BUDGET = 600;
-
-/** Mounts the readback that fills a domain channel from inside <Compute>. */
-export const DomainReadback = (
-  { source, version, rows, channel, alive }: {
-    source: GPUStorageSource;
-    version: number;
-    /** Input rows; zero makes an empty domain the immediate right answer. */
-    rows: number;
-    channel: ReadbackChannel<ResidentDomain1DResult>;
-    alive: () => boolean;
-  },
-): LiveElement => {
-  const expectNonEmpty = rows > 0;
-  const decide = useMemo(
-    () => (words: Uint32Array, exhausted: boolean) =>
-      decideDomain(words, { expectNonEmpty }, exhausted),
-    [expectNonEmpty],
-  );
-  return createElement(ResidentReadback, {
-    source,
-    version,
-    channel,
-    decide,
-    alive,
-    frames: DOMAIN_FRAME_BUDGET,
-    label: "resident domain",
-  }) as LiveElement;
-};
-
-export interface DomainKernelsProps {
-  /** The <ComputeBuffer> target, created by the caller outside <Compute>. */
-  target: unknown;
-  /** The mounted x column this reduces. */
-  source: unknown;
-  rows: number;
-  version: number;
-}
-
-/**
- * Mounts the clear and reduce passes against a caller-owned accumulator.
- *
- * `initial` + `version` is what makes this dispatch ONCE PER VERSION rather than
- * every frame: <Kernel> routes them through useInitialDispatch, whose guard
- * re-arms only when its deps change. Without `initial` a Kernel redispatches on
- * every frame the pass runs.
- */
-export const DomainKernels = (
-  { target, source, rows, version }: DomainKernelsProps,
-): LiveElement =>
-  createElement(
-    Fragment,
-    {},
-    createElement(
-      Stage,
-      { target },
-      createElement(Kernel, {
-        shader: DOMAIN_CLEAR_KERNEL,
-        size: [DOMAIN_ACCUMULATOR_LENGTH],
-        initial: true,
-        version,
-      }),
-      createElement(Kernel, {
-        shader: FINITE_DOMAIN_1D_KERNEL,
-        source,
-        size: [rows],
-        initial: true,
-        version,
-      }),
-    ),
-  ) as LiveElement;

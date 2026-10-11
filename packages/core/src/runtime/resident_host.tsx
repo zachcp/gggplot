@@ -43,14 +43,10 @@ import {
 } from "../compile/resident.ts";
 import { GPUDataProvider } from "./live.tsx";
 import { type CountProductOptions, useCountProduct } from "./count_product.ts";
-import {
-  decideGridSummary,
-  type GridSummary,
-} from "./resident_grid_pending.ts";
+import type { GridSummary } from "./resident_grid_pending.ts";
 import {
   createReadbackChannel,
   type ReadbackChannel,
-  ResidentReadback,
 } from "./resident_readback.tsx";
 import {
   RESIDENT_ID_PROP,
@@ -58,27 +54,16 @@ import {
   ResidentProductsContext,
 } from "./resident_products.ts";
 import {
-  HistogramKernels,
-  type HistogramPosition,
-} from "./resident_histogram_kernel_live.tsx";
-import {
-  DOMAIN_ACCUMULATOR_LENGTH,
-  DomainKernels,
-  DomainReadback,
-} from "./resident_domain_kernel_live.tsx";
-import {
-  type ResidentHistogramProduct,
-  ResidentHistogramProvider,
-} from "./resident_live.tsx";
+  HistogramProductNode,
+  type HistogramProductOptions,
+} from "./histogram_product.ts";
 import { paletteToRgbaF32 } from "./resident_bar.tsx";
 import type { GPUStorageSource } from "./types.ts";
 import {
   Compute,
-  ComputeBuffer,
   createElement,
   Fragment,
   provide,
-  useAwait,
   useMemo,
   useOne,
 } from "./usegpu_compat.ts";
@@ -98,57 +83,6 @@ interface SummaryChannel {
 const makeSummaryChannel = (): SummaryChannel => {
   const channel = createReadbackChannel<GridSummary>();
   return { channel, read: (version: number) => channel.read(version) };
-};
-
-/** What {@link GridSummaryReadback} needs of a product to read its summary. */
-interface SummarizedProduct {
-  readonly summary: GPUStorageSource;
-  readonly bins: number;
-  readonly groupsCount: number;
-  readonly rows: number;
-  readonly version: number;
-  alive(): boolean;
-}
-
-/**
- * Mounts the <Readback> that fills one grid product's summary channel.
- *
- * Nothing here waits on the compute having run — <Compute> sequences the copy
- * behind it. What it does wait on is the compute having FINISHED PRODUCING,
- * which is a different claim: a <Kernel> contributes no dispatch until its
- * pipeline compiles, and each of a chain's kernels compiles on its own promise,
- * so a pass can run with some of the chain absent and leave the summary buffer
- * untouched. Opening a view on that hands it an untouched summary, whose
- * stackedMaximum of 0 collapses the y-range to 1 and overflows the bars out of
- * the plot — the exact gggplot-vs7.1 attempt-2 failure, and one a pixel floor
- * cannot see because coverage goes UP. decideGridSummary is that predicate.
- */
-const GridSummaryReadback = (
-  { product, channel }: {
-    product: SummarizedProduct;
-    channel: ReadbackChannel<GridSummary>;
-  },
-): LiveElement => {
-  const { groupsCount, bins, rows } = product;
-  // A grid with no cells mounts no passes at all, so nothing ever arms its
-  // pending marker and nothing can make its summary nonzero; a grid with no
-  // rows can only ever summarize to zero. Either way zero is the answer rather
-  // than something to wait for.
-  const expectNonEmpty = rows > 0 && bins * groupsCount > 0;
-  const decide = useMemo(
-    () => (data: Uint32Array, exhausted: boolean) =>
-      decideGridSummary(data, { groupsCount, expectNonEmpty }, exhausted),
-    [groupsCount, expectNonEmpty],
-  );
-  const alive = useMemo(() => () => product.alive(), [product]);
-  return createElement(ResidentReadback, {
-    source: product.summary,
-    version: product.version,
-    channel,
-    decide,
-    alive,
-    label: "resident grid summary",
-  }) as LiveElement;
 };
 
 /**
@@ -284,19 +218,10 @@ const HoistedCount = (
 };
 
 /**
- * Builds one stat_bin node's kernels and yields its product.
- *
- * Two kernels, not one, and the second depends on a readback from the first:
- * an auto-domain histogram must know its x bounds before it can size the bin
- * grid. So this contributes its domain kernels immediately and its bin kernel
- * only once bounds have resolved — which is why HoistedResult allows a null
- * product. The in-place path had exactly the same two stages; hoisting does not
- * add a round trip.
- *
- * The domain reduction runs as real <Kernel>s. Its accumulator is created here,
- * OUTSIDE <Compute>, because <ComputeBuffer> is a buffer rather than a pass and
- * the handle has to reach both the <Stage> inside the compute and the readback
- * out here.
+ * Builds one stat_bin node's products and yields them (gggplot-0rv): the
+ * auto-domain stage first, then the bin grid sized to its bounds. See
+ * runtime/histogram_product.ts for why it takes two stages and the readiness
+ * rule between them.
  */
 const HoistedHistogram = (
   { props, children }: {
@@ -309,132 +234,39 @@ const HoistedHistogram = (
   const paletteColors = props.paletteColors as string[] | undefined;
   const opacity = props.opacity as number | undefined;
   const base = props.options as Record<string, unknown>;
-  const options = paletteColors
-    ? { ...base, palette: paletteToRgbaF32(paletteColors, opacity ?? 1) }
-    : base;
+  // Memoized on the colors: the palette is an input port uploaded per identity.
+  const palette = useMemo(
+    () =>
+      paletteColors ? paletteToRgbaF32(paletteColors, opacity ?? 1) : undefined,
+    [paletteColors?.join(","), opacity],
+  );
+  const options = useMemo((): HistogramProductOptions => ({
+    bins: base.bins as number | undefined,
+    binwidth: base.binwidth as number | undefined,
+    position: base.position as HistogramProductOptions["position"],
+    groupsCount: base.groupsCount as number | undefined,
+    ...(palette ? { palette } : {}),
+  }), [base.bins, base.binwidth, base.position, base.groupsCount, palette]);
   const fields = [
     { name: x, dtype: "f32", shape: "row", dimensions: ["row"] },
     ...(group
       ? [{ name: group, dtype: "u32", shape: "row", dimensions: ["row"] }]
       : []),
   ];
-  const domain = useOne(() => createReadbackChannel<ResidentDomain1DResult>());
-  const summary = useOne(makeSummaryChannel);
+  const channels = useOne(() => ({
+    domain: createReadbackChannel<ResidentDomain1DResult>(),
+    summary: makeSummaryChannel(),
+  }));
   return createElement(GPUDataProvider, {
     data: props.data,
     fields,
     children: (sources: Record<string, GPUStorageSource>) =>
-      createElement(ComputeBuffer, {
-        width: DOMAIN_ACCUMULATOR_LENGTH,
-        height: 1,
-        depth: 1,
-        format: "atomic<u32>",
-        label: "gggplot-domain",
-        children: (target: unknown) =>
-          createElement(AwaitHoistedBounds, {
-            target,
-            xSource: sources[x],
-            groupSource: group ? sources[group] : undefined,
-            options,
-            domain,
-            summary,
-            children,
-          }),
-      }),
-  }) as LiveElement;
-};
-
-/** Resolves x bounds off the GPU, then mounts the bin grid sized to them. */
-const AwaitHoistedBounds = (
-  {
-    target,
-    xSource,
-    groupSource,
-    options,
-    domain,
-    summary,
-    children,
-  }: {
-    target: unknown;
-    xSource: GPUStorageSource;
-    groupSource?: GPUStorageSource;
-    options: Record<string, unknown>;
-    domain: ReadbackChannel<ResidentDomain1DResult>;
-    summary: SummaryChannel;
-    children: (result: HoistedResult) => LiveElement;
-  },
-): LiveElement => {
-  const version = xSource.version;
-  // The accumulator's own `version` counts <ComputeBuffer> history swaps and
-  // never moves, so the readback is keyed on the COLUMN version instead — the
-  // version of the data whose bounds are in there.
-  const domainComputes = [
-    createElement(DomainKernels, {
-      target,
-      source: xSource,
-      rows: xSource.length,
-      version,
-    }),
-    createElement(DomainReadback, {
-      source: target as GPUStorageSource,
-      version,
-      rows: xSource.length,
-      channel: domain,
-      // Nothing to check: this leaf is mounted INSIDE the <ComputeBuffer> whose
-      // accumulator it copies (the host's fold nests every node's <Compute>
-      // within the nodes above it), so the buffer cannot outlive it and a
-      // dispatch cannot outlive the buffer. The grid summaries are the ones
-      // with a real answer here — their kernel object is disposed on an option
-      // change, not only on unmount.
-      alive: () => true,
-    }),
-  ];
-  const [bounds, error] = useAwait(() => domain.read(version), [version]);
-  if (error) throw error;
-  // Contribute the domain kernels even while their bounds are still in flight —
-  // they are what produce them, so withholding them would deadlock.
-  if (!bounds || bounds.empty) {
-    return children({ product: null, computes: domainComputes });
-  }
-  const resolved = {
-    ...options,
-    lo: bounds.min,
-    hi: bounds.max,
-    autoDomain: undefined,
-  };
-  return createElement(ResidentHistogramProvider, {
-    x: xSource,
-    group: groupSource,
-    options: resolved,
-    defer: true,
-    readSummary: summary.read,
-    children: (product: ResidentHistogramProduct) =>
-      children({
-        product: {
-          ...product,
-          // The view needs the bounds it was sized against to set its x range.
-          hoistedBounds: bounds,
-        },
-        // Real <Kernel>s rather than a recorded command buffer: this node's
-        // seven passes are dispatched from the frame's compute pass by
-        // Use.GPU's own linker and dispatch gating (gggplot-vs7.8). The kernel
-        // object built by the provider above contributes only its buffers now
-        // — with `defer` set nothing ever calls its encode(), so its raw
-        // pipelines are never built.
-        computes: [
-          ...domainComputes,
-          createElement(HistogramKernels, {
-            product,
-            values: xSource,
-            groups: groupSource,
-            position: (options as { position?: HistogramPosition }).position ??
-              "stack",
-          }),
-          createElement(GridSummaryReadback, {
-            product,
-            channel: summary.channel,
-          }),
-        ],
+      createElement(HistogramProductNode, {
+        x: sources[x],
+        group: group ? sources[group] : undefined,
+        options,
+        channels,
+        children,
       }),
   }) as LiveElement;
 };

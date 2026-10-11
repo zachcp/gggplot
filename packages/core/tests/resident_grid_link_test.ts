@@ -26,7 +26,7 @@ import {
   GROUPED_HISTOGRAM_1D_KERNEL,
   HISTOGRAM_BAR_VERTICES_KERNEL,
   HISTOGRAM_TILE_VERTICES_KERNEL,
-} from "../src/render/resident_grid_kernels.ts";
+} from "./support/linked_kernels.ts";
 
 // deno-lint-ignore no-explicit-any
 const any = (value: unknown): any => value;

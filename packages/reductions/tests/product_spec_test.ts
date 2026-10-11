@@ -1,19 +1,30 @@
 // gggplot-euh: kernels and products as plain data. Both preambles are
 // generated from a KernelSpec; the headless executor runs a ProductSpec.
-import { assert, assertEquals, assertThrows } from "@std/assert";
+import {
+  assert,
+  assertAlmostEquals,
+  assertEquals,
+  assertThrows,
+} from "@std/assert";
 import {
   CLEAR_U32,
   COUNT_BAR_VERTICES,
   COUNT_GRID_PRODUCT,
   createResidentCount1DFromSources,
+  createResidentDomain1D,
+  createResidentHistogram1DFromSources,
+  DOMAIN_1D_PRODUCT,
   evalSize,
+  floatFromOrdered,
   GRID_SUMMARY,
   gridPositionCode,
   GROUPED_COUNT_1D,
   groupedCount1d,
+  HISTOGRAM_GRID_PRODUCT,
   linkPreamble,
   type ProductSpec,
   rawSource,
+  resolveHistogram1dBins,
   runProduct,
   validateProductSpec,
 } from "../src/mod.ts";
@@ -168,5 +179,83 @@ Deno.test("the count grid product runs headless and matches the CPU", async () =
     handWired.destroy();
   }
   run.destroy();
+  device.destroy();
+});
+
+Deno.test("the histogram and domain products match the hand-wired executors", async () => {
+  const device = await requestTestDevice();
+  if (!device) return;
+  const values = Float32Array.of(4.3, 5.1, 5.8, 6.4, 7.9, 5.5, 6.1, Number.NaN);
+  const groupIds = Uint32Array.of(0, 1, 2, 0, 1, 2, 0, 1);
+  const upload = (array: Float32Array | Uint32Array) => {
+    const buffer = device.createBuffer({
+      size: array.byteLength,
+      usage: 0x0080 | 0x0008,
+    });
+    device.queue.writeBuffer(buffer, 0, array);
+    return buffer;
+  };
+
+  // Domain: the same ordered-float [min, max] words.
+  const domain = runProduct(device, DOMAIN_1D_PRODUCT, {
+    rows: values.length,
+  }, { values: upload(values) });
+  const handDomain = createResidentDomain1D(
+    device,
+    upload(values),
+    values.length,
+  );
+  handDomain.dispatch();
+  const words = await domain.readU32("domain");
+  const hand = await handDomain.readback();
+  assertAlmostEquals(floatFromOrdered(words[0]), hand.min, 1e-6);
+  assertAlmostEquals(floatFromOrdered(words[1]), hand.max, 1e-6);
+  domain.destroy();
+
+  const lo = 4.3, hi = 7.9;
+  const { bins, binwidth } = resolveHistogram1dBins({ lo, hi, bins: 5 });
+  for (const position of ["identity", "stack", "dodge", "fill"] as const) {
+    const run = runProduct(device, HISTOGRAM_GRID_PRODUCT, {
+      rows: values.length,
+      bins,
+      groups: 3,
+      hasGroups: 1,
+      position: gridPositionCode(position),
+      lo,
+      binwidth,
+    }, { values: upload(values), groupIds: upload(groupIds) });
+    const wired = createResidentHistogram1DFromSources(device, {
+      values: upload(values),
+      rows: values.length,
+      groupIds: upload(groupIds),
+      lo,
+      hi,
+      bins: 5,
+      groupsCount: 3,
+      position,
+    });
+    wired.dispatch();
+    assertEquals([...await run.readU32("counts")], [...await wired.readback()]);
+    const summary = await wired.readbackSummary();
+    assertEquals([...await run.readU32("summary")], [
+      ...summary.groupTotals,
+      summary.stackedMaximum,
+    ]);
+    assertEquals(
+      [...await run.readF32("barVertices")],
+      [...await wired.readbackBarVertices()],
+      position,
+    );
+    assertEquals(
+      [...await run.readF32("tileVertices")],
+      [...await wired.readbackTileVertices()],
+    );
+    assertEquals(
+      [...await run.readF32("heatmapColors")],
+      [...await wired.readbackHeatmapColors()],
+    );
+    run.destroy();
+    wired.destroy();
+  }
   device.destroy();
 });

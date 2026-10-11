@@ -59,7 +59,12 @@ export function packCount1dParams(input: GroupedCount1DInput): {
   return { params, groupsCount, countsLength: groupsCount * input.valuesCount };
 }
 
-function resolveHistogram1dBins(
+/**
+ * The bin count and width a 1D histogram uses: a binwidth fixes the bins over
+ * [lo, hi], else `bins` (default 30) fixes the width. Shared by the standalone
+ * executor and the mounted product so both size the grid identically.
+ */
+export function resolveHistogram1dBins(
   input: Pick<GroupedHistogram1DInput, "lo" | "hi" | "bins" | "binwidth">,
 ): {
   bins: number;

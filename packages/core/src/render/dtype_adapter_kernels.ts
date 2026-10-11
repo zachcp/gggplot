@@ -1,6 +1,7 @@
 // <Kernel>-linkable forms of the dtype adapter passes (gggplot-vs7.9).
 //
-// Same dual-surface rule as render/resident_grid_kernels.ts: @gggplot/reductions
+// Same dual-surface rule as the product catalog (@gggplot/reductions
+// product_spec.ts generates both preambles there): @gggplot/reductions
 // owns the pass BODIES and the hand-numbered preamble the standalone loader in
 // @gggplot/model-inspect uses (reductions/src/dtype_wgsl.ts), and this module
 // adds the `@link` preamble over the same body text. The bodies are shared by reference, not copied, so
