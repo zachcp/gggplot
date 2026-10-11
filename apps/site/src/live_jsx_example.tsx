@@ -5,7 +5,18 @@
 // createElement form alike. The wrong-prop lines are expected errors, so the
 // check fails if either ever type-checks. Part of `deno task check`.
 import type { LiveElement } from "@use-gpu/live";
-import { GeomHline, GeomPoint, GeomSmooth, GGPlot } from "@gggplot/core";
+import {
+  CoordFlip,
+  CoordPolar,
+  FacetWrap,
+  GeomHline,
+  GeomPoint,
+  GeomSmooth,
+  GGPlot,
+  Labs,
+  ScaleXLog10,
+  ThemeMinimal,
+} from "@gggplot/core";
 import type { GGSpec } from "@gggplot/core";
 import * as Jsx from "@gggplot/core/jsx";
 
@@ -39,6 +50,11 @@ export function ComponentPlot(): LiveElement {
       <GeomPoint size={3} color="#0f766e" opacity={0.6} />
       <GeomSmooth method="loess" se={false} span={0.75} />
       <GeomHline yintercept={3.5} linetype="dashed" />
+      <ScaleXLog10 name="Dose" />
+      <CoordFlip />
+      <FacetWrap vars={["g"]} ncol={2} />
+      <ThemeMinimal fontSize={12} />
+      <Labs title="Response" />
     </GGPlot>
   );
 }
@@ -46,6 +62,11 @@ export function ComponentPlot(): LiveElement {
 export const wrongGeomProp = <GeomPoint bins={3} />;
 // @ts-expect-error `size` is a number.
 export const wrongGeomValue = <GeomPoint size="big" />;
+// Plot parts (gggplot-vnh.7.1) are typed too.
+// @ts-expect-error FacetWrap needs `vars`.
+export const facetWithoutVars = <FacetWrap ncol={2} />;
+// @ts-expect-error theta is "x" or "y".
+export const polarOnZ = <CoordPolar theta="z" />;
 // A parameter the component does not type goes through `params`.
 export const untypedParam = (
   <GeomPoint

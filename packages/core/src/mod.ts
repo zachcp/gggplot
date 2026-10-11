@@ -34,6 +34,7 @@ export {
   layerFromProps,
 } from "./components/geom_layer.ts";
 export * from "./components/geoms.ts";
+export * from "./components/plot_parts.ts";
 export {
   GGPanelContext,
   type GGPanelValue,
