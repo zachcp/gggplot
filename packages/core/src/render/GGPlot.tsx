@@ -21,7 +21,6 @@ import {
   useFontContext,
   useNoDeviceContext,
 } from "@use-gpu/workbench";
-import type { RenderNode } from "../compile/rendertree.ts";
 import {
   collectResidentNodes,
   ResidentHost,
@@ -56,8 +55,6 @@ export interface GGPlotSpecProps {
   /** Compatibility shorthand; prefer fontResources for readiness/validation. */
   fonts?: FontFaceResource[];
   fontResources?: FontResources;
-  /** Runtime-only 3D content mounted inside the compiled Cartesian scene. */
-  sceneExtras?: unknown;
   children?: never;
 }
 
@@ -70,30 +67,11 @@ export interface GGPlotComponentProps extends GGPlotRootProps {
 
 export type GGPlotProps = GGPlotSpecProps | GGPlotComponentProps;
 
-function appendSceneExtras(tree: RenderNode, content: unknown): RenderNode {
-  let inserted = false;
-  const visit = (current: RenderNode): RenderNode => {
-    if (!inserted && current.component === "Cartesian") {
-      inserted = true;
-      return {
-        ...current,
-        children: [
-          ...current.children,
-          { component: "SceneExtras", props: { content }, children: [] },
-        ],
-      };
-    }
-    return { ...current, children: current.children.map(visit) };
-  };
-  return visit(tree);
-}
-
 const GlyphMeasuredPlot = (
   {
     spec,
     interactive = true,
-    sceneExtras,
-  }: { spec: GGSpec; interactive?: boolean; sceneExtras?: unknown },
+  }: { spec: GGSpec; interactive?: boolean },
 ) => {
   const rustText = useFontContext();
   const measureText = useMemo(
@@ -152,15 +130,11 @@ const GlyphMeasuredPlot = (
   const interactiveTree = tree.component === "Scene3D"
     ? { ...tree, props: { ...tree.props, interactive } }
     : tree;
-  const renderedTree =
-    sceneExtras != null && interactiveTree.component === "Scene3D"
-      ? appendSceneExtras(interactiveTree, sceneExtras)
-      : interactiveTree;
   // Resident kernels are built ABOVE the compiled tree and handed down by
   // context; <Plot>'s VirtualLayers boundary makes below-the-tree construction
   // a dead end for compute. See runtime/resident_host.tsx.
   const { tree: hostedTree, nodes: residentNodes } = collectResidentNodes(
-    renderedTree,
+    interactiveTree,
   );
   return createElement(ResidentHost, {
     nodes: residentNodes,
@@ -210,7 +184,6 @@ export const GGPlot = (props: GGPlotProps): LiveElement => {
     ? createElement(GlyphMeasuredPlot, {
       spec,
       interactive: props.interactive,
-      sceneExtras: (props as GGPlotSpecProps).sceneExtras,
     })
     : createElement(GGPlotRoot, {
       ...(props as GGPlotComponentProps),

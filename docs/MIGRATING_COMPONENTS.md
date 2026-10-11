@@ -173,3 +173,10 @@ panel and bind those same scales:
   <StationGlyphs />
 </GGLayer>;
 ```
+
+### `sceneExtras` is gone
+
+`<GGPlot spec sceneExtras={...}>` mounted extra Live content in a 3D scene by
+splicing it into the compiled tree. Put that content in `<GGPanel>` instead. In
+a 3D plot it draws in the scene's Cartesian, inside the 3D camera's view, which
+is where `ScenePicker` and `PrismInstances3D` need to be.

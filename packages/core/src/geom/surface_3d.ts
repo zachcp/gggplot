@@ -230,7 +230,8 @@ export function lowerArea3d(
  *
  * A prism is drawn as planar surfaces rather than through the instanced
  * PrismInstances3D primitive because that primitive is reached only through
- * the runtime SceneExtras host hook — it is not something compile() can emit.
+ * <GGPanel> content (formerly the SceneExtras hook) — not something compile()
+ * can emit.
  * Six rings per box reuses the surface path this module already provides and
  * keeps prisms inside the serializable RenderTree; instancing is a
  * performance question for dense lattices, filed separately.

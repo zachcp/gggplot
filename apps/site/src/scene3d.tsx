@@ -1,11 +1,14 @@
 /** @jsxRuntime classic */
 /** @jsx Jsx.createElement */
-// The shared GGPlot host compiles dimensionality and realizes Scene3D's orbit
-// and flat-overlay passes. Callers provide only GGSpec, exactly as in 2D.
+// The component-form GGPlot root realizes Scene3D's orbit and flat-overlay
+// passes; callers still provide a GGSpec, mapped to components here. Extras
+// (prism instances, the scene picker) draw in the scene's data space through
+// <GGPanel> (gggplot-icxo).
 import * as Jsx from "@gggplot/core/jsx";
 import { AutoCanvas, WebGPU } from "@use-gpu/webgpu";
 import {
   createFontResources,
+  GGPanel,
   GGPlot,
   type GGSpec,
   type PrismInstance3D,
@@ -15,6 +18,7 @@ import {
 } from "@gggplot/core";
 import { withSiteChartTheme3d } from "./chart_theme.ts";
 import { assetUrl } from "./asset_url.ts";
+import { specChildren } from "./spec_components.tsx";
 
 interface Props {
   canvas: HTMLCanvasElement;
@@ -42,9 +46,10 @@ const fontResources = createFontResources([
 export const Scene3D = (
   { canvas, spec, prismInstances, publishPick }: Props,
 ) => {
-  // Both extras must sit inside the panel's Cartesian node: the prisms to share
-  // its transform, the picker to read the 3D camera's ViewContext rather than
-  // the flat overlay's.
+  // Both extras sit inside the scene's Cartesian, where <GGPanel> content
+  // draws: the prisms to share its transform, the picker to read the 3D
+  // camera's ViewContext rather than the flat overlay's.
+  const themed = withSiteChartTheme3d(spec);
   const extras = [
     ...(prismInstances?.length
       ? [Jsx.createElement(PrismInstances3D, { instances: prismInstances })]
@@ -57,10 +62,15 @@ export const Scene3D = (
     <WebGPU fallback={null}>
       <AutoCanvas canvas={canvas} backgroundColor={[0.05, 0.05, 0.07, 1]}>
         <GGPlot
-          spec={withSiteChartTheme3d(spec)}
+          data={themed.data}
+          mapping={themed.mapping}
+          theme={themed.theme}
+          labels={themed.labels}
           fontResources={fontResources}
-          sceneExtras={extras.length ? extras : undefined}
-        />
+        >
+          {specChildren(themed)}
+          {extras.length ? <GGPanel>{extras}</GGPanel> : null}
+        </GGPlot>
       </AutoCanvas>
     </WebGPU>
   );
