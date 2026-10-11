@@ -5,6 +5,7 @@ import * as dsl from "../src/dsl/mod.ts";
 import type { SpecPart } from "../src/dsl/base.ts";
 import * as parts from "../src/components/plot_parts.ts";
 import type { PartComponent } from "../src/components/plot_parts.ts";
+import type { FacetGrid as PublicFacetGrid } from "../src/mod.ts";
 
 // deno-lint-ignore no-explicit-any
 type AnyPart = PartComponent<any>;
@@ -144,4 +145,15 @@ Deno.test("Live's key and children are not part options", () => {
     ),
     dsl.scaleXLog10({ name: "x" }),
   );
+});
+
+Deno.test("the public FacetGrid is the plot part, not the renderer's layout", () => {
+  // Checked by the type checker: an explicit renderer export used to shadow
+  // the plot part's `export *` (importing mod.ts at runtime would load the
+  // renderer, which Deno cannot).
+  const publicPart: typeof PublicFacetGrid = parts.FacetGrid;
+  const plotPart: typeof parts.FacetGrid =
+    null as unknown as typeof PublicFacetGrid;
+  assertEquals(typeof publicPart.part, "function");
+  assertEquals(plotPart, null);
 });

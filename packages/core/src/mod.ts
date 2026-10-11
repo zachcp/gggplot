@@ -86,10 +86,6 @@ export {
   validateExportDimensions,
 } from "./export/utils.ts";
 export {
-  FacetGrid,
-  type FacetGridProps,
-  FacetPanel,
-  type FacetPanelProps,
   GGPlot,
   type GGPlotComponentProps,
   type GGPlotProps,
