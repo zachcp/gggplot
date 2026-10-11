@@ -1,7 +1,7 @@
 // geom_point / geom_dotplot (and jitter/nudge/jitterdodge positions).
 import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
-import { jitter } from "../position/mod.ts";
+import { DEFAULT_JITTER_SEED, jitter, seededRandom } from "../position/mod.ts";
 import type { DepthPolicy, LayerContext } from "./types.ts";
 import {
   alphasOf,
@@ -34,18 +34,21 @@ export function lowerPoint(
   const opacity = layer.params.alpha as number | undefined;
 
   // Operate on planar xs/ys directly (no per-row tuple allocation). Position
-  // adjustments mutate xs[i]/ys[i] in place; jitter() call ORDER stays
-  // x-then-y per row, matching the former tuple-literal evaluation order so
-  // the RNG stream is unchanged.
+  // adjustments mutate xs[i]/ys[i] in place; jitter() draws x then y per row
+  // from one stream seeded per lowering, so the same layer always jitters
+  // the same way (gggplot-plrj).
   const { xs, ys } = positionsXYOf(mapping, data, xScale, yScale);
+  const random = seededRandom(
+    (layer.params.seed as number | undefined) ?? DEFAULT_JITTER_SEED,
+  );
   if (xs.length === 0) return [];
   if (layer.position === "jitter") {
     const xAmount = (layer.params.width as number) ??
       resolutionOf(xScale, xs) * 0.4;
     const yAmount = (layer.params.height as number) ?? 0.4;
     for (let i = 0; i < xs.length; i++) {
-      xs[i] = jitter(xs[i], xAmount);
-      ys[i] = jitter(ys[i], yAmount);
+      xs[i] = jitter(xs[i], xAmount, random);
+      ys[i] = jitter(ys[i], yAmount, random);
     }
   } else if (layer.position === "nudge") {
     const dx = (layer.params.x as number) ?? (layer.params.nudgeX as number) ??
@@ -70,8 +73,8 @@ export function lowerPoint(
       const offset = groups.length > 1
         ? (slot - (groups.length - 1) / 2) * dodgeWidth / groups.length
         : 0;
-      xs[i] = jitter(xs[i] + offset, jitterWidth);
-      ys[i] = jitter(ys[i], jitterHeight);
+      xs[i] = jitter(xs[i] + offset, jitterWidth, random);
+      ys[i] = jitter(ys[i], jitterHeight, random);
     }
   }
 

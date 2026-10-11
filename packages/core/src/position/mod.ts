@@ -114,7 +114,30 @@ export function nudge(
   return positions.map(([px, py]) => [px + x, py + y]);
 }
 
-/** Nudge a scale-mapped value by uniform random noise in [-amount, amount]. */
-export function jitter(value: number, amount: number): number {
-  return value + (Math.random() * 2 - 1) * amount;
+/**
+ * A deterministic uniform [0, 1) stream from a 32-bit seed (mulberry32), so a
+ * jittered layer lowers to the same positions on every render and on both
+ * paths (gggplot-plrj); ggplot2's position_jitter(seed) is the analogue.
+ */
+export function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** The seed a jittered layer uses when it names none. */
+export const DEFAULT_JITTER_SEED = 1;
+
+/** Nudge a scale-mapped value by uniform noise in [-amount, amount]. */
+export function jitter(
+  value: number,
+  amount: number,
+  random: () => number = Math.random,
+): number {
+  return value + (random() * 2 - 1) * amount;
 }

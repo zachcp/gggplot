@@ -53,6 +53,8 @@ export interface LineProps {
 
 /** Parameters of the dodge, jitter and nudge positions. */
 export interface PositionParams {
+  /** Seeds jitter, so a jittered layer is the same on every render. */
+  seed?: number;
   dodgeWidth?: number;
   jitterWidth?: number;
   jitterHeight?: number;
