@@ -28,14 +28,11 @@ import {
 import * as CoreNamespace from "@use-gpu/core";
 import { gridPositionCode } from "@gggplot/reductions";
 import {
-  CLEAR_U32_KERNEL,
-  GRID_BAR_VERTEX_COLORS_KERNEL,
-  GRID_HEATMAP_COLORS_KERNEL,
-  GRID_SUMMARY_KERNEL,
-  GROUPED_HISTOGRAM_1D_KERNEL,
-  HISTOGRAM_BAR_VERTICES_KERNEL,
-  HISTOGRAM_TILE_VERTICES_KERNEL,
-} from "../src/render/resident_grid_kernels.ts";
+  HISTOGRAM_GRID_PALETTE_PRODUCT,
+  linkSource,
+  productPassPlan,
+} from "@gggplot/reductions";
+import { wgsl } from "@use-gpu/shader/wgsl";
 
 // deno-lint-ignore no-explicit-any
 const any = (value: unknown): any => value;
@@ -220,69 +217,43 @@ Deno.test("the mounted bin grid's eight passes produce stacked bars and tiles in
     ...source(buffer, format, length),
     readWrite: true,
   });
-  const counts = source(countsBuffer, "u32", cells);
-  const summary = source(summaryBuffer, "u32", summaryLength);
-
-  // The value lists and their order mirror HistogramKernels one for one.
-  const passes = [
-    linkPass(device, CLEAR_U32_KERNEL, [
-      () => [cells, 1],
-      target(countsBuffer, "u32", cells),
-    ], cells),
-    linkPass(device, GROUPED_HISTOGRAM_1D_KERNEL, [
-      () => [rows, 1],
-      bins,
-      groupsCount,
-      1,
-      lo,
-      binwidth,
-      source(valuesBuffer, "f32", rows),
-      source(groupsBuffer, "u32", rows),
-      target(countsBuffer, "atomic<u32>", cells),
-    ], rows),
-    linkPass(device, CLEAR_U32_KERNEL, [
-      () => [summaryLength, 1],
-      target(summaryBuffer, "u32", summaryLength),
-    ], summaryLength),
-    linkPass(device, GRID_SUMMARY_KERNEL, [
-      () => [bins, 1],
-      groupsCount,
-      position,
-      counts,
-      target(summaryBuffer, "atomic<u32>", summaryLength),
-    ], bins),
-    linkPass(device, HISTOGRAM_BAR_VERTICES_KERNEL, [
-      () => [cells, 1],
-      bins,
-      groupsCount,
-      position,
-      lo,
-      binwidth,
-      counts,
-      summary,
-      target(barsBuffer, "vec2<f32>", cells * 4),
-    ], cells),
-    linkPass(device, HISTOGRAM_TILE_VERTICES_KERNEL, [
-      () => [cells, 1],
-      bins,
-      lo,
-      binwidth,
-      target(tilesBuffer, "vec2<f32>", cells * 4),
-    ], cells),
-    linkPass(device, GRID_HEATMAP_COLORS_KERNEL, [
-      () => [cells, 1],
-      groupsCount,
-      counts,
-      summary,
-      target(heatmapBuffer, "vec4<f32>", cells * 4),
-    ], cells),
-    linkPass(device, GRID_BAR_VERTEX_COLORS_KERNEL, [
-      () => [cells, 1],
-      bins,
-      source(paletteBuffer, "vec4<f32>", groupsCount),
-      target(colorsBuffer, "vec4<f32>", cells * 4),
-    ], cells),
-  ];
+  // The value lists come from the product's own plan, in pass order, exactly
+  // as <ProductKernels> builds them (gggplot-0rv).
+  const ports: Record<string, { buffer: GPUBuffer; length: number }> = {
+    values: { buffer: valuesBuffer, length: rows },
+    groupIds: { buffer: groupsBuffer, length: rows },
+    palette: { buffer: paletteBuffer, length: groupsCount },
+    counts: { buffer: countsBuffer, length: cells },
+    summary: { buffer: summaryBuffer, length: summaryLength },
+    barVertices: { buffer: barsBuffer, length: cells * 4 },
+    tileVertices: { buffer: tilesBuffer, length: cells * 4 },
+    heatmapColors: { buffer: heatmapBuffer, length: cells * 4 },
+    barColors: { buffer: colorsBuffer, length: cells * 4 },
+  };
+  const plan = productPassPlan(HISTOGRAM_GRID_PALETTE_PRODUCT, {
+    rows,
+    bins,
+    groups: groupsCount,
+    hasGroups: 1,
+    position,
+    lo,
+    binwidth,
+  });
+  assertEquals(plan.length, 8);
+  const passes = plan.map((step) =>
+    linkPass(device, wgsl`${linkSource(step.kernel)}`, [
+      () => [step.size, 1],
+      ...step.args,
+      ...step.reads.map((read) =>
+        source(ports[read.port].buffer, read.format, ports[read.port].length)
+      ),
+      target(
+        ports[step.write.port].buffer,
+        step.write.format,
+        ports[step.write.port].length,
+      ),
+    ], step.size)
+  );
 
   // ONE encoder and ONE compute pass for all seven dispatches, which is the
   // shape <Compute>'s ComputePass builds.

@@ -159,6 +159,8 @@ export interface ProductKernelsProps {
   summary?: ReadbackChannel<unknown>;
   /** Names the product in a failed readback's error. */
   label?: string;
+  /** Frames the summary readback waits before deciding with `exhausted`. */
+  frames?: number;
 }
 
 /** The passes and summary readback of one product. Mount inside <Compute>. */
@@ -251,6 +253,7 @@ export const ProductKernels = (props: ProductKernelsProps): LiveElement => {
       decide: offer,
       alive,
       label: props.label ?? spec.id,
+      ...(props.frames ? { frames: props.frames } : {}),
     })]
     : [];
   return createElement(Fragment, {}, ...kernels, ...readback) as LiveElement;

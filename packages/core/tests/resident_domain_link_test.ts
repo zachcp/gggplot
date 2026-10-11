@@ -21,7 +21,7 @@ import * as CoreNamespace from "@use-gpu/core";
 import {
   DOMAIN_CLEAR_KERNEL,
   FINITE_DOMAIN_1D_KERNEL,
-} from "../src/render/resident_domain_kernel.ts";
+} from "./support/linked_kernels.ts";
 
 // deno-lint-ignore no-explicit-any
 const any = (value: unknown): any => value;
