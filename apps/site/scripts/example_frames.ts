@@ -1,8 +1,7 @@
 // Capture doc examples' swap-chain frames, or compare two captured sets.
 //
 //   deno run -A scripts/example_frames.ts capture <outDir> <ExampleId>...
-//   deno run -A scripts/example_frames.ts capture-component <outDir> <ExampleId>...
-//   deno run -A scripts/example_frames.ts capture-chart <outDir> <ExampleId>...
+//   (capture-chart is the same mode, the name the goldens README uses)
 //   deno run -A scripts/example_frames.ts compare <dirA> <dirB>
 //   deno run -A scripts/example_frames.ts check-goldens <goldenDir>
 //
@@ -154,19 +153,10 @@ async function exampleIds(): Promise<string[]> {
   return [...ids].sort();
 }
 
-if (
-  mode === "capture" || mode === "capture-component" || mode === "capture-chart"
-) {
-  // capture-component renders each example through the component root
-  // (?capture=<id>&path=component) instead of compile().
-  // capture-chart renders each example's hand-written JSX (DocExample.chart).
-  const pathQuery = mode === "capture-component"
-    ? "&path=component"
-    : mode === "capture-chart"
-    ? "&path=chart"
-    : "";
+if (mode === "capture" || mode === "capture-chart") {
+  // Each example's hand-written JSX (DocExample.chart), the only form left.
   const [outDir, ...ids] = rest;
-  await captureFrames(ids, outDir, pathQuery);
+  await captureFrames(ids, outDir, "");
 } else if (mode === "check-goldens") {
   // gggplot-w8zq: every doc example's JSX against the compile-path golden
   // committed before compile() was retired.
@@ -182,7 +172,7 @@ if (
   const missed = await captureFrames(
     ids.filter((id) => goldens.has(id)),
     outDir,
-    "&path=chart",
+    "",
   );
   failures.push(...missed.map((id) => `${id}: no frame captured`));
   await withBrowser(async (page) => {
