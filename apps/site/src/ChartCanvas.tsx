@@ -1,5 +1,8 @@
 import React from "react";
 import { LiveCanvas } from "@use-gpu/react";
+// Live elements are built with the typed factory, not React JSX: a Live
+// scene returns a LiveElement, which React's JSX namespace rejects.
+import { createElement as liveElement } from "@gggplot/core/jsx";
 import type { GGSpec } from "@gggplot/core";
 import { Scene } from "./scene.tsx";
 
@@ -21,7 +24,7 @@ export function ChartCanvas(
       >
         {forceFailure ? <ForcedChartFailure /> : null}
         <LiveCanvas>
-          {(canvas: HTMLCanvasElement) => <Scene canvas={canvas} spec={spec} />}
+          {(canvas: HTMLCanvasElement) => liveElement(Scene, { canvas, spec })}
         </LiveCanvas>
       </div>
     </ChartErrorBoundary>

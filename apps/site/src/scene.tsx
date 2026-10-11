@@ -1,11 +1,11 @@
 /** @jsxRuntime classic */
-/** @jsx createElement */
-/** @jsxFrag Fragment */
+/** @jsx Jsx.createElement */
+/** @jsxFrag Jsx.Fragment */
 // UseGPU Live scene that hosts a gggplot spec on the WebGPU canvas.
 // FlatCamera establishes the pixel-space 2D view (RenderContext -> LayoutContext
 // + view/projection uniforms) that GGPlot's Cartesian panel renders into.
 
-import { createElement } from "@use-gpu/live";
+import * as Jsx from "@gggplot/core/jsx";
 import { AutoCanvas, WebGPU } from "@use-gpu/webgpu";
 import { FlatCamera, Pass } from "@use-gpu/workbench";
 import { createFontResources, GGPlot } from "@gggplot/core";

@@ -200,6 +200,7 @@ export default defineConfig({
         __dirname,
         "../../packages/core/src/compile/mod.ts",
       ),
+      "@gggplot/core/jsx": resolve(__dirname, "../../packages/core/src/jsx.ts"),
       "@gggplot/core": resolve(__dirname, "../../packages/core/src/mod.ts"),
       "@gggplot/reductions": resolve(
         __dirname,

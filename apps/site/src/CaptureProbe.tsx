@@ -1,4 +1,7 @@
 import { LiveCanvas } from "@use-gpu/react";
+// Live elements are built with the typed factory, not React JSX: a Live
+// scene returns a LiveElement, which React's JSX namespace rejects.
+import { createElement as liveElement } from "@gggplot/core/jsx";
 import { allDocExamples } from "./docs/examples.tsx";
 import { docPages } from "./docs/pages.ts";
 import { Scene } from "./scene.tsx";
@@ -17,9 +20,8 @@ export function CaptureProbe({ id }: { id: string }) {
   return (
     <div id="capture-canvas" style={{ width: 640, height: 400 }}>
       <LiveCanvas>
-        {(canvas: HTMLCanvasElement) => (
-          <Scene canvas={canvas} spec={example.spec!} />
-        )}
+        {(canvas: HTMLCanvasElement) =>
+          liveElement(Scene, { canvas, spec: example.spec! })}
       </LiveCanvas>
     </div>
   );
