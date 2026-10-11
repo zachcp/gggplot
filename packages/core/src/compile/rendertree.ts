@@ -68,6 +68,11 @@ export type ComponentName =
   | "Scene3D"
   /** Runtime-only host extension injected into the live 3D Cartesian scene. */
   | "SceneExtras"
+  /**
+   * Component path only (gggplot-7j9): a <GGPanel>'s Live children, drawn in
+   * each panel's data coordinates after its marks. Never emitted.
+   */
+  | "PanelContent"
   // Component path only (gggplot-fbq): a point whose mapped aesthetics are GPU
   // scale bindings. Never emitted; compile() never produces it.
   | "BoundPoint"

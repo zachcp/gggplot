@@ -452,6 +452,8 @@ const REGISTRY: Partial<Record<ComponentName, any>> = {
   // unaffected by this addition.
   ChunkedFace,
   BoundPoint,
+  // A <GGPanel>'s children (gggplot-7j9), already Live elements.
+  PanelContent: ({ content }: { content: unknown }) => content,
   Label: (props: Record<string, unknown>) =>
     typeof props.angle === "number" && props.angle !== 0
       ? createElement(RotatedLabel, props)

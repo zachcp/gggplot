@@ -358,6 +358,8 @@ export function layoutRoot(
   root: PreparedRoot,
   layout: { width: number; height: number; measureText: TextMeasurer },
   caches: RootCaches,
+  /** <GGPanel> children, drawn in every panel after its marks. */
+  panelContent: readonly unknown[] = [],
 ): LaidOutRoot {
   componentProbe.assembleCalls++;
   const { spec, layers } = root;
@@ -411,15 +413,27 @@ export function layoutRoot(
     return nodes;
   };
 
+  const content: RenderNode[] = panelContent.length
+    ? [{
+      component: "PanelContent",
+      props: { content: panelContent },
+      children: [],
+    }]
+    : [];
   let info: AssembledPlot | null = null;
-  const tree = layoutPlot(spec, root.prepared, root.trained, {
+  const laidOut = layoutPlot(spec, root.prepared, root.trained, {
     layout,
     lowerMarks,
     transformMark: (mark, polar) => transformMark(caches, mark, polar),
+    panelContent: () => content,
     onAssembled: (assembledInfo) => {
       info = assembledInfo;
     },
   });
+  // A 3D scene has one data space: its (first) Cartesian.
+  const tree = content.length && laidOut.component === "Scene3D"
+    ? intoFirstCartesian(laidOut, content)
+    : laidOut;
   for (const key of caches.lowered.keys()) {
     if (!liveLowered.has(key)) caches.lowered.delete(key);
   }
@@ -430,6 +444,23 @@ export function layoutRoot(
     info: info as AssembledPlot | null,
     residentNodes: hosted.nodes,
   };
+}
+
+/** `tree` with `extra` appended to its first Cartesian's children. */
+function intoFirstCartesian(tree: RenderNode, extra: RenderNode[]): RenderNode {
+  let inserted = false;
+  const visit = (node: RenderNode): RenderNode => {
+    if (inserted) return node;
+    if (node.component === "Cartesian") {
+      inserted = true;
+      return { ...node, children: [...node.children, ...extra] };
+    }
+    const children = node.children.map(visit);
+    return children.some((child, i) => child !== node.children[i])
+      ? { ...node, children }
+      : node;
+  };
+  return visit(tree);
 }
 
 /** One whole assembly: prepareRoot then layoutRoot. */

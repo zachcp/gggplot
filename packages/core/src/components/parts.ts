@@ -21,7 +21,8 @@ import { componentProbe } from "./probe.ts";
 /** One reported part. A layer carries the fiber id that keys its marks. */
 export type PlotPart =
   | { kind: "layer"; id: number; layer: Layer; pending?: boolean }
-  | { kind: "spec"; part: Exclude<SpecPart, { tag: "layer" }> };
+  | { kind: "spec"; part: Exclude<SpecPart, { tag: "layer" }> }
+  | { kind: "panel"; id: number; content: unknown };
 
 /** The capture a <GGPlot> root opens; parts report into it. */
 export const PlotPartCapture = makeCapture("GGPlotParts");
@@ -59,5 +60,24 @@ export const GGPart = ({ part }: { part: SpecPart }): LiveElement => {
     [id, part],
   );
   useCapture(PlotPartCapture, reported);
+  return null;
+};
+
+/**
+ * <GGPanel>: Live children drawn inside the plot's panel, in its data
+ * coordinates, after the marks (gggplot-7j9). Any Use.GPU primitive works,
+ * and can bind the trained scales on the GPU (components/gg_panel.ts's
+ * useGGColors) or read their CPU revision (useGGScales). In a faceted plot
+ * the children draw in every panel; in 3D, in the scene's data space.
+ */
+export const GGPanel = (
+  { children }: { children?: unknown },
+): LiveElement => {
+  const id = useFiberId();
+  const part = useMemo(
+    (): PlotPart => ({ kind: "panel", id, content: children }),
+    [id, children],
+  );
+  useCapture(PlotPartCapture, part);
   return null;
 };
