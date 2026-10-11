@@ -33,6 +33,7 @@ import {
   GGScalesContext,
   type GGScalesValue,
 } from "../components/gg_scales.ts";
+import { componentProbe } from "../components/probe.ts";
 
 export interface BoundPointProps {
   positions: FlatTensor;
@@ -69,6 +70,7 @@ export const BoundPoint = (props: BoundPointProps): LiveElement => {
     fixedSize,
     ...rest
   } = props;
+  componentProbe.boundRenders++;
   const scales = useContext<GGScalesValue | null>(GGScalesContext);
   const refs = scales?.gpu as ScaleBindingRefs | undefined;
   if (!refs) {

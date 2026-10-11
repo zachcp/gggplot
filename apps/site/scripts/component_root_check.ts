@@ -223,11 +223,14 @@ try {
 
     // GPU scale binding (gggplot-fbq): a color-domain change on a bound point
     // layer is a uniform write: no mark upload, no shader or pipeline build.
-    await step(page, {
+    const scaledMount = await step(page, {
       mode: "component",
       scaled: true,
       colorDomain: [10, 30],
     });
+    // Render-count guard (gggplot-vnh.6.1): a resize keeps the scales value,
+    // a retrain moves its revision exactly once.
+    const scaledResize = await step(page, { width: 560 });
     const domainChange = await step(page, { colorDomain: [5, 40] });
     const scaledComponent = await frameAfter(page, { colorDomain: [5, 41] });
     const scaledCompile = await frameAfter(page, { mode: "compile" });
@@ -240,7 +243,7 @@ try {
 
     const report = {
       generatedAt: new Date().toISOString(),
-      scaled: { domainChange, parity: parityScaled },
+      scaled: { scaledMount, scaledResize, domainChange, parity: parityScaled },
       shared: { columnUploads: shared.columnUploads },
       parity: { two: parityTwo, three: parityThree },
       atlasHistory,
@@ -299,6 +302,22 @@ try {
     ) {
       failures.push(
         `scaled: a domain change uploaded mark data (${domainChange.gpu.markBufferCreations} creations, ${domainChange.gpu.markBufferWrites} writes)`,
+      );
+    }
+    // Without this, a layer that silently fell back to CPU packing would pass
+    // every check below.
+    if (scaledMount.work.boundRenders < 1) {
+      failures.push("scaled: the point layer did not take the GPU-bound path");
+    }
+    const revisionBefore = scaledResize.work.scalesRevision;
+    if (domainChange.work.scalesRevision !== revisionBefore + 1) {
+      failures.push(
+        `scales revision went ${revisionBefore} -> ${domainChange.work.scalesRevision} on one retrain (want +1)`,
+      );
+    }
+    if (domainChange.work.boundRenders > 1) {
+      failures.push(
+        `a retrain rendered the bound mark ${domainChange.work.boundRenders} times (want <= 1)`,
       );
     }
     if (domainChange.newShaderModules || domainChange.newPipelines) {
