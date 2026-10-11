@@ -12,10 +12,12 @@ import {
   type FontResources,
   geomLine,
   geomPoint,
+  GGData,
   GGPlot,
   ggplot,
   type GGSpec,
   type Layer,
+  typedArrayForColumn,
 } from "@gggplot/core";
 import { installGpuInstrumentation } from "../../../packages/core/src/render/gpu_instrument.ts";
 import { GGLayerPart } from "../../../packages/core/src/components/parts.ts";
@@ -23,7 +25,11 @@ import { withSiteChartTheme } from "./chart_theme.ts";
 import { scatterLine } from "./docs/examples.tsx";
 
 export interface ComponentRootState {
-  mode: "compile" | "component";
+  /**
+   * "shared": two component plots (points, line) under one <GGData>, to count
+   * column uploads across plots (gggplot-0m6).
+   */
+  mode: "compile" | "component" | "shared";
   pointColor: string;
   /** Adds a third layer BEFORE the first two, the harder case for keyed reconciliation. */
   third: boolean;
@@ -55,15 +61,46 @@ export function compiledSpec(state: ComponentRootState): GGSpec {
   return withSiteChartTheme(plot.build());
 }
 
+/** Uploads whose payload is a frame column's typed array, by column name. */
+export const columnUploads: Record<string, number> = {};
+const columnBuffers = new Map<ArrayBufferLike, string>(
+  Object.entries(data).map(([name, column]) => [
+    typedArrayForColumn(column).buffer,
+    name,
+  ]),
+);
+
 function Instrumented({ children }: { children: LiveElement }): LiveElement {
   const device = useDeviceContext();
-  useOne(() => installGpuInstrumentation(device));
+  useOne(() => {
+    installGpuInstrumentation(device);
+    const write = device.queue.writeBuffer.bind(device.queue);
+    device.queue.writeBuffer = ((buffer, offset, payload, ...rest) => {
+      const name = columnBuffers.get(
+        ArrayBuffer.isView(payload) ? payload.buffer : payload,
+      );
+      if (name) columnUploads[name] = (columnUploads[name] ?? 0) + 1;
+      return write(buffer, offset, payload, ...rest);
+    }) as GPUQueue["writeBuffer"];
+  });
   return children;
 }
 
 function Plot(
   { state, fonts }: { state: ComponentRootState; fonts: FontResources },
 ): LiveElement {
+  if (state.mode === "shared") {
+    return (
+      <GGData data={data}>
+        <GGPlot mapping={mapping} theme={theme} fontResources={fonts}>
+          <GGLayerPart layer={pointLayer(state.pointColor)} />
+        </GGPlot>
+        <GGPlot mapping={mapping} theme={theme} fontResources={fonts}>
+          <GGLayerPart layer={LINE_LAYER} />
+        </GGPlot>
+      </GGData>
+    );
+  }
   if (state.mode === "compile") {
     return createElement(GGPlot, {
       spec: compiledSpec(state),

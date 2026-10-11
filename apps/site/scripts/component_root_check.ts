@@ -216,8 +216,14 @@ try {
       threeCompile,
     );
 
+    // Shared data (gggplot-0m6): two plots under one <GGData>. Mounting it
+    // must upload each frame column exactly once across both plots.
+    const shared = await step(page, { mode: "shared" });
+    const sharedFrame = await frameAfter(page, { pointColor: "#3b82f6" });
+
     const report = {
       generatedAt: new Date().toISOString(),
+      shared: { columnUploads: shared.columnUploads },
       parity: { two: parityTwo, three: parityThree },
       atlasHistory,
       steps: { idle, resize, color, third },
@@ -269,6 +275,26 @@ try {
       failures.push(
         `third layer mounted ${third.work.layerMounts} layers, ran ${third.work.statCalls} stats (want 1, 1)`,
       );
+    }
+    const columnNames = Object.keys(shared.columnUploads);
+    if (columnNames.length === 0) {
+      failures.push("shared: no frame column was uploaded at all");
+    }
+    for (const [name, count] of Object.entries(shared.columnUploads)) {
+      if (count !== 1) {
+        failures.push(
+          `shared: column ${name} uploaded ${count} times (want 1)`,
+        );
+      }
+    }
+    const sharedPixels = await compare(
+      page,
+      "shared",
+      sharedFrame,
+      sharedFrame,
+    );
+    if (sharedPixels.visibleFraction < 0.02) {
+      failures.push("shared: the two plots drew nothing");
     }
     if (failures.length) throw new Error(failures.join("\n"));
     console.log("Component-root gate passed.");
