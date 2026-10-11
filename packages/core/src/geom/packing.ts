@@ -20,6 +20,16 @@ export interface PackedGeometry {
   owners?: Uint32Array; // absent for kind='points' (vertex i IS row i)
 }
 
+/** `owners` through a retained-row mask: the owners of the kept vertices. */
+export function maskOwners(
+  owners: readonly number[],
+  mask: Uint8Array,
+): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < mask.length; i++) if (mask[i]) out.push(owners[i]);
+  return out;
+}
+
 /** Count of set (truthy) entries in a retained-row mask. */
 function maskCount(mask: Uint8Array): number {
   let count = 0;
@@ -362,9 +372,13 @@ export interface FaceLoop {
   positions: [number, number][];
   fill: string;
   alpha?: number;
+  /** Per-vertex prepared-data row (gggplot-8e1); one entry per position. */
+  owners?: number[];
 }
 
 export interface PackedFaceGeometry {
+  /** Per-vertex owners, present when every loop supplied them. */
+  owners?: Uint32Array;
   positions: FlatTensor;
   /** Renderer-facing topology only — kind:'loops', chunks, loops:true. NEVER an 'owners' field (gggplot-tzc.4: owners is compiler-internal and is stripped before this point — see the mandatory no-owners-on-RenderTree test). */
   topology: MarkTopology;
@@ -419,7 +433,15 @@ export function packFaceLoops(loops: FaceLoop[]): PackedFaceGeometry {
   const colors = combined.owners
     ? expandByOwners(rowColors, combined.owners)
     : rowColors;
-  return { positions: combined.positions, topology: combined.topology, colors };
+  const owners = loops.length > 0 && loops.every((l) => l.owners)
+    ? Uint32Array.from(loops.flatMap((l) => l.owners!))
+    : undefined;
+  return {
+    positions: combined.positions,
+    topology: combined.topology,
+    colors,
+    ...(owners ? { owners } : {}),
+  };
 }
 
 /**

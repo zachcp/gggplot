@@ -40,6 +40,7 @@ import {
   packFaceLoops,
   resolutionOf,
   valuesOf,
+  withOwners,
 } from "./shared.ts";
 
 /** Lower a geom_bar/geom_col layer to a single ChunkedFace node of bar-rectangle loops (gggplot-tzc.4), stacked/dodged/filled per layer.position. */
@@ -122,18 +123,24 @@ export function lowerBar(
   // are always axis-aligned (guaranteed convex), so this uses fan
   // triangulation (concave: false) — see render/chunked_face.tsx's spike
   // writeup for why this stays valid even after polar (coxcomb) munching.
+  // stack/dodge/dodge2 all return placed[i] for input row i, so each bar's
+  // four vertices are owned by its row (gggplot-8e1).
   const loops: FaceLoop[] = positions.map((position, i) => ({
     positions: position,
     fill: fills[i],
+    owners: [i, i, i, i],
   }));
   const packed = packFaceLoops(loops);
   return [
-    node("ChunkedFace", {
-      positions: packed.positions,
-      topology: packed.topology,
-      colors: packed.colors,
-      concave: false,
-    }),
+    withOwners(
+      node("ChunkedFace", {
+        positions: packed.positions,
+        topology: packed.topology,
+        colors: packed.colors,
+        concave: false,
+      }),
+      packed.owners,
+    ),
   ];
 }
 

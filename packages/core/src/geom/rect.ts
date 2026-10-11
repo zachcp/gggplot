@@ -4,7 +4,13 @@ import type { Aes, DataFrame, Layer } from "../ir/types.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
 import { scalePosition } from "../scale/mod.ts";
 import type { LayerContext } from "./types.ts";
-import { colorsOf, type FaceLoop, packFaceLoops, valuesOf } from "./shared.ts";
+import {
+  colorsOf,
+  type FaceLoop,
+  packFaceLoops,
+  valuesOf,
+  withOwners,
+} from "./shared.ts";
 
 /**
  * Lower an annotate("rect", ...)/geom_rect layer (xmin, xmax, ymin, ymax) to a
@@ -48,16 +54,22 @@ export function lowerRect(
   const fill = (layer.params.fill as string) ??
     (layer.params.color as string) ?? "#3b82f6";
   if (positions.length === 0) return [];
-  const loops: FaceLoop[] = colors
-    ? positions.map((position, i) => ({ positions: position, fill: colors[i] }))
-    : positions.map((position) => ({ positions: position, fill }));
+  // One cell per row, four vertices each (gggplot-8e1).
+  const loops: FaceLoop[] = positions.map((position, i) => ({
+    positions: position,
+    fill: colors ? colors[i] : fill,
+    owners: [i, i, i, i],
+  }));
   const packed = packFaceLoops(loops);
   return [
-    node("ChunkedFace", {
-      positions: packed.positions,
-      topology: packed.topology,
-      colors: packed.colors,
-      concave: false,
-    }),
+    withOwners(
+      node("ChunkedFace", {
+        positions: packed.positions,
+        topology: packed.topology,
+        colors: packed.colors,
+        concave: false,
+      }),
+      packed.owners,
+    ),
   ];
 }

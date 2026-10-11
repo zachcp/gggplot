@@ -119,6 +119,15 @@ export interface RenderNode {
    * mounted sources when a sibling is added or removed before it.
    */
   key?: string;
+  /**
+   * Per-vertex owner: the row of the layer's prepared (post-stat) data each
+   * vertex of `positions` came from (gggplot-8e1). Filtering, sorting, step
+   * expansion and N vertices per bar mean vertex i is not row i, so a GPU
+   * scale binding reads `getValue(getOwner(i))` through this. Compiler
+   * metadata on the node, never a renderer prop: renderTree passes `props`
+   * only. Absent on marks whose family does not track owners yet.
+   */
+  owners?: Uint32Array;
 }
 
 /**

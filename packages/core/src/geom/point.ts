@@ -17,7 +17,7 @@ import {
 } from "./shared.ts";
 import type { MarkTopology } from "../compile/rendertree.ts";
 import { scalePosition } from "../scale/mod.ts";
-import { packPoints3d } from "./packing.ts";
+import { maskOwners, packPoints3d } from "./packing.ts";
 
 const POINTS_TOPOLOGY: MarkTopology = { kind: "points" };
 
@@ -134,14 +134,18 @@ export function lowerPoint(
       ...(perRowSizes ? { sizes: rows.map((i) => perRowSizes[i]) } : {}),
       ...(alphas ? { alphas: rows.map((i) => alphas[i]) } : {}),
     });
-    return node("Point", {
-      positions: packed.positions,
-      topology: POINTS_TOPOLOGY,
-      ...(packed.colors ? { colors: packed.colors } : { color: nodeColor }),
-      ...(packed.sizes ? { sizes: packed.sizes } : { size: nodeSize }),
-      ...extra,
-      ...(opacity != null ? { opacity } : {}),
-    });
+    return {
+      ...node("Point", {
+        positions: packed.positions,
+        topology: POINTS_TOPOLOGY,
+        ...(packed.colors ? { colors: packed.colors } : { color: nodeColor }),
+        ...(packed.sizes ? { sizes: packed.sizes } : { size: nodeSize }),
+        ...extra,
+        ...(opacity != null ? { opacity } : {}),
+      }),
+      // gggplot-8e1: rows are prepared-data rows; the mask drops non-finite.
+      owners: Uint32Array.from(maskOwners(rows, packed.mask)),
+    };
   };
 
   if (shapes) {

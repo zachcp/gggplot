@@ -6,11 +6,15 @@ import { splitByEffectiveGroup } from "../group/mod.ts";
 import { scalePosition, type TrainedScale } from "../scale/mod.ts";
 import type { DomainContributionCtx, LayerContext } from "./types.ts";
 import {
+  bandOrder,
   bandPositions,
   colorsOf,
   type FaceLoop,
   packFaceLoops,
+  rowsOf,
   valuesOf,
+  withOwners,
+  withRowIndex,
 } from "./shared.ts";
 
 /** Wrap a layer's collected per-group band loops into the single ChunkedFace node the layer emits (gggplot-tzc.4: one Face node per layer). Bands can wiggle/self-cross, so this uses the concave-capable triangulation path (concave: true). */
@@ -18,12 +22,15 @@ function faceNodesFor(loops: FaceLoop[]): RenderNode[] {
   if (loops.length === 0) return [];
   const packed = packFaceLoops(loops);
   return [
-    node("ChunkedFace", {
-      positions: packed.positions,
-      topology: packed.topology,
-      colors: packed.colors,
-      concave: true,
-    }),
+    withOwners(
+      node("ChunkedFace", {
+        positions: packed.positions,
+        topology: packed.topology,
+        colors: packed.colors,
+        concave: true,
+      }),
+      packed.owners,
+    ),
   ];
 }
 
@@ -39,10 +46,12 @@ function lowerStackedAreaLayer(
   const positive = new Map<number, number>();
   const negative = new Map<number, number>();
   const loops: FaceLoop[] = [];
-  for (const group of splitByEffectiveGroup(mapping, data)) {
+  for (const group of splitByEffectiveGroup(mapping, withRowIndex(data))) {
     const xs = valuesOf(group.data, group.mapping.x) ?? [];
     const ys = valuesOf(group.data, group.mapping.y) ?? [];
-    const rows: Array<{ x: number; y0: number; y1: number }> = [];
+    const source = rowsOf(group.data);
+    const rows: Array<{ x: number; y0: number; y1: number; owner: number }> =
+      [];
     for (let row = 0; row < Math.min(xs.length, ys.length); row++) {
       const x = scalePosition(xScale, xs[row]);
       const y = Number(ys[row]);
@@ -51,7 +60,7 @@ function lowerStackedAreaLayer(
       const y0 = cumulative.get(x) ?? 0;
       const y1 = y0 + y;
       cumulative.set(x, y1);
-      rows.push({ x, y0, y1 });
+      rows.push({ x, y0, y1, owner: source[row] });
     }
     rows.sort((a, b) => a.x - b.x);
     if (!rows.length) continue;
@@ -72,6 +81,11 @@ function lowerStackedAreaLayer(
     );
     loops.push({
       positions,
+      // Upper edge in x order, then the lower edge back (gggplot-8e1).
+      owners: [
+        ...rows.map((r) => r.owner),
+        ...rows.toReversed().map((r) => r.owner),
+      ],
       fill: colors?.[0] ?? (layer.params.fill as string) ??
         (layer.params.color as string) ?? "#3b82f6",
     });
@@ -88,7 +102,7 @@ function lowerSilhouetteAreaLayer(
   colorScale: TrainedScale | undefined,
   fillScale: TrainedScale | undefined,
 ): RenderNode[] {
-  const groups = splitByEffectiveGroup(mapping, data);
+  const groups = splitByEffectiveGroup(mapping, withRowIndex(data));
   const totals = new Map<number, number>();
   for (const group of groups) {
     const xs = valuesOf(group.data, group.mapping.x) ?? [];
@@ -106,7 +120,9 @@ function lowerSilhouetteAreaLayer(
   for (const group of groups) {
     const xs = valuesOf(group.data, group.mapping.x) ?? [];
     const ys = valuesOf(group.data, group.mapping.y) ?? [];
-    const rows: Array<{ x: number; y0: number; y1: number }> = [];
+    const source = rowsOf(group.data);
+    const rows: Array<{ x: number; y0: number; y1: number; owner: number }> =
+      [];
     for (let row = 0; row < Math.min(xs.length, ys.length); row++) {
       const x = scalePosition(xScale, xs[row]);
       const y = Number(ys[row]);
@@ -114,7 +130,7 @@ function lowerSilhouetteAreaLayer(
       const y0 = cumulative.get(x) ?? 0;
       const y1 = y0 + y;
       cumulative.set(x, y1);
-      rows.push({ x, y0, y1 });
+      rows.push({ x, y0, y1, owner: source[row] });
     }
     rows.sort((a, b) => a.x - b.x);
     if (!rows.length) continue;
@@ -135,6 +151,11 @@ function lowerSilhouetteAreaLayer(
     );
     loops.push({
       positions,
+      // Upper edge in x order, then the lower edge back (gggplot-8e1).
+      owners: [
+        ...rows.map((r) => r.owner),
+        ...rows.toReversed().map((r) => r.owner),
+      ],
       fill: colors?.[0] ?? (layer.params.fill as string) ??
         (layer.params.color as string) ?? "#3b82f6",
     });
@@ -232,11 +253,20 @@ export function lowerArea(
   }
   const fill = (layer.params.fill as string) ??
     (layer.params.color as string) ?? "#3b82f6";
-  const loops: FaceLoop[] = splitByEffectiveGroup(mapping, data)
-    .map(({ mapping: m, data: d }) => {
+  const loops: FaceLoop[] = splitByEffectiveGroup(mapping, withRowIndex(data))
+    .map(({ mapping: m, data: d }): FaceLoop | null => {
       const positions = bandPositions(m, d, xScale, yScale);
       const colors = colorsOf(m, d, colorScale, fillScale, "fillOrColor");
-      return positions.length ? { positions, fill: colors?.[0] ?? fill } : null;
+      const rows = rowsOf(d);
+      const order = bandOrder(m, d, xScale).map((i) => rows[i]);
+      return positions.length
+        ? {
+          positions,
+          fill: colors?.[0] ?? fill,
+          // Top edge in x order, then the bottom edge back (gggplot-8e1).
+          owners: [...order, ...order.toReversed()],
+        }
+        : null;
     })
     .filter((l): l is FaceLoop => l !== null);
   return faceNodesFor(loops);

@@ -19,11 +19,14 @@ import {
   type PackedGeometry,
   packMarkRows,
   positionsOf,
+  rowsOf,
   sortByX,
+  stepOwners,
   stepPositions,
   valuesOf,
+  withRowIndex,
 } from "./shared.ts";
-import { packPoints3d, packScalar } from "./packing.ts";
+import { maskOwners, packPoints3d, packScalar } from "./packing.ts";
 
 /**
  * Polylines fade with alpha exactly as points do; the shared policy keeps the
@@ -41,6 +44,8 @@ export interface LineGroupRows {
   widths: number[];
   alphas?: number[];
   dash: readonly number[] | undefined;
+  /** Per-vertex prepared-data row (gggplot-8e1), aligned with xs/ys. */
+  owners?: number[];
 }
 
 /**
@@ -60,6 +65,7 @@ export function packChunkedLineNodes(
     positionGeoms: PackedGeometry[];
     colorTensors: FlatTensor[];
     widthTensors: FlatTensor[];
+    owners: number[][] | null;
     transparent: boolean;
   }>();
 
@@ -74,6 +80,7 @@ export function packChunkedLineNodes(
           ...(group.alphas ? { alphas: group.alphas } : {}),
         });
         return {
+          mask: point.mask,
           positions: point.positions,
           colors: point.colors,
           widths: packScalar(group.widths, point.mask),
@@ -93,6 +100,7 @@ export function packChunkedLineNodes(
       positionGeoms: [],
       colorTensors: [],
       widthTensors: [],
+      owners: [],
       transparent: false,
     };
     bucket.positionGeoms.push({
@@ -101,6 +109,10 @@ export function packChunkedLineNodes(
     });
     bucket.colorTensors.push(packed.colors!);
     bucket.widthTensors.push(packed.widths!);
+    // Owners survive only if every group in the node tracked them.
+    if (bucket.owners && group.owners) {
+      bucket.owners.push(maskOwners(group.owners, packed.mask));
+    } else bucket.owners = null;
     bucket.transparent ||= group.alphas?.some((alpha) => alpha < 1) === true;
     buckets.set(key, bucket);
   }
@@ -110,7 +122,7 @@ export function packChunkedLineNodes(
   // exactly this split, plus Point's per-shape split).
   return [...buckets.values()].map((bucket) => {
     const combined = concatPacked(bucket.positionGeoms);
-    return node("ChunkedLine", {
+    const lineNode = node("ChunkedLine", {
       positions: combined.positions,
       topology: combined.topology,
       colors: concatFlatTensors(bucket.colorTensors),
@@ -119,6 +131,9 @@ export function packChunkedLineNodes(
       ...(opacity != null ? { opacity } : {}),
       ...(threeD ? depthProps(LINE_3D_DEPTH, bucket.transparent) : {}),
     });
+    return bucket.owners
+      ? { ...lineNode, owners: Uint32Array.from(bucket.owners.flat()) }
+      : lineNode;
   });
 }
 
@@ -147,14 +162,18 @@ export function lowerLine(
 
   const groups: LineGroupRows[] = [];
   for (
-    const { mapping: m, data: d } of splitByEffectiveGroup(mapping, data)
+    const { mapping: m, data: d } of splitByEffectiveGroup(
+      mapping,
+      withRowIndex(data),
+    )
   ) {
     const ordered = layer.geom === "path" ? d : sortByX(m, d);
+    let owners = rowsOf(ordered);
     let positions = layer.stat === "ecdf"
       ? (() => {
         const xs = valuesOf(ordered, m.x) ?? [];
         const ys = valuesOf(ordered, m.y) ?? [];
-        return xs.slice(0, Math.min(xs.length, ys.length)).map((
+        const scaled = xs.slice(0, Math.min(xs.length, ys.length)).map((
           value,
           index,
         ): [number, number] => [
@@ -164,11 +183,18 @@ export function lowerLine(
             ? xDomain[1]
             : scalePosition(xScale, value),
           scalePosition(yScale, ys[index]),
-        ]).filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
+        ]);
+        const kept = scaled.map(([x, y]) =>
+          Number.isFinite(x) && Number.isFinite(y)
+        );
+        owners = owners.filter((_, i) => kept[i]);
+        return scaled.filter((_, i) => kept[i]);
       })()
       : positionsOf(m, ordered, xScale, yScale);
     if (layer.geom === "step") {
-      positions = stepPositions(positions, layer.params.direction ?? "hv");
+      const direction = layer.params.direction ?? "hv";
+      positions = stepPositions(positions, direction);
+      owners = stepOwners(owners, direction);
     }
     if (positions.length === 0) continue;
 
@@ -216,6 +242,7 @@ export function lowerLine(
       colors,
       widths,
       dash,
+      owners,
       ...(mappedAlphas
         ? { alphas: mappedAlphas }
         : opacity != null

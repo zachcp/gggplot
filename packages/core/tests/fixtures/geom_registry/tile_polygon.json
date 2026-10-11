@@ -237,7 +237,27 @@
                   },
                   "concave": false
                 },
-                "children": []
+                "children": [],
+                "owners": {
+                  "$u32": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    1,
+                    1,
+                    1,
+                    2,
+                    2,
+                    2,
+                    2,
+                    3,
+                    3,
+                    3,
+                    3
+                  ]
+                }
               },
               {
                 "component": "ChunkedFace",
@@ -295,7 +315,14 @@
                   },
                   "concave": true
                 },
-                "children": []
+                "children": [],
+                "owners": {
+                  "$u32": [
+                    0,
+                    1,
+                    2
+                  ]
+                }
               }
             ]
           }
@@ -1316,7 +1343,27 @@
                   },
                   "concave": false
                 },
-                "children": []
+                "children": [],
+                "owners": {
+                  "$u32": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    1,
+                    1,
+                    1,
+                    2,
+                    2,
+                    2,
+                    2,
+                    3,
+                    3,
+                    3,
+                    3
+                  ]
+                }
               },
               {
                 "component": "ChunkedFace",
@@ -1374,7 +1421,14 @@
                   },
                   "concave": true
                 },
-                "children": []
+                "children": [],
+                "owners": {
+                  "$u32": [
+                    0,
+                    1,
+                    2
+                  ]
+                }
               }
             ]
           }

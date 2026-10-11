@@ -9,7 +9,7 @@ import type { DepthPolicy } from "./types.ts";
 // this file so existing `../geom/shared.ts` importers keep resolving.
 import type { Aes, DataFrame, GGSpec, Layer } from "../ir/types.ts";
 import { columnValues, numericColumnValues } from "../data/mod.ts";
-import { sliceRows } from "../group/mod.ts";
+import { rowCount, sliceRows } from "../group/mod.ts";
 import {
   namedLinetypeValue,
   scaleAlphaValue,
@@ -269,10 +269,7 @@ export function bandPositions(
   const ymins = valuesOf(data, mapping.ymin);
   if (!xs || !ymaxs) return [];
 
-  const n = Math.min(xs.length, ymaxs.length, ymins ? ymins.length : xs.length);
-  const order = [...Array(n).keys()].sort((a, b) =>
-    scalePosition(xScale, xs[a]) - scalePosition(xScale, xs[b])
-  );
+  const order = bandOrder(mapping, data, xScale);
 
   const top: [number, number][] = order.map((i) => [
     scalePosition(xScale, xs[i]),
@@ -337,6 +334,71 @@ export function requiredValues(
     throw new TypeError(`${geom} requires a mapped ${aes} aesthetic`);
   }
   return values;
+}
+
+/**
+ * Hidden column carrying each row's index in a layer's prepared data, so the
+ * owner of a vertex survives grouping, sorting and row slicing, which all
+ * carry every column (gggplot-8e1).
+ */
+export const ROW_COLUMN = "__gggplot_row";
+
+/** `data` plus ROW_COLUMN = 0..n-1. */
+export function withRowIndex(data: DataFrame): DataFrame {
+  const n = rowCount(data);
+  return {
+    ...data,
+    [ROW_COLUMN]: {
+      type: "numeric",
+      values: Array.from({ length: n }, (_, i) => i),
+    },
+  };
+}
+
+/** `markNode` with its per-vertex owners attached, when there are any. */
+export function withOwners<T extends { owners?: Uint32Array }>(
+  markNode: T,
+  owners: Uint32Array | undefined,
+): T {
+  return owners ? { ...markNode, owners } : markNode;
+}
+
+/** The prepared-data row of each row of `data` (a slice of withRowIndex). */
+export function rowsOf(data: DataFrame): number[] {
+  return (data[ROW_COLUMN]?.values ?? []) as number[];
+}
+
+/**
+ * The owner of each vertex stepPositions emits, given the owners of its input
+ * points: a horizontal run carries the row it starts from (hv), the row it
+ * ends at (vh), or splits at the midpoint (mid).
+ */
+export function stepOwners(owners: number[], direction: unknown): number[] {
+  if (owners.length < 2) return owners;
+  const out = [owners[0]];
+  for (let i = 1; i < owners.length; i++) {
+    if (direction === "hv") out.push(owners[i - 1]);
+    if (direction === "vh") out.push(owners[i]);
+    if (direction === "mid") out.push(owners[i - 1], owners[i]);
+    out.push(owners[i]);
+  }
+  return out;
+}
+
+/** The order bandPositions visits rows in (by scaled x). */
+export function bandOrder(
+  mapping: Aes,
+  data: GGSpec["data"],
+  xScale: TrainedScale | undefined,
+): number[] {
+  const xs = valuesOf(data, mapping.x);
+  const ymaxs = valuesOf(data, mapping.ymax ?? mapping.y);
+  const ymins = valuesOf(data, mapping.ymin);
+  if (!xs || !ymaxs) return [];
+  const n = Math.min(xs.length, ymaxs.length, ymins ? ymins.length : xs.length);
+  return [...Array(n).keys()].sort((a, b) =>
+    scalePosition(xScale, xs[a]) - scalePosition(xScale, xs[b])
+  );
 }
 
 export function stepPositions(
