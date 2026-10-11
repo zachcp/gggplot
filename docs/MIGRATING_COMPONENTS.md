@@ -109,17 +109,24 @@ preset's props override its fields. `theme()` became `<ThemeOverrides>` because
 `Theme` is already the type's name.
 
 Parity: of the 65 doc examples in the basics, stats, intervals and shapes pages,
-every example rendered through `<GeomLayer>` matches the compile path pixel for
-pixel, with two exceptions. Jittered examples vary run to run on either path
-(`gggplot-plrj`). Resident-eligible examples still take the CPU stats on the
-component path until the product tier arrives there (`gggplot-280`).
+every example rendered through components matches the compile path pixel for
+pixel. The exception is jittered examples, which vary from run to run on either
+path (`gggplot-plrj`).
+
+## GPU-resident stats
+
+Layers eligible for a GPU stat (stat_count and stat_bin bars and tile strips, by
+the same rules as before) render from resident products on the component path
+too. The root mounts each distinct product once and hands it to every mark that
+reads it, so two layers over one bin grid dispatch it once. Nothing changes for
+authors: `<Execution resident={false} />` still opts a plot out.
 
 ## Row-removal diagnostics
 
 `compile()` reported dropped rows on the tree root (`diagnostics`) and with a
-console warning. The component root keeps both. `onDiagnostics` is called
-with the same records whenever the set changes, including an empty list once
-it clears:
+console warning. The component root keeps both. `onDiagnostics` is called with
+the same records whenever the set changes, including an empty list once it
+clears:
 
 ```tsx
 <GGPlot data={data} mapping={{ x: "x", y: "y" }} onDiagnostics={setRemovals}>
@@ -128,5 +135,5 @@ it clears:
 </GGPlot>;
 ```
 
-The warning fires once per distinct set rather than on every re-assembly, so
-a resize does not repeat it.
+The warning fires once per distinct set rather than on every re-assembly, so a
+resize does not repeat it.
