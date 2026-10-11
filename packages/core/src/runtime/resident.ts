@@ -61,7 +61,7 @@ function requireStorage(
 }
 
 /**
- * Converts mounted RawData sources into a resident executor input. This has no
+ * Converts mounted column sources into a resident executor input. This has no
  * upload or readback side effect; it retains the sources' existing buffers.
  */
 export function histogramSourceInput(
@@ -98,7 +98,7 @@ export function histogramSourceInput(
 
 /**
  * Allocates only derived histogram targets against the mounted device. The
- * input columns remain owned by `RawData`, while this result owns counts,
+ * input columns remain owned by GPUDataProvider, while this result owns counts,
  * vertices, and uniforms until its `destroy()` lifecycle runs.
  */
 export function createMountedResidentHistogram1D(

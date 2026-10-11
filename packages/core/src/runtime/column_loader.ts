@@ -1,8 +1,8 @@
 // The column half of the GPU loader tier (ADR 006, gggplot-vs7.10).
 //
 // typedArrayForColumn is the CPU lowering every column passes through before
-// <RawData> uploads it. For boxed input that lowering is unavoidable -- something
-// has to turn Array<number | null> into a Float32Array. For a caller who ALREADY
+// GPUDataProvider uploads it. For boxed input that lowering is unavoidable --
+// something has to turn Array<number | null> into a Float32Array. For a caller who ALREADY
 // owns typed data (Arrow, a fetched blob, a kernel's output) it is a pure copy,
 // and this is the path that skips it.
 //

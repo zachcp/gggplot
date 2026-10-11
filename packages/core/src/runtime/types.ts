@@ -1,12 +1,11 @@
-import type { Column, TypedDataFrame } from "../data/mod.ts";
-import type { FieldSpec, ProductPlan } from "../plan/mod.ts";
+import type { Column } from "../data/mod.ts";
 
 /** Opaque binding supplied by the mounted Use.GPU adapter. */
 export interface GPUFieldSource {
   readonly id?: string;
 }
 
-/** Runtime-only storage shape returned by a mounted Use.GPU `RawData` node. */
+/** Runtime-only storage shape returned by a mounted Use.GPU raw source. */
 export interface GPUStorageSource extends GPUFieldSource {
   readonly buffer: GPUBuffer;
   readonly format: string;
@@ -20,7 +19,7 @@ export interface GPUStorageSource extends GPUFieldSource {
  * A column the caller already owns on the GPU.
  *
  * The column-path counterpart to `GPUTensorSource` (ADR 006): where a plain
- * `Column` is lowered by `typedArrayForColumn` and uploaded by `<RawData>`, a
+ * `Column` is lowered by `typedArrayForColumn` and uploaded by GPUDataProvider, a
  * resident column is ALREADY a buffer and mounts with no upload at all. It is
  * for callers who own typed data to begin with -- an Arrow buffer, a fetched
  * binary blob, or the output of a kernel that already ran.
@@ -48,31 +47,4 @@ export function isResidentColumn(
   column: MountedColumn,
 ): column is ResidentColumn {
   return (column as ResidentColumn).kind === "resident";
-}
-
-/** The only runtime-specific dependency required by the semantic runtime. */
-export interface GPUFieldSourceFactory {
-  create(field: FieldSpec, column: Column): GPUFieldSource;
-  release?(source: GPUFieldSource): void;
-}
-
-export interface ResolvedCPUField extends FieldSpec {
-  column: Column;
-  contentVersion: number;
-}
-
-export interface ResolvedGPUField extends FieldSpec {
-  source: GPUFieldSource;
-  contentVersion: number;
-}
-
-export interface ResolvedProduct {
-  plan: ProductPlan;
-  cpu: Record<string, ResolvedCPUField>;
-  gpu: Record<string, ResolvedGPUField>;
-}
-
-export interface GPUPlotRuntimeOptions {
-  sourceFactory: GPUFieldSourceFactory;
-  data: TypedDataFrame;
 }

@@ -31,23 +31,20 @@ import {
   Polygon,
   ScissorBox,
   Tick,
+  Transform,
 } from "@use-gpu/plot";
 import {
   FlatCamera,
   FontLoader,
   LayoutContext,
-  MatrixContext,
   OrbitCamera,
   Pass,
-  TransformContext,
-  useCombinedMatrixTransform,
   useDeviceContext,
   useFontContext,
   useNoDeviceContext,
 } from "@use-gpu/workbench";
 import { OrbitControls } from "@use-gpu/interact";
 import { RangeContext } from "@use-gpu/plot/mjs/providers/range-provider.mjs";
-import { mat4 } from "gl-matrix";
 import { resolveResidentProduct } from "../runtime/mod.ts";
 import type { ComponentName, RenderNode } from "../compile/rendertree.ts";
 import type { FlatTensor } from "../compile/rendertree.ts";
@@ -111,90 +108,54 @@ export interface PanelViewportProps {
 export const FacetPanel = (
   { layout, children }: FacetPanelProps,
 ): LiveElement => {
-  const [range, matrix] = useMemo(() => {
-    const [left, top, right, bottom] = layout;
-    const width = right - left;
-    const height = bottom - top;
-    return [
-      [[-1, 1], [-1, 1], [-1, 1], [-1, 1]],
-      mat4.fromValues(
-        width / 2,
-        0,
-        0,
-        0,
-        0,
-        height / 2,
-        0,
-        0,
-        0,
-        0,
-        1,
-        0,
-        left + width / 2,
-        top + height / 2,
-        0,
-        1,
-      ),
-    ];
-  }, [layout]);
-  const [context, combined] = useCombinedMatrixTransform(matrix);
+  const [left, top, right, bottom] = layout;
+  const position = useMemo(
+    () => [(left + right) / 2, (top + bottom) / 2, 0],
+    [left, top, right, bottom],
+  );
+  const scale = useMemo(
+    () => [(right - left) / 2, (bottom - top) / 2, 1],
+    [left, top, right, bottom],
+  );
+  const range = useOne(() => [[-1, 1], [-1, 1], [-1, 1], [-1, 1]]);
   return provide(
-    MatrixContext,
-    combined,
-    provide(
-      TransformContext,
-      context,
-      provide(RangeContext, range, children as never),
-    ),
+    RangeContext,
+    range,
+    createElement(Transform, { position, scale }, children as never),
   );
 };
 
 /** Convert normalized outer-chart bounds into an inset pixel-space panel. */
 export const PanelViewport = ({ bounds, children }: PanelViewportProps) => {
   const [x0, y0, x1, y1] = bounds;
-  const matrix = useMemo(
-    () =>
-      mat4.fromValues(
-        (x1 - x0) / 2,
-        0,
-        0,
-        0,
-        0,
-        // NEGATIVE y (gggplot-8zx). This is the one place a y-up space meets a
-        // y-down one. plot's <Cartesian> maps the data range onto clip space
-        // with +y UP, while the surrounding overlay is y-DOWN: compile/axes.ts
-        // places the tick label for the y MINIMUM at the larger y coordinate,
-        // and that label renders at the bottom of the panel. Scaling by a
-        // positive (y1 - y0) / 2 carried Cartesian's +y straight through, so
-        // every mark, grid line, and axis line inside the panel came out
-        // mirrored against the very ticks that label them — a bar for value v
-        // occupied [ymax - v, ymax] instead of [0, v].
-        //
-        // The flip belongs here rather than on the Cartesian range because
-        // PanelViewport is 2D-only. Reversing the range instead also reaches
-        // the 3D scene's Cartesian, which sits under Scene3D with no y-down
-        // bridge and was never mirrored; doing that visibly turned the 3D
-        // showcases upside down.
-        -(y1 - y0) / 2,
-        0,
-        0,
-        0,
-        0,
-        1,
-        0,
-        (x0 + x1) / 2,
-        (y0 + y1) / 2,
-        0,
-        1,
-      ),
+  const position = useMemo(
+    () => [(x0 + x1) / 2, (y0 + y1) / 2, 0],
     [x0, y0, x1, y1],
   );
-  const [context, combined] = useCombinedMatrixTransform(matrix);
-  return provide(
-    MatrixContext,
-    combined,
-    provide(TransformContext, context, children as never),
+  const scale = useMemo(
+    () => [
+      (x1 - x0) / 2,
+      // NEGATIVE y (gggplot-8zx). This is the one place a y-up space meets a
+      // y-down one. plot's <Cartesian> maps the data range onto clip space
+      // with +y UP, while the surrounding overlay is y-DOWN: compile/axes.ts
+      // places the tick label for the y MINIMUM at the larger y coordinate,
+      // and that label renders at the bottom of the panel. Scaling by a
+      // positive (y1 - y0) / 2 carried Cartesian's +y straight through, so
+      // every mark, grid line, and axis line inside the panel came out
+      // mirrored against the very ticks that label them — a bar for value v
+      // occupied [ymax - v, ymax] instead of [0, v].
+      //
+      // The flip belongs here rather than on the Cartesian range because
+      // PanelViewport is 2D-only. Reversing the range instead also reaches
+      // the 3D scene's Cartesian, which sits under Scene3D with no y-down
+      // bridge and was never mirrored; doing that visibly turned the 3D
+      // showcases upside down.
+      -(y1 - y0) / 2,
+      1,
+    ],
+    [x0, y0, x1, y1],
   );
+  return createElement(Transform, { position, scale }, children as never);
 };
 
 /** Keep a polar chart circular within a rectangular host canvas. */
@@ -208,34 +169,8 @@ export const RadialViewport = (
     number,
   ];
   const aspect = (bottom - top) / (right - left);
-  const matrix = useMemo(
-    () =>
-      new Float32Array([
-        aspect,
-        0,
-        0,
-        0,
-        0,
-        1,
-        0,
-        0,
-        0,
-        0,
-        1,
-        0,
-        0,
-        0,
-        0,
-        1,
-      ]),
-    [aspect],
-  );
-  const [context, combined] = useCombinedMatrixTransform(matrix);
-  return provide(
-    MatrixContext,
-    combined,
-    provide(TransformContext, context, children as never),
-  );
+  const scale = useMemo(() => [aspect, 1, 1], [aspect]);
+  return createElement(Transform, { scale }, children as never);
 };
 
 /**

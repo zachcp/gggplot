@@ -72,7 +72,7 @@ const grid: ResidentGrid<
 });
 
 /**
- * Runs stat_bin from RawData storage on the mounted Use.GPU device. Source
+ * Runs stat_bin from mounted column storage on the mounted Use.GPU device. Source
  * content changes re-dispatch into persistent outputs; changing a buffer,
  * device, or bin shape safely replaces and destroys only derived resources.
  */

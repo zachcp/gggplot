@@ -1550,7 +1550,9 @@ Deno.test("coord_polar selects the Polar view and passes through bend/on params"
   ]);
   const src = emitSource(tree, "CircularPolar");
   assertStringIncludes(src, "const RadialViewport");
-  assertStringIncludes(src, "useCombinedMatrixTransform");
+  // The viewport is a plot <Transform> (gggplot-vnh.17), bound like the rest.
+  assertStringIncludes(src, "createElement(Transform, { scale }, children)");
+  assertStringIncludes(src, "Grid, Point, Transform } = PlotComponents");
 });
 
 Deno.test("coord_radial and coord_fixed preserve their declarative view transforms", () => {
@@ -1619,20 +1621,26 @@ Deno.test("coord_polar munches Polygon edges for curved bar wedges", () => {
   assertEquals(round([loops[0][16]]), round([[-Math.PI, 2]]));
 });
 
-Deno.test("coord_polar uses explicit Line rings/spokes instead of Cartesian Grid", () => {
+Deno.test("coord_polar draws its rings/spokes as one GPU-subdivided Grid", () => {
   const spec = ggplot({ x: ["a", "b"], y: [2, 3] }, { x: "x", y: "y" })
     .add(geomCol(), coordPolar())
     .build();
   const tree = compile(spec);
   const panel = tree.children[0].children[0];
 
-  assertEquals(panel.children.find((c) => c.component === "Grid"), undefined);
-  const grid = panel.children.find((c) => c.component === "Line");
-  const positions = grid?.props.positions as [number, number][][];
+  // gggplot-vnh.17: no CPU ring/spoke geometry; <Polar> bends what <Grid
+  // detail> subdivides. 12 spokes x 32 points, 4 rings (not the innermost)
+  // x 96 points, the same lines the CPU builder made.
+  assertEquals(panel.children.find((c) => c.component === "Line"), undefined);
+  const grid = panel.children.find((c) => c.component === "Grid");
   assertEquals(grid?.props.zBias, -1);
-  assertEquals(positions.length, 16);
-  assertEquals(positions[0].length, 96);
-  assertEquals(positions[4].length, 32);
+  assertEquals(grid?.props.first, { nice: false, divide: 11, detail: 31 });
+  assertEquals(grid?.props.second, {
+    nice: false,
+    divide: 4,
+    start: false,
+    detail: 95,
+  });
 });
 
 Deno.test("geom_line sorts by x before connecting, unlike geom_path", () => {
@@ -3969,13 +3977,14 @@ Deno.test("emitSource inlines a standalone FacetGrid definition for faceted spec
     "facetCellLayouts(width, height, nrow, ncol, gap, stripHeight)",
   );
   assertStringIncludes(src, "const panel = layouts[i].panel;");
+  assertStringIncludes(src, "import { FontLoader, LayoutContext }");
   assertStringIncludes(
     src,
-    "LayoutContext, MatrixContext, TransformContext",
+    "createElement(Transform, { position, scale }, children)",
   );
   assertStringIncludes(
     src,
-    "createElement, Fragment, provide, useAwait, useContext",
+    "createElement, Fragment, useAwait, useContext, useMemo",
   );
   assertStringIncludes(src, "const EmittedFontHost =");
   assertStringIncludes(src, "({ fontResources }: any = {})");

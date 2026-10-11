@@ -421,23 +421,29 @@ export function linspace([lo, hi]: [number, number], n: number): number[] {
   return Array.from({ length: n }, (_, i) => lo + (hi - lo) * (i / (n - 1)));
 }
 
+/**
+ * The polar ring/spoke grid as one plot <Grid> under <Polar> (gggplot-vnh.17).
+ *
+ * <Grid detail> subdivides each line on the GPU and <Polar> bends it, so no
+ * CPU ring or spoke geometry is built. Same lines as before: 12 spokes across
+ * theta (both ends included, as linspace did) with 32 points each, and 4 rings
+ * across radius, skipping the innermost (start: false), with 96 points each.
+ */
 export function polarGridLines(
   xDomain: [number, number],
   yDomain: [number, number],
   theme: Theme,
 ): RenderNode {
-  const ringYs = linspace(yDomain, 5).slice(1);
-  const spokeXs = linspace(xDomain, 12);
-  const ringXs = linspace(xDomain, 96);
-  const radialYs = linspace(yDomain, 32);
-  const positions = [
-    ...ringYs.map((y) => ringXs.map((x): [number, number] => [x, y])),
-    ...spokeXs.map((x) => radialYs.map((y): [number, number] => [x, y])),
-  ];
-  return node("Line", {
-    positions,
-    width: theme.gridWidth ?? 1,
-    zBias: -1,
-    ...(theme.gridColor ? { color: theme.gridColor } : {}),
-  });
+  return {
+    ...node("Grid", {
+      axes: "xy",
+      range: [xDomain, yDomain],
+      first: { nice: false, divide: 11, detail: 31 },
+      second: { nice: false, divide: 4, start: false, detail: 95 },
+      width: theme.gridWidth ?? 1,
+      zBias: -1,
+      ...(theme.gridColor ? { color: theme.gridColor } : {}),
+    }),
+    key: "grid-polar",
+  };
 }

@@ -1,5 +1,3 @@
-/** @jsxRuntime classic */
-/** @jsx createElement */
 // The only Use.GPU-specific module in the runtime layer.
 
 import type { LiveElement } from "@use-gpu/live";
@@ -12,7 +10,14 @@ import {
   type MountedColumn,
   type MountedDataFrame,
 } from "./types.ts";
-import { createElement, RawData } from "./usegpu_compat.ts";
+import {
+  createElement,
+  Fragment,
+  QueueReconciler,
+  useNoRawSource,
+  useOne,
+  useRawSource,
+} from "./usegpu_compat.ts";
 
 function formatFor(field: FieldSpec, column: MountedColumn): "f32" | "u32" {
   if (field.dtype === "f32" && column.type === "numeric") return "f32";
@@ -20,6 +25,48 @@ function formatFor(field: FieldSpec, column: MountedColumn): "f32" | "u32" {
   throw new Error(
     `Cannot mount ${field.name}: ${field.dtype} does not match ${column.type} column`,
   );
+}
+
+/** One-element stand-ins for an empty column (see MountColumns). */
+const EMPTY = { f32: new Float32Array(1), u32: new Uint32Array(1) };
+
+/** How one requested field mounts: uploaded, already resident, or absent. */
+export type ColumnMount =
+  | { name: string; kind: "absent" }
+  | { name: string; kind: "resident"; source: GPUStorageSource }
+  | {
+    name: string;
+    kind: "upload";
+    array: Float32Array | Uint32Array;
+    format: "f32" | "u32";
+  };
+
+/**
+ * Decide, and validate, how each requested field mounts. Pure: no device and
+ * no hooks, so a mismatched column fails before anything mounts.
+ *
+ * A `ResidentColumn` is already a buffer, so it mounts with no upload at all.
+ * It still gets the same f32/u32 check as a CPU column, so a mismatch fails
+ * with the same message rather than producing a silently wrong binding.
+ */
+export function planColumnMounts(
+  data: TypedDataFrame | MountedDataFrame,
+  fields: readonly FieldSpec[],
+): ColumnMount[] {
+  return fields.map((field): ColumnMount => {
+    const column = (data as MountedDataFrame)[field.name];
+    if (!column) return { name: field.name, kind: "absent" };
+    const format = formatFor(field, column);
+    if (isResidentColumn(column)) {
+      return { name: field.name, kind: "resident", source: column.source };
+    }
+    return {
+      name: field.name,
+      kind: "upload",
+      array: rawArrayForColumn(column as Column),
+      format,
+    };
+  });
 }
 
 export interface GPUDataProviderProps {
@@ -33,80 +80,70 @@ export interface GPUDataProviderProps {
 }
 
 /**
- * Occupies one level of the mount chain without mounting anything.
+ * One flat raw-source hook per requested field (gggplot-vnh.17).
  *
- * The chain's DEPTH is part of the tree's identity: Live reconciles by position,
- * so a level that appears or disappears remounts everything beneath it. Before
- * this, a field with no column simply skipped its level, which meant the depth
- * tracked the number of PRESENT columns -- so adding a mapping, or a column
- * arriving late, silently remounted every source below it and re-uploaded them.
- * A resident column would skip a level too, for the same reason.
+ * The hook COUNT is part of this component's identity: Live matches hooks by
+ * call order, so every field occupies exactly one slot whether it uploads or
+ * not, and `useNoRawSource` fills the slot of an absent or resident field. A
+ * column arriving late or a mapping being added therefore re-uploads only that
+ * column. `rawArrayForColumn` preserves array identity across view updates, and
+ * useRawSource uploads only when that identity changes.
  *
- * Keeping one level per requested field, occupied or not, makes the depth a
- * function of `fields.length` alone.
+ * This replaced a nested chain of one <RawData> per field plus a `HoldLevel`
+ * placeholder that pinned the chain's depth for the same reason.
  */
-const HoldLevel = (
-  { children }: { children: () => LiveElement },
-): LiveElement => children();
+const MountColumns = (
+  { mounts, children }: {
+    mounts: ColumnMount[];
+    children: GPUDataProviderProps["children"];
+  },
+): LiveElement => {
+  const sources: Record<string, GPUStorageSource> = {};
+  for (const mount of mounts) {
+    if (mount.kind === "upload") {
+      const empty = mount.array.length === 0;
+      // A zero-byte buffer cannot be bound ("binding size is zero"). <RawData>
+      // always allocated at least one element, so an empty column still does,
+      // and reports its true length of 0.
+      const source = useRawSource(
+        empty ? EMPTY[mount.format] : mount.array,
+        mount.format,
+      );
+      sources[mount.name] = empty
+        ? { ...source, length: 0, size: [0] }
+        : source;
+    } else {
+      useNoRawSource();
+      if (mount.kind === "resident") sources[mount.name] = mount.source;
+    }
+  }
+  // What <RawData> did for each field: re-signal the frame queue when any
+  // upload's version moves. Without it, a kernel or readback that waits on new
+  // data is never scheduled (the stat_bin domain readback went blank).
+  const versions = Object.values(sources).map((s) => s.version).join(",");
+  const trigger = useOne(() => QueueReconciler.signal(), versions);
+  return createElement(Fragment, {}, trigger, children(sources));
+};
 
 /**
- * Nests stable RawData nodes and supplies their StorageSources by field name.
+ * Mounts typed columns once and supplies their StorageSources by field name.
  *
- * `RawData` owns allocation/upload for CPU columns, and `rawArrayForColumn`
- * preserves array identity across view updates, so only replaced typed columns
- * upload again. A `ResidentColumn` bypasses `RawData` entirely -- its buffer is
- * already on the device, so its level holds depth and passes the existing source
- * straight through with no upload at all.
- *
- * WHY THIS IS STILL A NESTED CHAIN rather than one <Data schema={...}> node.
- * `<Data>` is an ARRAY-OF-STRUCTS AGGREGATOR, not a columnar mount. Reading
- * @use-gpu/workbench 0.20's data.mjs: `itemCount` comes from `data.length`, the
- * schema keys are probed as `data[0][key]`, and values are walked per item
- * through `copyRecursiveNumberArray` into buffers it allocates itself
+ * WHY NOT one <Data schema={...}> node. `<Data>` is an ARRAY-OF-STRUCTS
+ * AGGREGATOR, not a columnar mount. Reading @use-gpu/workbench 0.20's
+ * data.mjs: `itemCount` comes from `data.length`, the schema keys are probed as
+ * `data[0][key]`, and values are walked per item through
+ * `copyRecursiveNumberArray` into buffers it allocates itself
  * (`allocateSchema`). Handing it our columnar typed arrays as one struct makes
- * `itemCount` 1; handing it rows would reintroduce exactly the per-row CPU
- * repack this epic removes, and would allocate fresh buffers on every change --
- * destroying the reference-identity guarantee `PackCache` depends on
- * (docs/RESIDENCY_MATRIX.md, "GPU mark-data upload residency").
- *
- * So <Data> is the wrong primitive for a columnar frame, and the nesting problem
- * it was proposed to solve is solved directly by `HoldLevel`: the chain is a
- * fixed `fields.length` deep, which is the property that actually mattered.
- * <RawData> stays correct here -- one typed array in, one source out, which is
- * exactly our shape.
+ * `itemCount` 1; handing it rows would reintroduce the per-row CPU repack and
+ * allocate fresh buffers on every change.
  */
 export const GPUDataProvider = (
   { data, fields, children }: GPUDataProviderProps,
-): LiveElement => {
-  const bind = (
-    index: number,
-    sources: Record<string, GPUStorageSource>,
-  ): LiveElement => {
-    if (index === fields.length) return children(sources);
-    const field = fields[index];
-    const column = (data as MountedDataFrame)[field.name];
-    const next = (source?: GPUStorageSource) =>
-      bind(index + 1, source ? { ...sources, [field.name]: source } : sources);
-
-    if (!column) {
-      return createElement(HoldLevel, {
-        children: () => next(),
-      }) as LiveElement;
-    }
-    if (isResidentColumn(column)) {
-      // Validate the same f32/u32 match the CPU path enforces, so a mismatched
-      // resident column fails at mount with the same message rather than
-      // producing a silently wrong binding.
-      formatFor(field, column);
-      return createElement(HoldLevel, {
-        children: () => next(column.source),
-      }) as LiveElement;
-    }
-    return createElement(RawData, {
-      data: rawArrayForColumn(column as Column),
-      format: formatFor(field, column),
-      children: (source: GPUStorageSource) => next(source),
-    }) as LiveElement;
-  };
-  return bind(0, {});
-};
+): LiveElement =>
+  // Keyed by field count: a different count is a different hook layout, so it
+  // remounts rather than misaligning hook slots.
+  createElement(MountColumns, {
+    key: `fields-${fields.length}`,
+    mounts: planColumnMounts(data, fields),
+    children,
+  }) as LiveElement;

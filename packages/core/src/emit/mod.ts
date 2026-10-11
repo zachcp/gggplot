@@ -173,14 +173,8 @@ const RADIAL_VIEWPORT_SOURCE = `
 const RadialViewport = ({ children }: any): any => {
   const [left, top, right, bottom] = useContext(LayoutContext);
   const aspect = (bottom - top) / (right - left);
-  const matrix = useMemo(() => new Float32Array([
-    aspect, 0, 0, 0,
-    0, 1, 0, 0,
-    0, 0, 1, 0,
-    0, 0, 0, 1,
-  ]), [aspect]);
-  const [context, combined] = useCombinedMatrixTransform(matrix);
-  return provide(MatrixContext, combined, provide(TransformContext, context, children));
+  const scale = useMemo(() => [aspect, 1, 1], [aspect]);
+  return createElement(Transform, { scale }, children);
 };
 `;
 
@@ -188,17 +182,12 @@ const PANEL_VIEWPORT_SOURCE = `
 // Insets a plot panel while labels remain in the outer normalized chart.
 const PanelViewport = ({ bounds, children }: any): any => {
   const [x0, y0, x1, y1] = bounds;
-  const matrix = useMemo(() => new Float32Array([
-    (x1 - x0) / 2, 0, 0, 0,
-    // NEGATIVE y: plot's Cartesian is y-up, the surrounding overlay is y-down.
-    // See render/GGPlot.tsx's PanelViewport for the full derivation
-    // (gggplot-8zx) -- LIVE/EMIT PARITY REQUIRED.
-    0, -(y1 - y0) / 2, 0, 0,
-    0, 0, 1, 0,
-    (x0 + x1) / 2, (y0 + y1) / 2, 0, 1,
-  ]), [x0, y0, x1, y1]);
-  const [context, combined] = useCombinedMatrixTransform(matrix);
-  return provide(MatrixContext, combined, provide(TransformContext, context, children));
+  const position = useMemo(() => [(x0 + x1) / 2, (y0 + y1) / 2, 0], [x0, y0, x1, y1]);
+  // NEGATIVE y: plot's Cartesian is y-up, the surrounding overlay is y-down.
+  // See render/GGPlot.tsx's PanelViewport for the full derivation
+  // (gggplot-8zx) -- LIVE/EMIT PARITY REQUIRED.
+  const scale = useMemo(() => [(x1 - x0) / 2, -(y1 - y0) / 2, 1], [x0, y0, x1, y1]);
+  return createElement(Transform, { position, scale }, children);
 };
 `;
 
@@ -603,24 +592,22 @@ export function emitSource(root: RenderNode, name = "GGChart"): string {
   const chunkedLine = all.has("ChunkedLine");
 
   const needsContext = faceted || radial || panelViewport || cameraAxis3d;
-  const needsProvideAndMemo = radial || panelViewport || chunkedLine || scene3d;
+  const needsProvide = chunkedLine || scene3d;
+  const needsMemo = radial || panelViewport || chunkedLine || scene3d;
   const liveImportNames = [
     "createElement",
     "Fragment",
     ...(scene3d ? ["makeContext"] : []),
-    ...(needsProvideAndMemo ? ["provide"] : []),
+    ...(needsProvide ? ["provide"] : []),
     "useAwait",
     ...(needsContext ? ["useContext"] : []),
-    ...(needsProvideAndMemo ? ["useMemo"] : []),
+    ...(needsMemo ? ["useMemo"] : []),
   ];
   const liveImports = liveImportNames.join(", ");
   const workbenchImports = [
     "FontLoader",
     ...(scene3d ? ["FlatCamera", "OrbitCamera", "Pass"] : []),
     ...(faceted || radial ? ["LayoutContext"] : []),
-    ...(radial || panelViewport
-      ? ["MatrixContext", "TransformContext", "useCombinedMatrixTransform"]
-      : []),
   ];
   const workbenchImport = workbenchImports.length
     ? `\nimport { ${workbenchImports.join(", ")} } from "@use-gpu/workbench";`
@@ -682,9 +669,14 @@ export function emitSource(root: RenderNode, name = "GGChart"): string {
   // namespace destructure — exactly the `Partial<Record<ComponentName, any>>`
   // REGISTRY typing render/GGPlot.tsx dispatches through live — so the emitted
   // module type-checks while the runtime import stays @use-gpu/plot as before.
-  const plotBindings = used.length
+  // The viewports are plot <Transform>s (gggplot-vnh.17).
+  const plotNames = [
+    ...used,
+    ...(radial || panelViewport ? ["Transform"] : []),
+  ];
+  const plotBindings = plotNames.length
     ? `\nconst { ${
-      used.join(", ")
+      plotNames.join(", ")
     } } = PlotComponents as unknown as Record<string, any>;`
     : "";
 

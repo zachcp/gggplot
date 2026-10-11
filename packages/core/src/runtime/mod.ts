@@ -1,7 +1,4 @@
 export type * from "./types.ts";
-// @experimental — test-only contracts landed ahead of the GPU-native plan's
-// Phase 2; see the module docs on runtime.ts (gggplot-btd).
-export { GPUPlotRuntime } from "./runtime.ts";
 export { rawArrayForColumn } from "./raw.ts";
 export {
   createResidentColumn,
@@ -10,7 +7,12 @@ export {
   type ResidentColumnOptions,
 } from "./column_loader.ts";
 export { isResidentColumn } from "./types.ts";
-export { GPUDataProvider, type GPUDataProviderProps } from "./live.tsx";
+export {
+  type ColumnMount,
+  GPUDataProvider,
+  type GPUDataProviderProps,
+  planColumnMounts,
+} from "./live.tsx";
 export {
   createMountedDomain1D,
   createMountedResidentHistogram1D,

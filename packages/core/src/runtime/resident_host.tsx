@@ -449,7 +449,7 @@ const AwaitHoistedBounds = (
  *
  * The nesting is a fold rather than a flat list because each provider hands its
  * product to a callback; the same shape GPUDataProvider already uses for its
- * per-field RawData nodes.
+ * per-field raw-source hooks.
  */
 export const ResidentHost = (
   { nodes, children }: { nodes: HoistedNode[]; children: LiveElement },

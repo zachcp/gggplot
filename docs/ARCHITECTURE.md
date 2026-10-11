@@ -93,7 +93,7 @@ _lowering_, not a rendering engine.
 | `annotate()`                  | literal single-row layer, reuses the target geom's node                                           |
 | `geom_hline/vline/abline()`   | `<Line>` spanning the panel's trained domain                                                      |
 | axis guides                   | `<Axis axis="x">`, `<Axis axis="y">`                                                              |
-| grid / panel.grid             | `<Grid axes="xy">` or polar `<Line>` rings/spokes                                                 |
+| grid / panel.grid             | `<Grid axes="xy">`; polar rings/spokes are one `<Grid detail>` under `<Polar>`                    |
 | legends                       | overlay `<Label>` + `<Point>` guide nodes                                                         |
 | facets                        | custom `<FacetGrid>` + one `<Embedded>` per panel                                                 |
 
@@ -301,9 +301,9 @@ which operations currently take each flow.
   Resources keep stable identity until their input _version_ changes.
 
 React/Live reconciles source _handles_, not freshly-created vertex arrays on
-each render. `GPUPlotRuntime` is the sole hook-owning adapter boundary for
-Use.GPU imports; stats and geoms depend on gggplot's field interfaces, not on
-Use.GPU component props.
+each render. `runtime/usegpu_compat.ts` is the sole typed boundary for Use.GPU
+imports; stats and geoms depend on gggplot's field interfaces, not on Use.GPU
+component props.
 
 ### Residency principles
 
