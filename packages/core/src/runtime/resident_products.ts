@@ -1,22 +1,48 @@
-// The channel that carries hoisted resident products down to their consumers.
+// The GPU-resident products the component root hosts, and the channel that
+// carries them to their marks (gggplot-vnh.5.1).
 //
-// A LEAF module on purpose. resident_host.tsx builds the products, but its
-// consumers are the marks and views — and the mark lives in resident_grid.tsx,
-// which resident_host.tsx itself depends on through the three product modules
-// (resident_count_live / resident_live / resident_tile_live). Importing the
-// context straight from the host therefore closes a cycle
-//   resident_grid -> resident_host -> resident_count_live -> resident_grid
-// and Vite resolves one side of it to undefined. That failure is not subtle but
-// it is unattributable: every canvas on every route silently fails to mount,
-// including ones with no resident product in them at all (gggplot-vs7.1).
-//
-// So the context lives here, where it imports nothing from the resident family
-// and both sides can reach it.
+// A LEAF module on purpose: the host (product_host.tsx) builds products and
+// the mark (product_mark.tsx) reads them, and both reach this module without
+// importing each other. A cycle between the two resolves one side to
+// undefined under Vite, which fails every canvas silently (gggplot-vs7.1).
 
+import type { ResidentDomain1DResult } from "@gggplot/reductions";
+import type { GridSummary } from "./resident_grid_pending.ts";
+import type { GPUStorageSource } from "./types.ts";
 import { makeContext, useContext } from "./usegpu_compat.ts";
 
-/** Products built above the plot, keyed by the id stamped on their node. */
-export type ResidentProducts = ReadonlyMap<number, unknown>;
+/** A resident [group, bin] grid: counts and mark geometry stay on the GPU. */
+export interface ResidentGridProduct {
+  readonly counts: GPUStorageSource;
+  readonly barVertices: GPUStorageSource;
+  /** Per-vertex RGBA bar colors, present when the product has a palette. */
+  readonly barColors?: GPUStorageSource;
+  /** The uploaded per-group palette, an input of the bar-color pass. */
+  readonly palette?: GPUStorageSource;
+  /** Per-vertex RGBA tile colors, each cell shaded by its own count. */
+  readonly heatmapColors?: GPUStorageSource;
+  /** Dense [group, bin] tile geometry. */
+  readonly tileVertices: GPUStorageSource;
+  /** [group totals..., stacked maximum]. */
+  readonly summary: GPUStorageSource;
+  readonly bins: number;
+  readonly groupsCount: number;
+  /** Input rows: tells a legitimate zero summary from an unfinished one. */
+  readonly rows: number;
+  /** stat_bin's resolved bin geometry. */
+  readonly binGeometry?: { readonly lo: number; readonly binwidth: number };
+  /** stat_bin's GPU-resolved x bounds, when they were read back. */
+  readonly hoistedBounds?: ResidentDomain1DResult;
+  /** Whether the buffers are still mounted (a readback spans frames). */
+  alive(): boolean;
+  /** This version's compact summary, once read back. */
+  readSummary(): Promise<GridSummary>;
+  /** The data version this product was dispatched for. */
+  readonly version: number;
+}
+
+/** Products the root mounted, by product key (product_host.tsx). */
+export type ResidentProducts = ReadonlyMap<string, ResidentGridProduct>;
 
 const EMPTY: ResidentProducts = new Map();
 
@@ -25,12 +51,8 @@ export const ResidentProductsContext = makeContext<ResidentProducts>(
   "ResidentProductsContext",
 );
 
-/** The prop name stamped onto a hoisted node so its consumer finds its product. */
-export const RESIDENT_ID_PROP = "residentId";
-
-/** Reads the product built for this node, or null when it was not hoisted. */
-export function useHoistedProduct<T>(residentId: unknown): T | null {
+/** The product mounted under `key`, or null while it is still resolving. */
+export function useResidentProduct(key: string): ResidentGridProduct | null {
   const products = useContext<ResidentProducts>(ResidentProductsContext);
-  if (typeof residentId !== "number") return null;
-  return (products.get(residentId) as T) ?? null;
+  return products.get(key) ?? null;
 }

@@ -283,11 +283,18 @@ position / palette expansion         stable GPU RawData sources
 
 Flow A applies only when a registered resident product's eligibility gate
 accepts the full layer. It returns bounded guide/domain summaries rather than
-row-shaped data. Flow B covers general plots: CPU work produces packed tensors
-whose stable references prevent another upload while mapped column identities,
-revisions, and pack keys remain unchanged. The
-[residency matrix](./RESIDENCY_MATRIX.md) is the authoritative detailed list of
-which operations currently take each flow.
+row-shaped data. The component root owns Flow A end to end
+(`runtime/product_host.tsx`):
+
+- It plans one product per distinct product key and mounts each once, in a
+  `<Compute>` beside the plot.
+- It trains y from a product's read-back stacked maximum when no y domain is
+  declared.
+- It draws each resident layer as a `ProductMark` under the trained axes. Flow B
+  covers general plots: CPU work produces packed tensors whose stable references
+  prevent another upload while mapped column identities, revisions, and pack
+  keys remain unchanged. The [residency matrix](./RESIDENCY_MATRIX.md) is the
+  authoritative detailed list of which operations currently take each flow.
 
 ### Component-path invariants (gggplot-bv0)
 

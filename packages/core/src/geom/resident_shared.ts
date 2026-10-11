@@ -4,7 +4,7 @@
 // positions, standalone requirements) stays in each geom's own hook.
 import type { Aes, GGSpec } from "../ir/types.ts";
 import type { Column, TypedDataFrame } from "../data/mod.ts";
-import { columnValues, factorLevelsFor } from "../data/mod.ts";
+import { columnValues, columnVersion, factorLevelsFor } from "../data/mod.ts";
 import { categoricalRange, OTHER_COLOR } from "../scale/mod.ts";
 
 export function explicitDomain(
@@ -26,7 +26,10 @@ export function explicitDomain(
  * (and therefore the legend) uses. Only reached when no custom scale is
  * declared for the aes.
  */
-function discreteColorDomain(data: TypedDataFrame, col: string): string[] {
+export function discreteColorDomain(
+  data: TypedDataFrame,
+  col: string,
+): string[] {
   const declared = factorLevelsFor(data, col);
   if (declared) {
     const seen = new Set<string>();
@@ -142,4 +145,42 @@ export function residentBinRequest(
     binwidth: requestedBinwidth as number | undefined,
     bins: requestedBinwidth == null ? bins : undefined,
   };
+}
+
+const releveled = new WeakMap<Column, Map<string, Column>>();
+
+/**
+ * `data` with `col` re-leveled to the order the trained position scale gives
+ * its levels (gggplot-mos5). A factor column's codes follow its own levels,
+ * which ingest records in first-appearance order, while an undeclared
+ * discrete scale sorts them: a GPU count grid indexed by code would put each
+ * category's bar under another's label. The copy shares the values and only
+ * changes which code each level gets, so the grid's slot i is the scale's
+ * level i. Returned unchanged when the orders already agree.
+ */
+export function scaleOrderedFactor(
+  spec: GGSpec,
+  data: TypedDataFrame,
+  col: string,
+): TypedDataFrame {
+  const column = data[col];
+  if (column?.type !== "factor") return data;
+  const declared = spec.scales.find((scale) => scale.aes === "x")?.domain;
+  const order = Array.isArray(declared) && typeof declared[0] === "string"
+    ? declared as string[]
+    : discreteColorDomain(data, col);
+  if (
+    order.length === column.levels.length &&
+    order.every((level, i) => level === column.levels[i])
+  ) return data;
+  // The copy shares the values, so a touched column needs a fresh copy.
+  const key = `${columnVersion(column)}|${JSON.stringify(order)}`;
+  let byOrder = releveled.get(column);
+  if (!byOrder) releveled.set(column, byOrder = new Map());
+  let copy = byOrder.get(key);
+  if (!copy) {
+    copy = { ...column, levels: [...order] };
+    byOrder.set(key, copy);
+  }
+  return { ...data, [col]: copy };
 }

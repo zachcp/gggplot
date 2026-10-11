@@ -52,12 +52,11 @@ export type ComponentName =
   | "Polygon"
   | "Label"
   /**
-   * A GPU-resident product mark, resolved at render time through the runtime
-   * resident registry: props.product (a plan id string) selects the live
-   * component and props.view picks its standalone auto-domain form. Serializable
-   * and runtime-only — emitSource compiles portable CPU nodes, never this.
+   * Component path only (gggplot-vnh.5.1): a layer whose stat runs on the GPU,
+   * drawn from the product the root hosts (runtime/product_mark.tsx). Never
+   * emitted; compile() plans no resident products.
    */
-  | "ResidentProduct"
+  | "ProductMark"
   /** One facet cell with a concrete viewport supplied by FacetGrid. */
   | "FacetPanel"
   /** Insets a single plot panel while outer labels remain in chart space. */

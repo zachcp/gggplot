@@ -56,6 +56,9 @@ export type Capture = <T>(
 export type UseCapture = (context: unknown, value: unknown) => void;
 export type UseContext = <T>(context: unknown) => T;
 export type UseOne = <T>(create: () => T, dependency?: unknown) => T;
+export type UseState = <T>(
+  initial: T | (() => T),
+) => [T, (next: T | ((prev: T) => T)) => void];
 export type UseResource = <T>(
   create: (dispose: (cleanup: () => void) => void) => T,
   dependencies: readonly unknown[],
@@ -145,6 +148,7 @@ const live = interop<{
   provide: Provide;
   useMemo: UseMemo;
   useOne: UseOne;
+  useState: UseState;
   useResource: UseResource;
   useAwait: UseAwait;
   makeContext: MakeContext;
@@ -199,6 +203,7 @@ export const yeet = live.yeet;
 export const provide = live.provide;
 export const useMemo = live.useMemo;
 export const useOne = live.useOne;
+export const useState = live.useState;
 export const useResource = live.useResource;
 export const useAwait = live.useAwait;
 export const makeContext = live.makeContext;
@@ -214,7 +219,7 @@ export const useFiberId = live.useFiberId;
  *
  * Must be mounted OUTSIDE <Plot>: its Resume returns pass elements, and inside
  * <Plot> those land in VirtualLayers' layer tree and corrupt rendering. See
- * runtime/resident_host.tsx.
+ * runtime/product_host.tsx.
  */
 export const Compute = workbench.Compute;
 /**

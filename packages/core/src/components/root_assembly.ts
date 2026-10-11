@@ -19,6 +19,7 @@ import {
   prepareSignature,
   recordRemovals,
   type RenderNode,
+  type ResidentDomains,
   type RowRemoval,
   sortedRemovals,
   type TextMeasurer,
@@ -44,10 +45,11 @@ import {
 import { type CpuStatCache, createCpuStatCache } from "../stat/mod.ts";
 import type { PlotPart } from "./parts.ts";
 import { componentProbe } from "./probe.ts";
-import {
-  collectResidentNodes,
-  type HoistedNode,
-} from "../runtime/resident_host.tsx";
+import { productKey, type ProductPlan } from "../runtime/product_host.tsx";
+import type { Generation } from "../runtime/generation_gate.ts";
+import type { GridSummary } from "../runtime/resident_grid_pending.ts";
+import { RESIDENT_STAT_BIN_TILES_PRODUCT } from "../geom/resident_plans.ts";
+import type { ResidentProductProps } from "../geom/types.ts";
 
 export interface PreparedEntry {
   layer: Layer;
@@ -262,37 +264,47 @@ function transformMark(
 /** The layer parts a root assembles, in tree order. */
 export type LayerParts = readonly Extract<PlotPart, { kind: "layer" }>[];
 
-/**
- * The layout-free half of an assembly: every layer prepared (filtered, stat
- * run or resident plan made) and the plot trained. A resize changes none of
- * it (gggplot-d14).
- */
-export interface PreparedRoot {
+/** Every layer part prepared (filtered, stat run or product planned). */
+export interface PreparedLayers {
   /** The plot-level spec with the parts' layers. */
   spec: GGSpec;
   layers: LayerParts;
   prepared: PreparedPlot;
-  trained: TrainedPlot;
   /** Rows each layer dropped before its stat, as compile() reports them. */
   diagnostics: readonly RowRemoval[];
+  /** One plan per distinct GPU product the layers ask for (gggplot-280). */
+  plans: ProductPlan[];
 }
 
 /**
- * Prepare every layer part and train the plot, reusing each prepared layer
- * whose layer, panel rows and prepareSignature are unchanged (gggplot-2gu).
- * Null while any layer is pending.
+ * The layout-free half of an assembly: every layer prepared and the plot
+ * trained. A resize changes none of it (gggplot-d14).
  */
-export function prepareRoot(
+export interface PreparedRoot extends PreparedLayers {
+  trained: TrainedPlot;
+  /**
+   * Per product key, the data version whose read-back y range trained the
+   * plot: its mark draws only while the product is at that version.
+   */
+  residentVersions: ReadonlyMap<string, number>;
+}
+
+/**
+ * Prepare every layer part, reusing each prepared layer whose layer, panel
+ * rows, prepareSignature and column versions are unchanged (gggplot-2gu),
+ * and plan the GPU products the resident layers ask for. Null while any
+ * layer is pending.
+ */
+export function prepareLayers(
   base: GGSpec,
   layers: LayerParts,
   panels: ReturnType<typeof buildFacetPanels>,
   caches: RootCaches,
-): PreparedRoot | null {
+): PreparedLayers | null {
   // vs7 trap 2: a layer whose domain contribution is still in flight would
   // train as empty, so nothing is trained or assembled until every layer has
   // reported. The previous assembly stays on screen meanwhile.
   if (layers.some((layer) => layer.pending)) return null;
-  componentProbe.trainCalls++;
   const spec: GGSpec = { ...base, layers: layers.map((l) => l.layer) };
   const faceted = spec.facet.kind !== "none";
   const standalone = !faceted && layers.length === 1;
@@ -351,9 +363,131 @@ export function prepareRoot(
     spec,
     layers,
     prepared,
-    trained: trainPlot(spec, prepared),
     diagnostics: sortedRemovals(removals),
+    plans: residentPlans(prepared),
   };
+}
+
+/** The key of the product a resident layer's plan asks for. */
+const keyOf = (resident: ResidentProductProps) =>
+  productKey(resident.product, resident.props);
+
+/**
+ * One plan per distinct product, in layer order: consumers of the same
+ * product (productKey) share one build and one dispatch per version.
+ */
+export function residentPlans(prepared: PreparedPlot): ProductPlan[] {
+  const plans = new Map<string, ProductPlan>();
+  for (const layer of prepared.panelLayers.flat()) {
+    const resident = layer.resident;
+    if (!resident) continue;
+    const key = keyOf(resident);
+    const existing = plans.get(key);
+    const summary = resident.props.autoYDomain === true;
+    if (existing) {
+      existing.summary ||= summary;
+      continue;
+    }
+    plans.set(key, {
+      key,
+      product: resident.product,
+      props: resident.props,
+      summary,
+    });
+  }
+  return [...plans.values()];
+}
+
+/** Summaries read back for products, by product key (product_host.tsx). */
+export type ResidentReadbacks = ReadonlyMap<string, Generation<GridSummary>>;
+
+/** What the root trains its resident layers with, once it has it. */
+export interface ResidentTraining {
+  domains: ResidentDomains;
+  versions: ReadonlyMap<string, number>;
+  /** A plan still waits for its first summary: nothing can train yet. */
+  pending: boolean;
+}
+
+/**
+ * The y range the resident layers need (gggplot-vnh.5.1, the job the
+ * standalone views used to do): a bar product that owns its y reads its
+ * stacked maximum back off the GPU (1 for position fill); a tile strip's
+ * rows are its group count, known without a readback, and draw no breaks.
+ */
+export function residentTraining(
+  plans: readonly ProductPlan[],
+  readbacks: ResidentReadbacks,
+): ResidentTraining {
+  let lo = Infinity, hi = -Infinity;
+  let breaks: number[] | undefined;
+  let pending = false;
+  const versions = new Map<string, number>();
+  const options = (plan: ProductPlan) =>
+    plan.props.options as { position?: string; groupsCount?: number };
+  for (const plan of plans) {
+    if (plan.product === RESIDENT_STAT_BIN_TILES_PRODUCT) {
+      lo = Math.min(lo, 0);
+      hi = Math.max(hi, Math.max(1, options(plan).groupsCount ?? 1));
+      breaks = [];
+      continue;
+    }
+    if (!plan.summary) continue;
+    const readback = readbacks.get(plan.key);
+    if (!readback) {
+      pending = true;
+      continue;
+    }
+    versions.set(plan.key, readback.version);
+    lo = Math.min(lo, 0);
+    hi = Math.max(
+      hi,
+      options(plan).position === "fill"
+        ? 1
+        : Math.max(1, readback.value.stackedMaximum),
+    );
+  }
+  return {
+    domains: lo <= hi
+      ? { y: { domain: [lo, hi], ...(breaks ? { breaks } : {}) } }
+      : {},
+    versions,
+    pending,
+  };
+}
+
+/** Train prepared layers, with whatever the resident layers learned. */
+export function trainRoot(
+  layers: PreparedLayers,
+  resident: ResidentTraining = {
+    domains: {},
+    versions: new Map(),
+    pending: false,
+  },
+): PreparedRoot {
+  componentProbe.trainCalls++;
+  return {
+    ...layers,
+    trained: trainPlot(layers.spec, layers.prepared, resident.domains),
+    residentVersions: resident.versions,
+  };
+}
+
+/**
+ * Prepare and train in one call. Null while any layer is pending, or while a
+ * resident layer still waits for the summary its y range comes from.
+ */
+export function prepareRoot(
+  base: GGSpec,
+  layers: LayerParts,
+  panels: ReturnType<typeof buildFacetPanels>,
+  caches: RootCaches,
+  readbacks: ResidentReadbacks = new Map(),
+): PreparedRoot | null {
+  const prepared = prepareLayers(base, layers, panels, caches);
+  if (!prepared) return null;
+  const resident = residentTraining(prepared.plans, readbacks);
+  return resident.pending ? null : trainRoot(prepared, resident);
 }
 
 /** Every column's content version, as one comparable key. */
@@ -367,8 +501,6 @@ export function versionKey(frame: DataFrame): string {
 export interface LaidOutRoot {
   tree: RenderNode;
   info: AssembledPlot | null;
-  /** The GPU products the tree's resident marks read, one per product. */
-  residentNodes: HoistedNode[];
 }
 
 /**
@@ -444,10 +576,39 @@ export function layoutRoot(
       children: [],
     }]
     : [];
+  // A layer whose stat runs on the GPU is drawn from the product the root
+  // hosts, inside the panel, under the axes the root trained.
+  const residentMark = (
+    { resident, layerIndex, panelIndex }: {
+      resident: ResidentProductProps;
+      layerIndex: number;
+      panelIndex: number;
+    },
+  ): RenderNode[] => {
+    const productKey = keyOf(resident);
+    const props = resident.props as { color: string; opacity?: number };
+    return [{
+      component: "ProductMark",
+      key: `layer-${layers[layerIndex].id}-${panelIndex}-product`,
+      props: {
+        productKey,
+        form: resident.product === RESIDENT_STAT_BIN_TILES_PRODUCT
+          ? "tiles"
+          : "bars",
+        color: props.color,
+        ...(props.opacity !== undefined ? { opacity: props.opacity } : {}),
+        ...(root.residentVersions.has(productKey)
+          ? { domainVersion: root.residentVersions.get(productKey) }
+          : {}),
+      },
+      children: [],
+    }];
+  };
   let info: AssembledPlot | null = null;
   const laidOut = layoutPlot(spec, root.prepared, root.trained, {
     layout,
     lowerMarks,
+    residentMark,
     transformMark: (mark, polar) => transformMark(caches, mark, polar),
     panelContent: () => content,
     onAssembled: (assembledInfo) => {
@@ -461,13 +622,7 @@ export function layoutRoot(
   for (const key of caches.lowered.keys()) {
     if (!liveLowered.has(key)) caches.lowered.delete(key);
   }
-  // Each distinct product once, every consumer stamped with its id.
-  const hosted = collectResidentNodes(tree);
-  return {
-    tree: hosted.tree,
-    info: info as AssembledPlot | null,
-    residentNodes: hosted.nodes,
-  };
+  return { tree, info: info as AssembledPlot | null };
 }
 
 /** `tree` with `extra` appended to its first Cartesian's children. */
@@ -503,8 +658,9 @@ export function assembleRoot(
   panels: ReturnType<typeof buildFacetPanels>,
   layout: { width: number; height: number; measureText: TextMeasurer },
   caches: RootCaches,
+  readbacks: ResidentReadbacks = new Map(),
 ): RootAssembly | null {
-  const root = prepareRoot(base, layers, panels, caches);
+  const root = prepareRoot(base, layers, panels, caches, readbacks);
   if (!root) return null;
   return { ...layoutRoot(root, layout, caches), diagnostics: root.diagnostics };
 }

@@ -2,7 +2,7 @@
 // and dispatched through the named-port adapter (runtime/product_kernels.ts)
 // instead of the hand-wired CountKernels and the reductions kernel object.
 //
-// Yields the same ResidentCountProduct shape the count view and the inline
+// Yields the same ResidentGridProduct shape the count view and the inline
 // bar mark already consume, plus the compute elements (passes and summary
 // readback) for the frame's <Compute>.
 import type { LiveElement } from "@use-gpu/live";
@@ -14,7 +14,7 @@ import {
   type ResidentCountSummary,
 } from "@gggplot/reductions";
 import { ProductKernels, useProductAllocation } from "./product_kernels.ts";
-import type { ResidentCountProduct } from "./resident_count_live.tsx";
+import type { ResidentGridProduct } from "./resident_products.ts";
 import type { GridSummary } from "./resident_grid_pending.ts";
 import type { ReadbackChannel } from "./resident_readback.tsx";
 import type { GPUStorageSource } from "./types.ts";
@@ -47,7 +47,7 @@ export function useCountProduct(
       read: (version: number) => Promise<GridSummary>;
     };
   },
-): { product: ResidentCountProduct; computes: LiveElement[] } {
+): { product: ResidentGridProduct; computes: LiveElement[] } {
   const spec = options.palette
     ? COUNT_GRID_PALETTE_PRODUCT
     : COUNT_GRID_PRODUCT;
@@ -77,7 +77,7 @@ export function useCountProduct(
     groupIds: group ?? x,
     ...(palette ? { palette } : {}),
   }), [x, group, palette]);
-  const product = useMemo((): ResidentCountProduct => {
+  const product = useMemo((): ResidentGridProduct => {
     const { buffers } = allocation;
     return {
       counts: buffers.counts,

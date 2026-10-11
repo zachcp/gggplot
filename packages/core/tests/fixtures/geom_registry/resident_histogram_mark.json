@@ -1,207 +1,4 @@
 {
-  "plain": {
-    "component": "Embedded",
-    "props": {
-      "normalize": true
-    },
-    "children": [
-      {
-        "component": "PanelViewport",
-        "props": {
-          "bounds": [
-            -0.72,
-            -0.66,
-            0.92,
-            0.68
-          ]
-        },
-        "children": [
-          {
-            "component": "Cartesian",
-            "props": {
-              "range": [
-                [
-                  -0.45,
-                  3.45
-                ],
-                [
-                  0,
-                  1
-                ]
-              ],
-              "axes": "xy"
-            },
-            "children": [
-              {
-                "component": "Grid",
-                "props": {
-                  "axes": "xy",
-                  "range": [
-                    [
-                      0,
-                      3
-                    ],
-                    [
-                      0,
-                      1
-                    ]
-                  ],
-                  "first": {
-                    "nice": false,
-                    "divide": 3
-                  },
-                  "second": null,
-                  "width": 1,
-                  "zBias": -1
-                },
-                "children": [],
-                "key": "grid-x-3"
-              },
-              {
-                "component": "Axis",
-                "props": {
-                  "axis": "x",
-                  "width": 2,
-                  "zBias": 0
-                },
-                "children": []
-              },
-              {
-                "component": "Axis",
-                "props": {
-                  "axis": "y",
-                  "width": 2,
-                  "zBias": 0
-                },
-                "children": []
-              },
-              {
-                "component": "ResidentProduct",
-                "props": {
-                  "product": "@gggplot/core:stat_bin@1",
-                  "data": {
-                    "x": {
-                      "type": "numeric",
-                      "values": [
-                        0,
-                        1,
-                        2,
-                        3
-                      ]
-                    }
-                  },
-                  "x": "x",
-                  "options": {
-                    "autoDomain": true,
-                    "binwidth": 2,
-                    "groupsCount": 1,
-                    "position": "stack"
-                  },
-                  "color": "#ff0000",
-                  "autoYDomain": false
-                },
-                "children": []
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "component": "FacetPanel",
-        "props": {},
-        "children": [
-          {
-            "component": "Label",
-            "props": {
-              "positions": [
-                [
-                  -0.5307692307692308,
-                  0.744
-                ],
-                [
-                  -0.11025641025641031,
-                  0.744
-                ],
-                [
-                  0.31025641025641026,
-                  0.744
-                ],
-                [
-                  0.7307692307692308,
-                  0.744
-                ]
-              ],
-              "labels": [
-                "0",
-                "1",
-                "2",
-                "3"
-              ],
-              "color": "#0b0b0b",
-              "size": 11,
-              "zBias": 2,
-              "weight": "normal",
-              "style": "normal"
-            },
-            "children": []
-          },
-          {
-            "component": "Label",
-            "props": {
-              "positions": [],
-              "labels": [],
-              "color": "#0b0b0b",
-              "size": 11,
-              "zBias": 2,
-              "weight": "normal",
-              "style": "normal"
-            },
-            "children": []
-          },
-          {
-            "component": "Label",
-            "props": {
-              "positions": [
-                [
-                  0.10000000000000003,
-                  0.904
-                ]
-              ],
-              "labels": [
-                "x"
-              ],
-              "color": "#0b0b0b",
-              "size": 13,
-              "zBias": 2,
-              "weight": "normal",
-              "style": "normal"
-            },
-            "children": []
-          },
-          {
-            "component": "Label",
-            "props": {
-              "positions": [
-                [
-                  -0.916,
-                  0.010000000000000009
-                ]
-              ],
-              "labels": [
-                "y"
-              ],
-              "color": "#0b0b0b",
-              "size": 13,
-              "zBias": 2,
-              "weight": "normal",
-              "style": "normal"
-            },
-            "children": []
-          }
-        ]
-      }
-    ]
-  },
   "laidOut": {
     "component": "Embedded",
     "props": {
@@ -212,10 +9,10 @@
         "component": "PanelViewport",
         "props": {
           "bounds": [
-            -0.931875,
-            -0.9333333333333333,
+            -0.91125,
+            -0.92,
             0.95,
-            0.825
+            0.79
           ]
         },
         "children": [
@@ -229,7 +26,7 @@
                 ],
                 [
                   0,
-                  1
+                  4
                 ]
               ],
               "axes": "xy"
@@ -246,7 +43,7 @@
                     ],
                     [
                       0,
-                      1
+                      4
                     ]
                   ],
                   "first": {
@@ -261,6 +58,31 @@
                 "key": "grid-x-6"
               },
               {
+                "component": "Grid",
+                "props": {
+                  "axes": "xy",
+                  "range": [
+                    [
+                      -0.45,
+                      3.45
+                    ],
+                    [
+                      0,
+                      4
+                    ]
+                  ],
+                  "first": null,
+                  "second": {
+                    "nice": false,
+                    "divide": 4
+                  },
+                  "width": 1,
+                  "zBias": -1
+                },
+                "children": [],
+                "key": "grid-y-4"
+              },
+              {
                 "component": "Axis",
                 "props": {
                   "axis": "x",
@@ -279,29 +101,12 @@
                 "children": []
               },
               {
-                "component": "ResidentProduct",
+                "component": "ProductMark",
+                "key": "layer-1-0-product",
                 "props": {
-                  "product": "@gggplot/core:stat_bin@1",
-                  "data": {
-                    "x": {
-                      "type": "numeric",
-                      "values": [
-                        0,
-                        1,
-                        2,
-                        3
-                      ]
-                    }
-                  },
-                  "x": "x",
-                  "options": {
-                    "autoDomain": true,
-                    "binwidth": 2,
-                    "groupsCount": 1,
-                    "position": "stack"
-                  },
-                  "color": "#ff0000",
-                  "autoYDomain": false
+                  "productKey": "[\"bin\",2,\"x\",null,{\"autoDomain\":true,\"binwidth\":2,\"groupsCount\":1,\"position\":\"stack\"},null,null]",
+                  "form": "bars",
+                  "color": "#ff0000"
                 },
                 "children": []
               }
@@ -318,20 +123,20 @@
             "props": {
               "positions": [
                 [
-                  -0.714735576923077,
-                  0.86
+                  -0.6964903846153846,
+                  0.8320000000000001
                 ],
                 [
-                  -0.23220352564102575,
-                  0.86
+                  -0.21924679487179488,
+                  0.8320000000000001
                 ],
                 [
-                  0.2503285256410255,
-                  0.86
+                  0.25799679487179483,
+                  0.8320000000000001
                 ],
                 [
-                  0.7328605769230767,
-                  0.86
+                  0.7352403846153847,
+                  0.8320000000000001
                 ]
               ],
               "labels": [
@@ -351,8 +156,35 @@
           {
             "component": "Label",
             "props": {
-              "positions": [],
-              "labels": [],
+              "positions": [
+                [
+                  -0.929,
+                  0.79
+                ],
+                [
+                  -0.929,
+                  0.36250000000000004
+                ],
+                [
+                  -0.929,
+                  -0.06499999999999995
+                ],
+                [
+                  -0.929,
+                  -0.49249999999999994
+                ],
+                [
+                  -0.929,
+                  -0.9199999999999999
+                ]
+              ],
+              "labels": [
+                "0",
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
               "color": "#0b0b0b",
               "size": 11,
               "zBias": 2,
@@ -366,8 +198,8 @@
             "props": {
               "positions": [
                 [
-                  0.009062499999999973,
-                  0.8979166666666667
+                  0.019374999999999976,
+                  0.8775
                 ]
               ],
               "labels": [
@@ -387,7 +219,7 @@
               "positions": [
                 [
                   -0.9440625,
-                  -0.054166666666666696
+                  -0.065
                 ]
               ],
               "labels": [

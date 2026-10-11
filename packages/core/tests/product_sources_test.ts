@@ -1,7 +1,7 @@
 // gggplot-y43: a resident product under <GGData> reads the data tier's
 // mounted columns when it plots that very frame, instead of uploading copies.
 import { assert, assertEquals } from "@std/assert";
-import { sharedSources } from "../src/runtime/resident_host.tsx";
+import { sharedSources } from "../src/runtime/product_host.tsx";
 import type { GGDataValue } from "../src/components/gg_data.ts";
 import { ingest } from "../src/data/mod.ts";
 import type { GPUStorageSource } from "../src/runtime/types.ts";

@@ -22,9 +22,9 @@ import type { ProductPlan } from "../plan/mod.ts";
 import {
   RESIDENT_STAT_BIN_PRODUCT,
   RESIDENT_STAT_COUNT_PRODUCT,
-  type ResidentCountNodeProps,
-  type ResidentHistogramNodeProps,
-} from "../compile/resident.ts";
+  type ResidentCountPlanProps,
+  type ResidentHistogramPlanProps,
+} from "./resident_plans.ts";
 import type {
   DomainContributionCtx,
   LayerContext,
@@ -34,6 +34,7 @@ import {
   explicitDomain,
   residentBinRequest,
   residentColorGroups,
+  scaleOrderedFactor,
 } from "./resident_shared.ts";
 import {
   type FaceLoop,
@@ -178,8 +179,8 @@ export function barDomainContribution(
 /**
  * geom_bar's GPU-resident capability: the first safe resident lowering contract
  * for an eligible stat_bin layer, or undefined when the CPU compiler must stay
- * authoritative. Automatic y-domains deliberately wait for the bounded-summary
- * executor (standaloneView) rather than materializing stat rows.
+ * authoritative. An automatic y-domain is read back off the GPU by the root
+ * (`autoYDomain`) rather than materializing stat rows.
  *
  * A fill/color mapping is resident-eligible IFF (a) the mapped column is a
  * factor column in the data, (b) it is the same column the group derivation
@@ -218,12 +219,15 @@ export function barResidentPlan(
   if (!x || !xColumn) return undefined;
   if (layer.stat === "count") {
     if (xColumn.type !== "factor") return undefined;
-    const nodeProps: ResidentCountNodeProps = {
-      data,
+    // The grid's slot i must be the trained x scale's level i (gggplot-mos5).
+    const ordered = scaleOrderedFactor(spec, data, x);
+    const orderedX = ordered[x] as typeof xColumn;
+    const nodeProps: ResidentCountPlanProps = {
+      data: ordered,
       x,
       group,
       options: {
-        valuesCount: xColumn.levels.length,
+        valuesCount: orderedX.levels.length,
         groupsCount,
         position,
       },
@@ -236,7 +240,6 @@ export function barResidentPlan(
     return {
       product: RESIDENT_STAT_COUNT_PRODUCT,
       props: nodeProps as unknown as Record<string, unknown>,
-      standaloneView: nodeProps.autoYDomain,
     };
   }
   if (xColumn.type !== "numeric") return undefined;
@@ -244,7 +247,7 @@ export function barResidentPlan(
   if (!binRequest) return undefined;
 
   const xDomain = explicitDomain(spec, "x");
-  const nodeProps: ResidentHistogramNodeProps = {
+  const nodeProps: ResidentHistogramPlanProps = {
     data,
     x,
     group,
@@ -260,7 +263,6 @@ export function barResidentPlan(
   return {
     product: RESIDENT_STAT_BIN_PRODUCT,
     props: nodeProps as unknown as Record<string, unknown>,
-    standaloneView: nodeProps.autoYDomain,
   };
 }
 
