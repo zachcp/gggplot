@@ -3,6 +3,7 @@ import { columnValues, isTypedDataFrame } from "@gggplot/core";
 import type { DataFrame } from "@gggplot/core";
 import { ChartCanvas } from "./ChartCanvas.tsx";
 import { loadStaticDataset, staticDatasets } from "./docs/data/real.ts";
+import { printedSource } from "./docs/printed_source.ts";
 import type { DocExample } from "./docs/types.ts";
 import { styles } from "./styles.ts";
 
@@ -104,7 +105,9 @@ export function ExampleSection({
         style={{ ...styles.grid, ...(compact ? styles.gridCompact : {}) }}
       >
         <Panel title="Component JSX">
-          <pre style={styles.pre}>{example.jsxSource}</pre>
+          <pre style={styles.pre} data-printed-source="">
+            {printedSource(example)}
+          </pre>
         </Panel>
         <Panel title="live WebGPU render">
           <ChartCanvas

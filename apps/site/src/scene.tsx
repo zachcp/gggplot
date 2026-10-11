@@ -12,10 +12,9 @@
 import * as Jsx from "@gggplot/core/jsx";
 import { AutoCanvas, WebGPU } from "@use-gpu/webgpu";
 import { FlatCamera, Pass } from "@use-gpu/workbench";
-import { createFontResources, GGPlot } from "@gggplot/core";
+import { GGPlot } from "@gggplot/core";
 import type { GGSpec } from "@gggplot/core";
 import { withSiteChartTheme } from "./chart_theme.ts";
-import { assetUrl } from "./asset_url.ts";
 import { specChildren } from "./spec_components.tsx";
 
 interface Props {
@@ -23,20 +22,8 @@ interface Props {
   spec: GGSpec;
 }
 
-export const fontResources = createFontResources([
-  {
-    family: "Basic",
-    weight: 400,
-    style: "normal",
-    src: assetUrl("/fonts/Basic-Regular.ttf"),
-  },
-  {
-    family: "Lato",
-    weight: 400,
-    style: "normal",
-    src: assetUrl("/fonts/Lato-Regular.ttf"),
-  },
-]);
+export { fontResources } from "./site_fonts.ts";
+import { fontResources } from "./site_fonts.ts";
 
 export const Scene = ({ canvas, spec }: Props) => {
   const themed = withSiteChartTheme(spec);

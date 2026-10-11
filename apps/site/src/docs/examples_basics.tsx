@@ -1,9 +1,9 @@
 /** @jsxRuntime classic */
 /** @jsx Jsx.createElement */
 // Feature-tour examples, written as component JSX (gggplot-vnh.10.1). Each
-// `chart` is the live example; its `jsxSource` is the same code as the reader
-// sees it, with the site's <SitePlot> (dark theme, loaded fonts) shown as
-// <GGPlot>. jsx_source_test.ts keeps the two in step.
+// `chart` is the live example, and the reader sees it printed (printJsx,
+// gggplot-vnh.11) with the site's <SitePlot> (dark theme, loaded fonts) shown
+// as <GGPlot>. Data the source names is exported, so it prints by name.
 import * as Jsx from "@gggplot/core/jsx";
 import {
   CoordCartesian,
@@ -40,10 +40,6 @@ export const scatterLine: DocExample = {
   whatChanged:
     "Both layers share the plot mapping. Points lower to a Point mark and the sorted path to a Line mark.",
   dataPreview: scatterData,
-  jsxSource: `<GGPlot data={scatterData} mapping={{ x: "wt", y: "mpg" }}>
-  <GeomPoint size={6} color="#3b82f6" />
-  <GeomLine color="#ef4444" />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={scatterData} mapping={{ x: "wt", y: "mpg" }}>
       <GeomPoint size={6} color="#3b82f6" />
@@ -60,9 +56,6 @@ export const discreteX: DocExample = {
   whatChanged:
     "The x column trains a discrete position scale, so the string levels become stable numeric slots before rendering.",
   dataPreview: rankedData,
-  jsxSource: `<GGPlot data={rankedData} mapping={{ x: "tier", y: "score" }}>
-  <GeomPoint size={8} color="#1baf7a" />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={rankedData} mapping={{ x: "tier", y: "score" }}>
       <GeomPoint size={8} color="#1baf7a" />
@@ -77,12 +70,6 @@ export const histogramStatBin: DocExample = {
     "The full 234-row mpg table shows stat_bin over engine displacement.",
   whatChanged:
     "This example selects the CPU-reference stat path so its computed bin geometry remains inspectable; 234 observations make the distribution shape and bin resolution visible.",
-  jsxSource: `<GGData load={loadMpg}>
-  <GGPlot mapping={{ x: "displ" }}>
-    <GeomHistogram bins={18} fill="#3b82f6" />
-    <Execution resident={false} />
-  </GGPlot>
-</GGData>`,
   dataSource: { id: "mpg" },
   chart: () => (
     <GGData load={loadMpg}>
@@ -101,11 +88,6 @@ export const groupedHistogram: DocExample = {
     "All 150 iris measurements show species-specific sepal-length distributions.",
   whatChanged:
     "Species is encoded as the factor group for stat_bin. Because it uses the default discrete fill scale, the group grid and mapped palette remain eligible for the resident path.",
-  jsxSource: `<GGData load={loadIris}>
-  <GGPlot mapping={{ x: "Sepal.Length", fill: "Species" }}>
-    <GeomHistogram bins={16} opacity={0.78} />
-  </GGPlot>
-</GGData>`,
   dataSource: { id: "iris" },
   chart: () => (
     <GGData load={loadIris}>
@@ -116,7 +98,7 @@ export const groupedHistogram: DocExample = {
   ),
 };
 
-const categoricalGroupedData = {
+export const categoricalGroupedData = {
   ...groupedData,
   cyl: groupedData.cyl.map((value) => `cyl ${value}`),
 };
@@ -129,13 +111,6 @@ export const colorMapped: DocExample = {
   whatChanged:
     "Mapped color trains a discrete color scale and emits a legend; literal color params would skip both.",
   dataPreview: categoricalGroupedData,
-  jsxSource: `<GGPlot
-  data={categoricalGroupedData}
-  mapping={{ x: "wt", y: "mpg", color: "cyl" }}
->
-  <GeomPoint size={8} />
-  <ThemeOverrides textColor="#e8e8f0" />
-</GGPlot>`,
   chart: () => (
     <SitePlot
       data={categoricalGroupedData}
@@ -154,13 +129,6 @@ export const mtcarsLineStyles: DocExample = {
     "The vendored mtcars table is loaded lazily as typed columns; transmission maps to linetype and horsepower maps to linewidth.",
   whatChanged:
     "The scale stage turns transmission levels into one dash binding per effective group and maps horsepower into per-vertex GPU line widths. No stat result or row-shaped transfer is introduced.",
-  jsxSource: `<GGData load={loadMtcars}>
-  <GGPlot mapping={{ x: "wt", y: "mpg", linetype: "am", linewidth: "hp" }}>
-    <GeomLine color="#38bdf8" />
-    <ScaleLinetype name="Transmission" />
-    <ScaleLinewidth name="Horsepower" range={[1, 4]} />
-  </GGPlot>
-</GGData>`,
   dataSource: { id: "mtcars" },
   chart: () => (
     <GGData load={loadMtcars}>
@@ -182,11 +150,6 @@ export const mpgFuelEconomy: DocExample = {
     "The real ggplot2 mpg dataset is fetched on demand and kept as typed columns through scale training and point lowering.",
   whatChanged:
     "Class is a factor, so color trains a categorical guide while displacement and highway mileage remain numeric GPU mark inputs. This is a direct mark path: no stat product or data readback is required.",
-  jsxSource: `<GGData load={loadMpg}>
-  <GGPlot mapping={{ x: "displ", y: "hwy", color: "class" }}>
-    <GeomPoint size={4} />
-  </GGPlot>
-</GGData>`,
   dataSource: { id: "mpg" },
   chart: () => (
     <GGData load={loadMpg}>
@@ -204,12 +167,6 @@ export const mpgContinuousPalettes: DocExample = {
     "A real mpg scatter uses a viridis color ramp for highway mileage; changing the scale changes only color bindings.",
   whatChanged:
     "Viridis is stored as a small serializable scale ramp. The same typed point positions and source columns remain valid, so a palette change does not rerun a stat or re-upload the data. <ScaleColorGradient2> offers the corresponding diverging ramp for centered values.",
-  jsxSource: `<GGData load={loadMpg}>
-  <GGPlot mapping={{ x: "displ", y: "cty", color: "hwy" }}>
-    <GeomPoint size={4} />
-    <ScaleColorViridis name="Highway MPG" />
-  </GGPlot>
-</GGData>`,
   dataSource: { id: "mpg" },
   chart: () => (
     <GGData load={loadMpg}>
@@ -228,11 +185,6 @@ export const irisMeasurements: DocExample = {
     "The classic iris table demonstrates a typed real-data scatter plot with a discrete species guide.",
   whatChanged:
     "Sepal dimensions lower to positions while Species trains the color scale. The chart is lazy at the site boundary: the CSV is not requested until this example is opened.",
-  jsxSource: `<GGData load={loadIris}>
-  <GGPlot mapping={{ x: "Sepal.Length", y: "Sepal.Width", color: "Species" }}>
-    <GeomPoint size={4} />
-  </GGPlot>
-</GGData>`,
   dataSource: { id: "iris" },
   chart: () => (
     <GGData load={loadIris}>
@@ -253,10 +205,6 @@ export const flippedBars: DocExample = {
   whatChanged:
     "The bar polygons stay in data space; the cartesian coord projects the rendered axes as yx.",
   dataPreview: rankedData,
-  jsxSource: `<GGPlot data={rankedData} mapping={{ x: "tier", y: "score" }}>
-  <GeomCol color="#eb6834" />
-  <CoordFlip />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={rankedData} mapping={{ x: "tier", y: "score" }}>
       <GeomCol color="#eb6834" />
@@ -275,10 +223,6 @@ export const zoomedPanel: DocExample = {
   whatChanged:
     "The panel range narrows while the layer still receives every row, so any stat sees the full data. Marks outside the window are clipped by a scissor rather than culled, which is what keeps a zoomed boxplot's summary identical to the unzoomed one.",
   dataPreview: rankedData,
-  jsxSource: `<GGPlot data={rankedData} mapping={{ x: "tier", y: "score" }}>
-  <GeomCol color="#38bdf8" />
-  <CoordCartesian ylim={[0, 60]} />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={rankedData} mapping={{ x: "tier", y: "score" }}>
       <GeomCol color="#38bdf8" />
@@ -295,10 +239,6 @@ export const polarBars: DocExample = {
   whatChanged:
     "Rectangular bar polygons are subdivided before the nonlinear polar projection so edges curve smoothly.",
   dataPreview: rankedData,
-  jsxSource: `<GGPlot data={rankedData} mapping={{ x: "tier", y: "score" }}>
-  <GeomCol color="#4a3aa7" />
-  <CoordPolar />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={rankedData} mapping={{ x: "tier", y: "score" }}>
       <GeomCol color="#4a3aa7" />
@@ -315,19 +255,6 @@ export const themedChart: DocExample = {
   whatChanged:
     "Theme defaults flow into grid, axis, and Label marks unless a layer overrides them.",
   dataPreview: groupedData,
-  jsxSource: `<GGPlot
-  data={groupedData}
-  mapping={{ x: "wt", y: "mpg", label: "cyl", family: "family" }}
->
-  <GeomPoint size={8} color="#1a1a2e" />
-  <GeomText size={14} angle={-25} color="#f8fafc" />
-  <ThemeOverrides
-    background="#241f45"
-    gridColor="#a78bfa"
-    axisColor="#4a3aa7"
-    fontFamily="Basic"
-  />
-</GGPlot>`,
   chart: () => (
     <SitePlot
       data={groupedData}
@@ -353,10 +280,6 @@ export const facetedScatter: DocExample = {
   whatChanged:
     "Rows are sliced per facet level, while scales and plot-level legends remain shared across panels.",
   dataPreview: facetedData,
-  jsxSource: `<GGPlot data={facetedData} mapping={{ x: "wt", y: "mpg" }}>
-  <GeomPoint size={8} color="#3b82f6" />
-  <FacetWrap vars={["cyl"]} />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={facetedData} mapping={{ x: "wt", y: "mpg" }}>
       <GeomPoint size={8} color="#3b82f6" />
@@ -365,38 +288,54 @@ export const facetedScatter: DocExample = {
   ),
 };
 
-const freeFacetData = {
+export const freeFacetData = {
   group: ["small", "small", "large", "large"],
   x: [0, 1, 100, 200],
   y: [0, 10, 1000, 2000],
 };
 
-const freeFacetExample = (
-  id: string,
-  scales: "free" | "free_x" | "free_y",
-): DocExample => ({
-  id,
+/** The text shared by the three free-scale facet fixtures. */
+const freeFacetText = (scales: string) => ({
   title: `Facet wrap with ${scales} scales`,
   description:
     `Visible fixture for panel-local ${scales} domain training and axis policy.`,
   whatChanged:
     "The same rows are partitioned into two panels while only the requested position domains train locally.",
   dataPreview: freeFacetData,
-  jsxSource: `<GGPlot data={freeFacetData} mapping={{ x: "x", y: "y" }}>
-  <GeomPoint size={8} />
-  <FacetWrap vars={["group"]} ncol={2} scales="${scales}" />
-</GGPlot>`,
+});
+
+export const facetFree: DocExample = {
+  id: "FacetFree",
+  ...freeFacetText("free"),
   chart: () => (
     <SitePlot data={freeFacetData} mapping={{ x: "x", y: "y" }}>
       <GeomPoint size={8} />
-      <FacetWrap vars={["group"]} ncol={2} scales={scales} />
+      <FacetWrap vars={["group"]} ncol={2} scales="free" />
     </SitePlot>
   ),
-});
+};
 
-export const facetFree = freeFacetExample("FacetFree", "free");
-export const facetFreeX = freeFacetExample("FacetFreeX", "free_x");
-export const facetFreeY = freeFacetExample("FacetFreeY", "free_y");
+export const facetFreeX: DocExample = {
+  id: "FacetFreeX",
+  ...freeFacetText("free_x"),
+  chart: () => (
+    <SitePlot data={freeFacetData} mapping={{ x: "x", y: "y" }}>
+      <GeomPoint size={8} />
+      <FacetWrap vars={["group"]} ncol={2} scales="free_x" />
+    </SitePlot>
+  ),
+};
+
+export const facetFreeY: DocExample = {
+  id: "FacetFreeY",
+  ...freeFacetText("free_y"),
+  chart: () => (
+    <SitePlot data={freeFacetData} mapping={{ x: "x", y: "y" }}>
+      <GeomPoint size={8} />
+      <FacetWrap vars={["group"]} ncol={2} scales="free_y" />
+    </SitePlot>
+  ),
+};
 
 export const facetCoordFlip: DocExample = {
   id: "FacetCoordFlip",
@@ -405,11 +344,6 @@ export const facetCoordFlip: DocExample = {
   whatChanged:
     "<CoordFlip> projects y horizontally and x vertically inside each panel.",
   dataPreview: facetedData,
-  jsxSource: `<GGPlot data={facetedData} mapping={{ x: "wt", y: "mpg" }}>
-  <GeomPoint />
-  <FacetWrap vars={["cyl"]} />
-  <CoordFlip />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={facetedData} mapping={{ x: "wt", y: "mpg" }}>
       <GeomPoint />
@@ -427,11 +361,6 @@ export const facetCoordFixed: DocExample = {
   whatChanged:
     "<CoordFixed> locks the Cartesian ratio without changing facet membership.",
   dataPreview: facetedData,
-  jsxSource: `<GGPlot data={facetedData} mapping={{ x: "wt", y: "mpg" }}>
-  <GeomPoint />
-  <FacetWrap vars={["cyl"]} />
-  <CoordFixed />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={facetedData} mapping={{ x: "wt", y: "mpg" }}>
       <GeomPoint />

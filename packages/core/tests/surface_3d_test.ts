@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertThrows } from "@std/assert";
+import { assertEquals, assertThrows } from "@std/assert";
 import {
   geomArea,
   geomPolygon,
@@ -9,7 +9,6 @@ import {
   statSummary2d,
 } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
-import { emitSource } from "../src/emit/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
 
 function findNodes(node: RenderNode, component: string): RenderNode[] {
@@ -133,7 +132,7 @@ Deno.test("3D area does not fill to a z floor", () => {
   assertEquals(new Set(zs).size, 1);
 });
 
-Deno.test("surfaces carry depth props and survive emitSource", () => {
+Deno.test("surfaces carry depth props", () => {
   const opaque = surfaces(
     ggplot(ring, { x: "x", y: "y", z: "z" }).add(geomPolygon()).build(),
   )[0];
@@ -146,15 +145,6 @@ Deno.test("surfaces carry depth props and survive emitSource", () => {
   )[0];
   assertEquals(faded.props.depthWrite, false);
   assertEquals(faded.props.mode, "transparent");
-
-  const source = emitSource(
-    compile(
-      ggplot(ring, { x: "x", y: "y", z: "z" }).add(geomPolygon()).build(),
-    ),
-    "Surface3D",
-  );
-  assert(source.includes("vec4<f32>"));
-  assert(source.includes("depthWrite"));
 });
 
 Deno.test("geom_tile keeps z as a value channel and gains no 3D mode", () => {

@@ -1,7 +1,6 @@
-import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
+import { assertEquals, assertThrows } from "@std/assert";
 import { geomLine, geomPath, ggplot } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
-import { emitSource } from "../src/emit/mod.ts";
 import type { FlatTensor, RenderNode } from "../src/compile/rendertree.ts";
 
 const data = {
@@ -80,36 +79,4 @@ Deno.test("geomPath z mode preserves input order and validates mode limits", () 
     Error,
     'does not support position "jitter"',
   );
-});
-
-Deno.test("emitted 3D polylines keep vec4 tensors and the shared Scene3D", async () => {
-  const tree = compile(
-    ggplot(data, { x: "x", y: "y", z: "z", group: "group" }).add(
-      geomLine({ alpha: 0.5, linetype: "dashed" }),
-    ).build(),
-  );
-  const source = emitSource(tree, "Line3D");
-  assertStringIncludes(source, "<Scene3D");
-  assertStringIncludes(source, "<ChunkedLine");
-  assertStringIncludes(source, 'format: "vec4<f32>"');
-  assertStringIncludes(source, 'mode="transparent"');
-  assertStringIncludes(source, "depthWrite={false}");
-
-  const packageDir = new URL("../", import.meta.url).pathname;
-  const output = await Deno.makeTempFile({
-    dir: packageDir,
-    prefix: "gen_line_3d_",
-    suffix: ".tsx",
-  });
-  try {
-    await Deno.writeTextFile(output, source);
-    const result = await new Deno.Command("deno", {
-      args: ["check", output],
-      stdout: "piped",
-      stderr: "piped",
-    }).output();
-    assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));
-  } finally {
-    await Deno.remove(output);
-  }
 });

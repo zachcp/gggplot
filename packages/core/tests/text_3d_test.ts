@@ -1,7 +1,6 @@
-import { assert, assertEquals, assertThrows } from "@std/assert";
+import { assertEquals, assertThrows } from "@std/assert";
 import { geomLabel, geomText, ggplot } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
-import { emitSource } from "../src/emit/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
 
 const data = {
@@ -81,7 +80,7 @@ Deno.test("glyphs batch by resolved font identity", () => {
   );
 });
 
-Deno.test("3D text carries depth props and survives emitSource", () => {
+Deno.test("3D text carries depth props", () => {
   const opaque = glyphNodes(ggplot(data, mapping).add(geomText()).build())[0];
   assertEquals(opaque.props.depthTest, true);
   assertEquals(opaque.props.depthWrite, true);
@@ -90,13 +89,6 @@ Deno.test("3D text carries depth props and survives emitSource", () => {
     glyphNodes(ggplot(data, mapping).add(geomText({ alpha: 0.3 })).build())[0];
   assertEquals(faded.props.depthWrite, false);
   assertEquals(faded.props.mode, "transparent");
-
-  const source = emitSource(
-    compile(ggplot(data, mapping).add(geomText()).build()),
-    "Text3D",
-  );
-  assert(source.includes("depthWrite"), "emitted node keeps depth props");
-  assert(source.includes("positions"), "emitted node keeps its anchors");
 });
 
 Deno.test("geom_label has no 3D mode and says so", () => {

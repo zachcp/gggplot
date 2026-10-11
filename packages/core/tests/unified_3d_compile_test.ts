@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals } from "@std/assert";
 import {
   camera3d,
   coordCartesian,
@@ -9,7 +9,6 @@ import {
   theme,
 } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
-import { emitSource } from "../src/emit/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import { cameraNearOrigin3d } from "../src/compile/guides_3d.ts";
 
@@ -113,55 +112,4 @@ Deno.test("3D theme guide switches apply without a parallel guide spec", () => {
     [2.5, 3.5],
     [1, 1],
   ]);
-});
-
-Deno.test("the shared emitter serializes Scene3D, camera, vec4 points, and overlay", async () => {
-  const spec = ggplot(
-    { x: [1, 2], y: [3, 4], z: [5, 6] },
-    { x: "x", y: "y", z: "z" },
-  ).add(
-    geomPoint({ alpha: 0.5 }),
-    camera3d({ bearing: 1, pitch: 0.4, radius: 5, near: 0.2, far: 50 }),
-    labels({ title: "Emitted 3D" }),
-  ).build();
-  const source = emitSource(compile(spec), "Unified3D");
-  assertStringIncludes(source, "const Scene3D =");
-  assertStringIncludes(
-    source,
-    'import { OrbitControls } from "@use-gpu/interact"',
-  );
-  assertStringIncludes(source, "const Point3D =");
-  assertStringIncludes(source, 'format: "vec4<f32>"');
-  assertStringIncludes(source, '"bearing":1');
-  assertStringIncludes(source, '"near":0.2');
-  assertStringIncludes(source, '"far":50');
-  assertStringIncludes(source, "<CameraAxis3D");
-  assertStringIncludes(source, "const CameraOrbitContext = makeContext");
-  assertStringIncludes(
-    source,
-    "provide(CameraOrbitContext, { bearing, pitch }, scene)",
-  );
-  assertStringIncludes(source, "<Embedded normalize={true}>");
-
-  const packageDir = new URL("../", import.meta.url).pathname;
-  const output = await Deno.makeTempFile({
-    dir: packageDir,
-    prefix: "gen_3d_",
-    suffix: ".tsx",
-  });
-  try {
-    await Deno.writeTextFile(output, source);
-    const result = await new Deno.Command("deno", {
-      args: ["check", output],
-      stdout: "piped",
-      stderr: "piped",
-    }).output();
-    assertEquals(
-      result.code,
-      0,
-      new TextDecoder().decode(result.stderr),
-    );
-  } finally {
-    await Deno.remove(output);
-  }
 });

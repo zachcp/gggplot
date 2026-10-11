@@ -2,7 +2,7 @@
 /** @jsx Jsx.createElement */
 // 3D showcases, written as component JSX (gggplot-vnh.10.1): mapping z on an
 // ordinary geom selects its 3D mode. See examples_basics.tsx for the
-// chart/jsxSource convention; <SitePlot3D> is shown as <GGPlot>.
+// chart convention; <SitePlot3D> is shown as <GGPlot>.
 import * as Jsx from "@gggplot/core/jsx";
 import type { LiveElement } from "@use-gpu/live";
 import {
@@ -30,7 +30,6 @@ function showcase(
   showcase: {
     title: string;
     description: string;
-    jsxSource: string;
     chart: () => LiveElement;
   },
 ): ThreeDShowcase {
@@ -57,19 +56,6 @@ const helix3d = showcase("Helix3D", {
   title: "3D helix point cloud",
   description:
     "160 points and grouped 3D paths tracing a helix, colored by height band. In-scene axes and grids orbit with the cube; the legend and title stay flat on screen. No camera part is needed: the standard three-quarter view is the default.",
-  jsxSource:
-    `<GGPlot data={helixData} mapping={{ x: "x", y: "y", z: "z", color: "band" }}>
-  <GeomPath linewidth={3} alpha={0.7} />
-  <GeomPoint size={24} />
-  <Labs
-    title="Helix"
-    subtitle="x/z trace a circle while y climbs"
-    x="cos(t)"
-    y="height"
-    z="sin(t)"
-    color="band"
-  />
-</GGPlot>`,
   chart: () => (
     <SitePlot3D
       data={helixData}
@@ -108,19 +94,12 @@ for (let i = 0; i < STEPS; i++) {
   }
 }
 
-const latticeData = { x: latX, y: latY, z: latZ, radius };
+export const latticeData = { x: latX, y: latY, z: latZ, radius };
 
 const lattice3d = showcase("Lattice3D", {
   title: "Perspective sizing and a continuous colorbar",
   description:
     "A 6x6x6 lattice colored by distance from the origin. sizeMode 'perspective' is the explicit world-space sizing override.",
-  jsxSource: `<GGPlot
-  data={latticeData}
-  mapping={{ x: "x", y: "y", z: "z", color: "radius" }}
->
-  <GeomPoint size={16} alpha={0.85} sizeMode="perspective" />
-  <Labs title="Lattice" color="distance from origin" />
-</GGPlot>`,
   chart: () => (
     <SitePlot3D
       data={latticeData}
@@ -147,19 +126,12 @@ for (let i = 0; i < treatments.length; i++) {
   }
 }
 
-const categoricalData = { x: catX, y: catY, z: catZ, replicate };
+export const categoricalData = { x: catX, y: catY, z: catZ, replicate };
 
 const categorical3d = showcase("Categorical3D", {
   title: "A discrete position axis in 3D",
   description:
     "A string column on x trains the same discrete position scale used in 2D, with named level ticks.",
-  jsxSource: `<GGPlot
-  data={categoricalData}
-  mapping={{ x: "x", y: "y", z: "z", color: "replicate" }}
->
-  <GeomPoint size={18} />
-  <Labs title="Discrete x" x="treatment" y="response" z="offset" />
-</GGPlot>`,
   chart: () => (
     <SitePlot3D
       data={categoricalData}
@@ -175,16 +147,6 @@ const swizzled3d = showcase("Swizzled3D", {
   title: "coord swizzle, grid off",
   description:
     "The same helix under the xzy output-axis swizzle, with the ordinary theme grid switch disabled and three scale breaks per axis.",
-  jsxSource:
-    `<GGPlot data={helixData} mapping={{ x: "x", y: "y", z: "z", color: "band" }}>
-  <GeomPoint size={24} />
-  <CoordCartesian axes="xzy" />
-  <ScaleXContinuous nBreaks={3} />
-  <ScaleYContinuous nBreaks={3} />
-  <ScaleZContinuous nBreaks={3} />
-  <ThemeOverrides grid={false} />
-  <Labs title="coord axes = xzy" color="band" />
-</GGPlot>`,
   chart: () => (
     <SitePlot3D
       data={helixData}
@@ -232,7 +194,7 @@ for (let i = 0; i < 5; i++) {
   }
 }
 
-const fieldData = {
+export const fieldData = {
   x: fieldX,
   y: fieldY,
   z: fieldZ,
@@ -246,20 +208,6 @@ const segments3d = showcase("Segments3D", {
   title: "3D segments from six mapped positions",
   description:
     "A swirl field drawn as one disjoint segment per row. The 3D mode needs all six positions mapped — x/y/z and xend/yend/zend — and zend trains the z scale exactly as xend trains x, so the far endpoints stay inside the cube. Mapping z without zend reports the missing aesthetic rather than silently dropping back to a 2D plot.",
-  jsxSource: `<GGPlot
-  data={fieldData}
-  mapping={{
-    x: "x",
-    y: "y",
-    z: "z",
-    xend: "xend",
-    yend: "yend",
-    zend: "zend",
-  }}
->
-  <GeomSegment strokeWidth={2} color="#38bdf8" />
-  <Labs title="Vector field" x="x" y="y" z="z" />
-</GGPlot>`,
   chart: () => (
     <SitePlot3D
       data={fieldData}
@@ -299,23 +247,17 @@ for (const [qi, quarter] of quarters.entries()) {
   }
 }
 
-const prismData = { x: prismX, y: prismY, z: prismZ, series: prismSeries };
+export const prismData = {
+  x: prismX,
+  y: prismY,
+  z: prismZ,
+  series: prismSeries,
+};
 
 const prisms3d = showcase("Prisms3D", {
   title: "3D columns over a two-axis footprint",
   description:
     "geom_col in 3D is a distinct primitive, not a z extension: a 2D bar has one categorical axis and one measured extent, while a prism has two. z places each column and a zwidth param gives it thickness, defaulting to the scale resolution exactly as width does on x. Stacking accumulates within an (x, z) footprint cell rather than along x alone. geom_bar has no 3D mode: a count has no per-(x, z) meaning.",
-  jsxSource:
-    `<GGPlot data={prismData} mapping={{ x: "x", y: "y", z: "z", fill: "series" }}>
-  <GeomCol />
-  <Labs
-    title="Stacked prisms"
-    x="quarter"
-    y="revenue"
-    z="region"
-    fill="series"
-  />
-</GGPlot>`,
   chart: () => (
     <SitePlot3D
       data={prismData}
@@ -351,16 +293,12 @@ for (let i = 0; i < 900; i++) {
   cloudZ.push(-blob + (rand() - 0.5) * 1.1);
 }
 
-const cloudData = { x: cloudX, y: cloudY, z: cloudZ };
+export const cloudData = { x: cloudX, y: cloudY, z: cloudZ };
 
 const voxels3d = showcase("Voxels3D", {
   title: "Sparse 3D binning",
   description:
     "stat_bin_3d counts observations into lattice cells and geom_voxel draws the occupied ones. The product is sparse: empty cells are dropped, so absence means no observations landed there rather than a count of zero. padding shrinks each cell toward its center so individual bins stay legible in a dense lattice; fill defaults to the computed count, and density divides by cell VOLUME. Setting alpha below 1 is an accepted trade-off rather than a free option: cells inside one draw call blend in packing order, not back-to-front, which shifts the composited intensity of overlapping cells by up to ~64 of 255 levels. Since fill encodes count, that intensity is itself a data channel, so read exact counts from the legend rather than from how dark a cell looks. Opaque voxels are ordered correctly by the depth buffer and are unaffected.",
-  jsxSource: `<GGPlot data={cloudData} mapping={{ x: "x", y: "y", z: "z" }}>
-  <GeomVoxel bins={7} padding={0.15} />
-  <Labs title="Occupancy voxels" fill="count" />
-</GGPlot>`,
   chart: () => (
     <SitePlot3D data={cloudData} mapping={{ x: "x", y: "y", z: "z" }}>
       <GeomVoxel bins={7} padding={0.15} />
@@ -390,16 +328,12 @@ for (let j = 0; j < GRID; j++) {
   }
 }
 
-const heightField = { x: gridX, y: gridY, z: gridZ };
+export const heightField = { x: gridX, y: gridY, z: gridZ };
 
 const surface3d = showcase("Surface3D", {
   title: "A grid-connected height field",
   description:
     "geom_surface triangulates z = f(x, y) by grid adjacency. The grid contract is enforced rather than inferred: every combination of the distinct x and y values must appear exactly once, and scattered points are refused (with the row count a complete grid would have needed) instead of being triangulated. One cell here has a missing z, which leaves a visible hole — the quads touching it are dropped rather than interpolated across, since bridging the gap would fabricate terrain.",
-  jsxSource: `<GGPlot data={heightField} mapping={{ x: "x", y: "y", z: "z" }}>
-  <GeomSurface fill="#38bdf8" alpha={0.85} />
-  <Labs title="Height field" x="x" y="y" z="height" />
-</GGPlot>`,
   chart: () => (
     <SitePlot3D data={heightField} mapping={{ x: "x", y: "y", z: "z" }}>
       <GeomSurface fill="#38bdf8" alpha={0.85} />
@@ -425,19 +359,12 @@ for (const [index, depth] of [-1, 0, 1].entries()) {
   }
 }
 
-const planeData = { x: planeX, y: planeY, z: planeZ, plane: planeGroup };
+export const planeData = { x: planeX, y: planeY, z: planeZ, plane: planeGroup };
 
 const planes3d = showcase("Planes3D", {
   title: "Planes embedded in 3D, with no implied volume",
   description:
     "Vertex z positions the plane; nothing is extruded. Three hexagonal rings sit at three depths, translucent so the ones behind stay visible. A ring with any missing vertex is dropped whole rather than closed across the gap, which would invent area the data never had. geom_area, geom_ribbon and geom_rect share this path: a ribbon between two z values is TWO surfaces, never a solid.",
-  jsxSource: `<GGPlot
-  data={planeData}
-  mapping={{ x: "x", y: "y", z: "z", group: "plane", fill: "plane" }}
->
-  <GeomPolygon alpha={0.55} />
-  <Labs title="Planar surfaces" fill="plane" />
-</GGPlot>`,
   chart: () => (
     <SitePlot3D
       data={planeData}
@@ -468,7 +395,7 @@ for (const [index, depth] of [-0.8, 0, 0.8].entries()) {
   }
 }
 
-const bandData3d = {
+export const bandData3d = {
   x: bandX,
   ymin: bandLow,
   ymax: bandHigh,
@@ -480,20 +407,6 @@ const bands3d = showcase("Bands3D", {
   title: "Uncertainty bands stacked in depth",
   description:
     "Each ribbon is one surface walking its upper edge and back along the lower one, standing in the plane at its own z. It does not fill down to a z floor, because the grammar has not chosen a floor — a 3D band is a surface, not a solid.",
-  jsxSource: `<GGPlot
-  data={bandData3d}
-  mapping={{
-    x: "x",
-    ymin: "ymin",
-    ymax: "ymax",
-    z: "z",
-    group: "series",
-    fill: "series",
-  }}
->
-  <GeomRibbon alpha={0.6} />
-  <Labs title="Bands at depth" x="t" y="value" fill="series" />
-</GGPlot>`,
   chart: () => (
     <SitePlot3D
       data={bandData3d}
@@ -519,18 +432,17 @@ const markerY = [0, 0, 1, -1, 0.8];
 const markerZ = [0, 0, 0.6, -0.6, 1.2];
 const markerLabel = ["west", "east", "up", "down", "corner"];
 
-const markerData = { x: markerX, y: markerY, z: markerZ, label: markerLabel };
+export const markerData = {
+  x: markerX,
+  y: markerY,
+  z: markerZ,
+  label: markerLabel,
+};
 
 const labels3d = showcase("Labels3D", {
   title: "Camera-facing text at world anchors",
   description:
     "geom_text in 3D anchors glyphs at vec4 world positions and lets the renderer keep them facing the camera. Size is pixel-constant by default so labels stay legible at any distance, with sizeMode 'perspective' as the explicit world-space opt-in. geom_label has no 3D mode: its background box is measured in CSS pixels, which has no meaning under a perspective camera.",
-  jsxSource:
-    `<GGPlot data={markerData} mapping={{ x: "x", y: "y", z: "z", label: "label" }}>
-  <GeomPoint size={20} />
-  <GeomText size={15} color="#f8fafc" />
-  <Labs title="3D billboards" />
-</GGPlot>`,
   chart: () => (
     <SitePlot3D
       data={markerData}

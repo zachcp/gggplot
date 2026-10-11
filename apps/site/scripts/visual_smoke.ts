@@ -9,6 +9,11 @@
 import { chromium } from "playwright";
 import { browserArgs } from "./browser_args.ts";
 import { buildGate, previewArgs } from "./gate_output.ts";
+import {
+  EXAMPLE_FILES,
+  normalizeFile,
+  normalizeSource,
+} from "../src/docs/source_normalize.ts";
 
 const host = "127.0.0.1";
 // A fresh high port prevents a user's running dev server from becoming the
@@ -28,6 +33,8 @@ interface RouteResult {
   opaquePixels: number[];
   console: string[];
   screenshot: string | null;
+  /** Each docs panel's printed source (printJsx), as the page shows it. */
+  printedSources: string[];
 }
 
 await Deno.mkdir(output, { recursive: true });
@@ -102,8 +109,37 @@ try {
       await verifyForcedFailure(browser);
       await verifyRouteLifecycle(browser);
     }
+    // gggplot-vnh.11: a panel's source is printJsx's print of its chart, in
+    // the production build (minified, so names must come by identity). Each
+    // block of it must be that example file's own code.
+    const exampleCode = (await Promise.all(
+      EXAMPLE_FILES.map((file) =>
+        Deno.readTextFile(new URL(`../src/docs/${file}`, import.meta.url))
+      ),
+    )).map(normalizeFile).join("\n");
+    const printedTotal = results.reduce(
+      (sum, result) => sum + result.printedSources.length,
+      0,
+    );
+    if (!requestedRoute && printedTotal < 70) {
+      throw new Error(
+        `Only ${printedTotal} printed docs sources were found; expected every example's`,
+      );
+    }
     const failures = results.flatMap((result) => {
       const problems: string[] = [];
+      for (const source of result.printedSources) {
+        const stray = source.split(/\n\s*\n/).filter((block) =>
+          !exampleCode.includes(normalizeSource(block))
+        );
+        if (stray.length) {
+          problems.push(
+            `printed source is not its example's code: ${
+              stray[0].slice(0, 120)
+            }`,
+          );
+        }
+      }
       if (result.chartCount === 0) problems.push("no chart surfaces");
       if (result.accessibleLabels !== result.chartCount) {
         problems.push("chart surface is missing an accessible visual summary");
@@ -400,7 +436,10 @@ async function inspectRoute(
         `Screenshot capture failed after retry: ${String(screenshotError)}`,
       );
     }
+    const printedSources = await page.locator("[data-printed-source]")
+      .allTextContents();
     return {
+      printedSources,
       route,
       chartCount: surfaceBounds.length,
       accessibleLabels,
