@@ -27,6 +27,15 @@ export {
   type GGDataValue,
   useGGData,
 } from "./components/gg_data.ts";
+export { GGLayerPart, GGPart, type PlotPart } from "./components/parts.ts";
+export {
+  GGPanelContext,
+  type GGPanelValue,
+  GGScalesContext,
+  type GGScalesValue,
+  useGGPanel,
+  useGGScales,
+} from "./components/gg_scales.ts";
 
 // Compiler + render tree
 export { compile, type CompileOptions } from "./compile/mod.ts";
@@ -67,7 +76,9 @@ export {
   FacetPanel,
   type FacetPanelProps,
   GGPlot,
+  type GGPlotComponentProps,
   type GGPlotProps,
+  type GGPlotSpecProps,
   renderTree,
 } from "./render/GGPlot.tsx";
 export {

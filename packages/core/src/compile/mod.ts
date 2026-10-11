@@ -84,6 +84,21 @@ export interface CompileOptions {
    * whose inputs did not change. Resident layers never reach this hook.
    */
   lowerMarks?: (args: LowerMarksArgs) => RenderNode[];
+  /**
+   * Component path: receives what assemblePlot trained and laid out, so the
+   * root can provide it to marks and custom primitives (GGScalesContext,
+   * GGPanelContext) without training twice.
+   */
+  onAssembled?: (info: AssembledPlot) => void;
+}
+
+/** What one assemblePlot call trained and laid out. */
+export interface AssembledPlot {
+  /** Every trained scale, by aesthetic. x/y carry the widened guide domains. */
+  scales: Partial<Record<AesName, TrainedScale>>;
+  /** The panel's normalized bounds within the chart, [x0, y0, x1, y1]. */
+  panelBounds: [number, number, number, number];
+  dimensions: 2 | 3;
 }
 
 /** What a `CompileOptions.lowerMarks` override receives for one layer. */
@@ -431,6 +446,11 @@ export function assemblePlot(
   const allPerLayer = panelLayers.flat();
   const scales = trainScales(spec, allPerLayer);
   if (dimensionality.dimensions === 3) {
+    options.onAssembled?.({
+      scales: Object.fromEntries(scales) as AssembledPlot["scales"],
+      panelBounds: [-1, -1, 1, 1],
+      dimensions: 3,
+    });
     return compileThreeDimensionalPlot(spec, allPerLayer, scales, options);
   }
   const xScale = scales.get("x");
@@ -500,6 +520,7 @@ export function assemblePlot(
   const panelTickCount = faceted
     ? panelGuideTickCount(tickCount, ncol)
     : tickCount;
+  options.onAssembled?.({ scales: guideScales, panelBounds, dimensions: 2 });
 
   /** Build one panel's Cartesian/Polar view node (guides + this panel's marks). */
   function buildPanel(
