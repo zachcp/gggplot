@@ -1,6 +1,7 @@
 import type { DocPage } from "./types.ts";
 import { geomReferenceEntries } from "./geom_reference.ts";
 import { threeDShowcases } from "./example_3d.ts";
+import { composeWithUseGpu } from "./compose_example.tsx";
 import {
   alignedStackedArea,
   areaAndRibbon,
@@ -310,6 +311,21 @@ export const docPages: DocPage[] = [
       residentTileStrip,
       smoothLm,
     ],
+  },
+  {
+    slug: "compose",
+    section: "internals",
+    title: "Compose with Use.GPU",
+    summary:
+      "Draw any Use.GPU primitive inside a gggplot panel, in data coordinates, colored and sized by the plot's own scales.",
+    narrative: [
+      {
+        heading: "Custom primitives share the plot's scales",
+        body:
+          "A <GGPanel> draws its children inside the panel after the marks; a <GGLayer> also declares the rows and aesthetics they show, so those train the axes and legend like a geom's. Inside either, useGGColors and useGGSizes return the plot's own GPU scale functions as lambda sources, so a primitive matches gggplot's marks exactly and follows every retrain by uniform write.",
+      },
+    ],
+    examples: [composeWithUseGpu],
   },
   {
     slug: "three-d",

@@ -1,4 +1,5 @@
 import type { DataFrame, GGSpec } from "@gggplot/core";
+import type { LiveElement } from "@use-gpu/live";
 import type { ModelDocument } from "@gggplot/model-inspect";
 
 /** A 3D GGSpec preview on a docs page. */
@@ -45,7 +46,14 @@ export interface DocExample {
   dataPreview?: Record<string, unknown[]>;
   computedDataPreview?: DataFrame;
   /** DSL source shown to the reader - kept in sync with `spec` by hand. */
-  dslSource: string;
+  dslSource?: string;
+  /**
+   * A component-form example: a Live component rendering a <GGPlot> tree
+   * (SitePlot), with its JSX shown to the reader in `jsxSource`, kept in
+   * sync by hand. Used instead of `spec`/`buildSpec`.
+   */
+  chart?: () => LiveElement;
+  jsxSource?: string;
   /** Explanation shown beside the execution flow detected from the live tree. */
   executionDetail?: string;
   /** Optional route for an interactive or instrumented companion demonstration. */

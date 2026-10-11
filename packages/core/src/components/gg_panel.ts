@@ -7,6 +7,7 @@
 // refs, so a retrain updates the primitive by uniform write with no relink.
 // For CPU work, useGGScales() gives the immutable trained scales and their
 // revision.
+import type { ShaderSource } from "@use-gpu/shader";
 import { wgsl } from "@use-gpu/shader/wgsl";
 import {
   COLOR_BINDING,
@@ -45,7 +46,7 @@ function useRefs(): ScaleBindingRefs {
 export function useGGColors(
   values: Float32Array,
   aes: "color" | "fill" = "color",
-): unknown {
+): ShaderSource {
   const refs = useRefs()[aes];
   const valueSource = useRawSource(values, "f32");
   const palette = useRawSource(refs.palette, "vec4<f32>");
@@ -63,7 +64,7 @@ export function useGGColors(
     refs.naColor,
   ]);
   const props = useOne(() => ({ length: values.length }), values.length);
-  return useLambdaSource(bound, props);
+  return useLambdaSource(bound, props) as ShaderSource;
 }
 
 /**
@@ -71,7 +72,7 @@ export function useGGColors(
  * semantics, as gggplot's points). Returns a lambda source of f32, one per
  * value: pass it as `sizes`.
  */
-export function useGGSizes(values: Float32Array): unknown {
+export function useGGSizes(values: Float32Array): ShaderSource {
   const refs = useRefs().size;
   const valueSource = useRawSource(values, "f32");
   const bound = useShader(SIZE_BINDING, [
@@ -81,5 +82,5 @@ export function useGGSizes(values: Float32Array): unknown {
     refs.range,
   ]);
   const props = useOne(() => ({ length: values.length }), values.length);
-  return useLambdaSource(bound, props);
+  return useLambdaSource(bound, props) as ShaderSource;
 }

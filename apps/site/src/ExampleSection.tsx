@@ -92,7 +92,9 @@ export function ExampleSection({
             )
             : null}
           <p style={styles.metaCopy}>
-            {nodeCount === undefined
+            {example.chart
+              ? "Component tree: rendered by the <GGPlot> root, no RenderTree or emitted source."
+              : nodeCount === undefined
               ? resolved.error
                 ? `Dataset load failed: ${resolved.error}`
                 : "Loading typed dataset lazily…"
@@ -104,11 +106,21 @@ export function ExampleSection({
       <section
         style={{ ...styles.grid, ...(compact ? styles.gridCompact : {}) }}
       >
-        <Panel title="ggplot DSL">
-          <pre style={styles.pre}>{example.dslSource}</pre>
+        <Panel title={example.chart ? "Component JSX" : "ggplot DSL"}>
+          <pre style={styles.pre}>
+            {example.chart ? example.jsxSource : example.dslSource}
+          </pre>
         </Panel>
         <Panel title="live WebGPU render">
-          {resolved.spec
+          {example.chart
+            ? (
+              <ChartCanvas
+                chart={example.chart}
+                label={example.visualSummary ?? example.description}
+                forceFailure={forceChartFailure}
+              />
+            )
+            : resolved.spec
             ? (
               <ChartCanvas
                 spec={resolved.spec}
@@ -128,10 +140,12 @@ export function ExampleSection({
         </Panel>
       </section>
 
-      <details style={styles.details}>
-        <summary style={styles.summary}>Emitted UseGPU Live source</summary>
-        <pre style={styles.pre}>{emitted ?? "Loading typed dataset…"}</pre>
-      </details>
+      {example.chart ? null : (
+        <details style={styles.details}>
+          <summary style={styles.summary}>Emitted UseGPU Live source</summary>
+          <pre style={styles.pre}>{emitted ?? "Loading typed dataset…"}</pre>
+        </details>
+      )}
     </section>
   );
 }

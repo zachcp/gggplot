@@ -7,6 +7,7 @@ import { docPages } from "./docs/pages.ts";
 import type { DocExample } from "./docs/types.ts";
 import { Scene } from "./scene.tsx";
 import { ComponentScene } from "./component_scene.tsx";
+import { ChartScene } from "./chart_scene.tsx";
 import { useResolvedExample } from "./hooks.ts";
 
 /**
@@ -22,6 +23,17 @@ export function CaptureProbe(
     ...docPages.flatMap((page) => page.examples ?? []),
   ].find((e) => e.id === id);
   if (!example) return <p id="capture-missing">No example {id}</p>;
+  if (example.chart) {
+    // A component-form example has one path: the component root.
+    return (
+      <div id="capture-canvas" style={{ width: 640, height: 400 }}>
+        <LiveCanvas>
+          {(canvas: HTMLCanvasElement) =>
+            liveElement(ChartScene, { canvas, chart: example.chart! })}
+        </LiveCanvas>
+      </div>
+    );
+  }
   return <CaptureExample example={example} path={path} />;
 }
 
