@@ -22,6 +22,7 @@
     "@use-gpu/workbench": "npm:@use-gpu/workbench@^0.20.0",
     "@use-gpu/webgpu": "npm:@use-gpu/webgpu@^0.20.0",
     "@use-gpu/scene": "npm:@use-gpu/scene@^0.20.0",
+    "@use-gpu/shader": "npm:@use-gpu/shader@^0.20.0",
     "@use-gpu/shader/wgsl": "npm:@use-gpu/shader@^0.20.0/wgsl",
     "@use-gpu/wgsl/use/view.wgsl": "npm:@use-gpu/wgsl@^0.20.0/use/view.wgsl",
     "react": "npm:react@^18.3.1",

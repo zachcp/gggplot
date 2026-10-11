@@ -7,6 +7,9 @@ const SITE_CHART_COLORS = {
   gridColor: "#343447",
 };
 
+/** The 2D host's theme defaults, for component-form plots (SitePlot). */
+export const SITE_CHART_THEME = { fontFamily: "Basic", ...SITE_CHART_COLORS };
+
 /** Apply readable host defaults without overriding an example's explicit theme. */
 export function withSiteChartTheme(spec: GGSpec): GGSpec {
   return {
