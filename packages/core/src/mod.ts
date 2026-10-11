@@ -27,7 +27,13 @@ export {
   type GGDataValue,
   useGGData,
 } from "./components/gg_data.ts";
-export { GGLayerPart, GGPart, type PlotPart } from "./components/parts.ts";
+export {
+  GGLayerPart,
+  GGPanel,
+  GGPart,
+  type PlotPart,
+} from "./components/parts.ts";
+export { useGGColors, useGGSizes } from "./components/gg_panel.ts";
 export {
   GeomLayer,
   type GeomLayerProps,

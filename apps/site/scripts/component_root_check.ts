@@ -241,6 +241,35 @@ try {
       scaledComponent,
     );
 
+    // Custom primitives (gggplot-7j9): the point layer swapped for a custom
+    // PointLayer inside <GGPanel>, bound through useGGColors/useGGSizes,
+    // changes no pixel, before and after a domain change.
+    const customOff = await frameAfter(page, {
+      mode: "component",
+      scaled: true,
+      colorDomain: [10, 30],
+      custom: false,
+    });
+    const customOn = await frameAfter(page, { custom: true });
+    const customPixels = await compare(page, "custom", customOff, customOn);
+    // The positive control: shifted, the same custom points must show.
+    const customShifted = await frameAfter(page, { customOffset: 3 });
+    const customShiftPixels = await compare(
+      page,
+      "custom-shifted",
+      customOn,
+      customShifted,
+    );
+    await step(page, { customOffset: 0 });
+    const customOnRetrained = await frameAfter(page, { colorDomain: [5, 40] });
+    const customOffRetrained = await frameAfter(page, { custom: false });
+    const customRetrainedPixels = await compare(
+      page,
+      "custom-retrained",
+      customOffRetrained,
+      customOnRetrained,
+    );
+
     // Discrete scales on the GPU (gggplot-81r): a palette swap and a level
     // reorder rewrite the lookup only; no mark data moves.
     const discreteMount = await step(page, {
@@ -268,6 +297,11 @@ try {
     const report = {
       generatedAt: new Date().toISOString(),
       scaled: { scaledMount, scaledResize, domainChange, parity: parityScaled },
+      custom: {
+        before: customPixels,
+        shifted: customShiftPixels,
+        retrained: customRetrainedPixels,
+      },
       discrete: {
         discreteMount,
         paletteSwap,
@@ -354,6 +388,28 @@ try {
       failures.push(
         `scaled: a domain change built ${domainChange.newShaderModules} shader modules, ${domainChange.newPipelines} pipelines`,
       );
+    }
+    if (customShiftPixels.changed < 50) {
+      failures.push(
+        `custom: shifting the custom points changed ${customShiftPixels.changed} pixels; they are not rendering`,
+      );
+    }
+    // Same mount, same glyph atlas: nothing but the custom points can move a
+    // pixel. A wrong color or size moves every point (hundreds of pixels; the
+    // shifted control moves ~350); the allowance is for where two points
+    // overlap, since the layer draws its lowered order and the primitive row
+    // order.
+    for (
+      const [name, pixels] of [["custom", customPixels], [
+        "custom after a domain change",
+        customRetrainedPixels,
+      ]] as const
+    ) {
+      if (pixels.changed > 5) {
+        failures.push(
+          `${name}: the custom primitive's colors or sizes differ from the layer's (${pixels.changed} pixels, max ${pixels.maxDifference})`,
+        );
+      }
     }
     if (discreteMount.work.boundRenders < 1) {
       failures.push(

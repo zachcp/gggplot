@@ -137,3 +137,25 @@ clears:
 
 The warning fires once per distinct set rather than on every re-assembly, so a
 resize does not repeat it.
+
+## Custom primitives in the panel (`<GGPanel>`)
+
+Any Use.GPU component can draw inside the plot's panel, in its data coordinates,
+after the marks:
+
+```tsx
+<GGPlot data={mtcars} mapping={{ x: "wt", y: "mpg", color: "mpg" }}>
+  <GeomPoint />
+  <GGPanel>
+    <MyPrimitive />
+  </GGPanel>
+</GGPlot>;
+```
+
+Inside, `useGGColors(values, aes?)` and `useGGSizes(values)` return lambda
+sources computed by the plot's own GPU scale functions, the ones gggplot's bound
+points use. A primitive colored with them matches a point layer exactly and
+follows every retrain by uniform write, with no relink. `useGGScales()` gives
+the immutable trained scales and their revision for CPU work, and `useGGPanel()`
+gives the panel's bounds. In a faceted plot the content draws in every panel; in
+3D, in the scene's data space.

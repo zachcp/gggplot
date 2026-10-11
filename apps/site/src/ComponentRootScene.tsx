@@ -7,12 +7,20 @@
 import { createElement, type LiveElement, useOne } from "@use-gpu/live";
 import * as Jsx from "@gggplot/core/jsx";
 import { AutoCanvas, WebGPU } from "@use-gpu/webgpu";
-import { FlatCamera, Pass, useDeviceContext } from "@use-gpu/workbench";
+import {
+  FlatCamera,
+  Pass,
+  PointLayer,
+  useDeviceContext,
+  useRawSource,
+} from "@use-gpu/workbench";
 import {
   type FontResources,
+  geomBlank,
   geomLine,
   geomPoint,
   GGData,
+  GGPanel,
   GGPart,
   GGPlot,
   ggplot,
@@ -22,6 +30,8 @@ import {
   scaleColor,
   type SpecPart,
   typedArrayForColumn,
+  useGGColors,
+  useGGSizes,
 } from "@gggplot/core";
 import { installGpuInstrumentation } from "../../../packages/core/src/render/gpu_instrument.ts";
 import { GGLayerPart } from "../../../packages/core/src/components/parts.ts";
@@ -52,6 +62,15 @@ export interface ComponentRootState {
   discrete?: boolean;
   palette?: string[];
   levels?: string[];
+  /**
+   * With `scaled`: the point layer becomes geom_blank (same scales, no
+   * marks) and a custom PointLayer inside <GGPanel> draws the points instead,
+   * colored and sized through useGGColors/useGGSizes (gggplot-7j9). If those
+   * match the layer's own mapping, no pixel changes.
+   */
+  custom?: boolean;
+  /** Shifts the custom points in y: the check that they render at all. */
+  customOffset?: number;
 }
 
 const data = scatterLine.spec!.data;
@@ -73,6 +92,8 @@ const pointLayer = (color: string) => {
 
 const SCALED_MAPPING = { x: "wt", y: "mpg", color: "mpg", size: "wt" };
 const SCALED_LAYER = geomPoint().value as Layer;
+// Trains the same scales and draws nothing: the custom points draw instead.
+const BLANK_LAYER = geomBlank().value as Layer;
 const colorParts = new Map<string, SpecPart>();
 const colorPart = (domain: [number, number]) => {
   const key = domain.join(",");
@@ -103,6 +124,32 @@ const discretePart = (state: ComponentRootState) => {
   }
   return discreteParts.get(key)!;
 };
+
+const WT = Float32Array.from(data.wt.values as number[]);
+const MPG = Float32Array.from(data.mpg.values as number[]);
+const POSITIONS = Float32Array.from(
+  Array.from(WT, (wt, i) => [wt, MPG[i]]).flat(),
+);
+
+/** The scaled layer's points again, bound through the public scale hooks. */
+function CustomPoints({ offset = 0 }: { offset?: number }): LiveElement {
+  const shifted = useOne(
+    () =>
+      offset
+        ? POSITIONS.map((v, i) => (i % 2 === 1 ? v + offset : v))
+        : POSITIONS,
+    offset,
+  );
+  const positions = useRawSource(shifted, "vec2<f32>");
+  const colors = useGGColors(MPG, "color");
+  const sizes = useGGSizes(WT);
+  return createElement(PointLayer, {
+    positions,
+    colors,
+    sizes,
+    count: WT.length,
+  });
+}
 
 /** The same plot as a spec, for the compile path. */
 export function compiledSpec(state: ComponentRootState): GGSpec {
@@ -205,8 +252,15 @@ function Plot(
         theme={theme}
         fontResources={fonts}
       >
-        <GGLayerPart layer={SCALED_LAYER} />
+        <GGLayerPart layer={state.custom ? BLANK_LAYER : SCALED_LAYER} />
         <GGPart part={colorPart(state.colorDomain ?? [10, 30])} />
+        {state.custom
+          ? (
+            <GGPanel>
+              <CustomPoints offset={state.customOffset ?? 0} />
+            </GGPanel>
+          )
+          : null}
       </GGPlot>
     );
   }

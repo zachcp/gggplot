@@ -90,6 +90,11 @@ export interface CompileOptions {
    */
   transformMark?: (mark: RenderNode, polar: PolarTransform) => RenderNode;
   /**
+   * Nodes appended to every 2D panel's view after its marks, in that panel's
+   * data coordinates: the component root's <GGPanel> content (gggplot-7j9).
+   */
+  panelContent?: (panelIndex: number) => RenderNode[];
+  /**
    * Component path (gggplot-vnh.3): lowers one layer's marks in place of the
    * built-in lowerLayer/pack-cache call. The component root passes a per-layer
    * memo here, so a resize or a sibling's change does not re-lower a layer
@@ -995,7 +1000,7 @@ export function layoutPlot(
         axes,
         ...viewParams,
       },
-      [...guides, ...clipped],
+      [...guides, ...clipped, ...(options.panelContent?.(panelIndex) ?? [])],
     );
   }
 

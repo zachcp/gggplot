@@ -216,6 +216,11 @@ const PlotView = (
     p.kind === "spec" ? [p.part as SpecPart] : []
   );
   const specParts = useMemo(() => specPartList, specPartList);
+  // <GGPanel> children, stabilized the same way.
+  const panelList = stableParts.flatMap((p) =>
+    p.kind === "panel" ? [p.content] : []
+  );
+  const panelContent = useMemo(() => panelList, panelList);
   const base = useMemo(
     () => plotSpec(data, mapping, theme, labels, specParts),
     [data, mapping, theme, labels, specParts],
@@ -271,7 +276,12 @@ const PlotView = (
   return provide(
     GGScalesContext,
     scalesRef.value,
-    createElement(PlotLayout, { root, caches, interactive }) as LiveElement,
+    createElement(PlotLayout, {
+      root,
+      caches,
+      interactive,
+      panelContent,
+    }) as LiveElement,
   );
 };
 
@@ -281,10 +291,11 @@ const PlotView = (
  * layout-bound). The only part of the root a resize re-renders.
  */
 const PlotLayout = (
-  { root, caches, interactive }: {
+  { root, caches, interactive, panelContent }: {
     root: PreparedRoot;
     caches: RootCaches;
     interactive: boolean;
+    panelContent: readonly unknown[];
   },
 ): LiveElement => {
   const rustText = useFontContext();
@@ -302,8 +313,9 @@ const PlotLayout = (
   const height = Math.max(bottom - top, 1);
   const panelRef = useOne(() => ({ value: null as GGPanelValue | null }));
   const { tree, info, residentNodes } = useMemo(
-    () => layoutRoot(root, { width, height, measureText }, caches),
-    [root, width, height, measureText],
+    () =>
+      layoutRoot(root, { width, height, measureText }, caches, panelContent),
+    [root, width, height, measureText, panelContent],
   );
   if (info) {
     const panel = panelRef.value;
