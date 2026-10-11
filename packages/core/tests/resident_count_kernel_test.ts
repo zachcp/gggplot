@@ -1,5 +1,7 @@
-// The MOUNTED stat_count grid: all five passes of runtime/resident_count_kernel_live.tsx
-// linked and dispatched into ONE compute pass, exactly as <Kernel> does (gggplot-vs7.7).
+// The MOUNTED stat_count grid: every pass of COUNT_GRID_PALETTE_PRODUCT, linked
+// from its generated `@link` sources against the values productPassPlan gives
+// (the same plan <ProductKernels> mounts, gggplot-034), and dispatched into ONE
+// compute pass, exactly as <Kernel> does (gggplot-vs7.7).
 //
 // resident_grid_link_test.ts already proves each pass body in isolation. What
 // that cannot see is the two things the mounted swap actually got wrong twice:
@@ -7,8 +9,8 @@
 //   1. VALUE ORDER. <Kernel> pairs a positional value list
 //      [dataSize, ...args, ...sources, ...targets] against the bundle's
 //      attributes, and a misorder does not fail loudly — it binds a buffer to a
-//      size lambda, or one accessor to another. So the lists below are the ones
-//      CountKernels builds, in the same order, and must stay in sync with it.
+//      size lambda, or one accessor to another. The lists below are built from
+//      productPassPlan, the one function <ProductKernels> also builds them with.
 //   2. PASS ORDER. Declaration order inside <Stage>s is the schedule, because
 //      ComputePass runs every gathered `compute` call in tree order into one
 //      encoder. `summarize` has to land strictly before the bar-vertex pass:
@@ -27,14 +29,13 @@ import {
   resolveBindings,
 } from "@use-gpu/shader/wgsl";
 import * as CoreNamespace from "@use-gpu/core";
-import { gridPositionCode } from "@gggplot/reductions";
 import {
-  CLEAR_U32_KERNEL,
-  COUNT_BAR_VERTICES_KERNEL,
-  GRID_BAR_VERTEX_COLORS_KERNEL,
-  GRID_SUMMARY_KERNEL,
-  GROUPED_COUNT_1D_KERNEL,
-} from "../src/render/resident_grid_kernels.ts";
+  COUNT_GRID_PALETTE_PRODUCT,
+  gridPositionCode,
+  linkSource,
+  productPassPlan,
+} from "@gggplot/reductions";
+import { wgsl } from "@use-gpu/shader/wgsl";
 
 // deno-lint-ignore no-explicit-any
 const any = (value: unknown): any => value;
@@ -216,51 +217,40 @@ Deno.test("the mounted count grid's five passes produce dodged bars in one compu
     ...source(buffer, format, length),
     readWrite: true,
   });
-  const counts = source(countsBuffer, "u32", cells);
-  const summary = source(summaryBuffer, "u32", summaryLength);
 
-  // The value lists and their order mirror CountKernels one for one.
-  const passes = [
-    linkPass(device, CLEAR_U32_KERNEL, [
-      () => [cells, 1],
-      target(countsBuffer, "u32", cells),
-    ], cells),
-    linkPass(device, GROUPED_COUNT_1D_KERNEL, [
-      () => [rows, 1],
-      perGroup,
-      groupsCount,
-      1,
-      source(valuesBuffer, "u32", rows),
-      source(groupsBuffer, "u32", rows),
-      target(countsBuffer, "atomic<u32>", cells),
-    ], rows),
-    linkPass(device, CLEAR_U32_KERNEL, [
-      () => [summaryLength, 1],
-      target(summaryBuffer, "u32", summaryLength),
-    ], summaryLength),
-    linkPass(device, GRID_SUMMARY_KERNEL, [
-      () => [perGroup, 1],
-      groupsCount,
-      position,
-      counts,
-      target(summaryBuffer, "atomic<u32>", summaryLength),
-    ], perGroup),
-    linkPass(device, COUNT_BAR_VERTICES_KERNEL, [
-      () => [cells, 1],
-      perGroup,
-      groupsCount,
-      position,
-      counts,
-      summary,
-      target(verticesBuffer, "vec2<f32>", cells * 4),
-    ], cells),
-    linkPass(device, GRID_BAR_VERTEX_COLORS_KERNEL, [
-      () => [cells, 1],
-      perGroup,
-      source(paletteBuffer, "vec4<f32>", groupsCount),
-      target(colorsBuffer, "vec4<f32>", cells * 4),
-    ], cells),
-  ];
+  // The value lists come from the product's own plan, in pass order:
+  // [size, ...args, ...reads, target] for each, exactly as <ProductKernels>.
+  const ports: Record<string, { buffer: GPUBuffer; length: number }> = {
+    valueIds: { buffer: valuesBuffer, length: rows },
+    groupIds: { buffer: groupsBuffer, length: rows },
+    palette: { buffer: paletteBuffer, length: groupsCount },
+    counts: { buffer: countsBuffer, length: cells },
+    summary: { buffer: summaryBuffer, length: summaryLength },
+    barVertices: { buffer: verticesBuffer, length: cells * 4 },
+    barColors: { buffer: colorsBuffer, length: cells * 4 },
+  };
+  const plan = productPassPlan(COUNT_GRID_PALETTE_PRODUCT, {
+    rows,
+    bins: perGroup,
+    groups: groupsCount,
+    hasGroups: 1,
+    position,
+  });
+  assertEquals(plan.length, 6);
+  const passes = plan.map((step) =>
+    linkPass(device, wgsl`${linkSource(step.kernel)}`, [
+      () => [step.size, 1],
+      ...step.args,
+      ...step.reads.map((read) =>
+        source(ports[read.port].buffer, read.format, ports[read.port].length)
+      ),
+      target(
+        ports[step.write.port].buffer,
+        step.write.format,
+        ports[step.write.port].length,
+      ),
+    ], step.size)
+  );
 
   // ONE encoder and ONE compute pass for all six dispatches, which is the shape
   // <Compute>'s ComputePass builds. Read-after-write between dispatches inside a

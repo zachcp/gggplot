@@ -123,3 +123,31 @@ export const COUNT_GRID_PRODUCT: ProductSpec = {
   ],
   summary: { port: "summary", decide: "gridSummary" },
 };
+
+/**
+ * stat_count with per-group fill colors: the count grid plus a pass that
+ * expands an RGBA palette input (one color per group) into per-vertex bar
+ * colors.
+ */
+export const COUNT_GRID_PALETTE_PRODUCT: ProductSpec = {
+  ...COUNT_GRID_PRODUCT,
+  id: "@gggplot/reductions:count_grid_palette@1",
+  inputs: [
+    ...COUNT_GRID_PRODUCT.inputs,
+    { name: "palette", format: "vec4<f32>", length: "groups" },
+  ],
+  buffers: [
+    ...COUNT_GRID_PRODUCT.buffers,
+    { name: "barColors", format: "vec4<f32>", length: { mul: [CELLS, 4] } },
+  ],
+  passes: [
+    ...COUNT_GRID_PRODUCT.passes,
+    {
+      kernel: GRID_BAR_VERTEX_COLORS,
+      reads: { paletteColor: "palette" },
+      write: "barColors",
+      args: { perGroup: "bins" },
+      size: CELLS,
+    },
+  ],
+};

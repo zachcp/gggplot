@@ -206,3 +206,44 @@ export function validateProductSpec(spec: ProductSpec): void {
     throw new Error(`[gggplot] ${spec.id}: summary port missing`);
   }
 }
+
+/** One pass, resolved against a product's symbols: what <Kernel> is given. */
+export interface PassPlan {
+  kernel: KernelSpec;
+  /** Elements dispatched (getSize().x). Zero means the pass is skipped. */
+  size: number;
+  /** Arg values, in the kernel's declared arg order. */
+  args: number[];
+  /** Source ports, in the kernel's declared read order, with their formats. */
+  reads: { port: string; format: ElementFormat }[];
+  /** The target port, and the storage format the binding declares. */
+  write: { port: string; format: string };
+}
+
+/**
+ * Resolves every pass to the values <Kernel> pairs with the kernel's
+ * attributes: [size, ...args, ...reads, target]. One function, so the mounted
+ * adapter and the link tests cannot disagree about order.
+ */
+export function productPassPlan(
+  spec: ProductSpec,
+  symbols: Symbols,
+): PassPlan[] {
+  return spec.passes.map((pass) => ({
+    kernel: pass.kernel,
+    size: evalSize(pass.size, symbols),
+    args: pass.kernel.args.map((arg) =>
+      evalSize(pass.args![arg.name], symbols)
+    ),
+    reads: pass.kernel.reads.map((read) => ({
+      port: pass.reads![read.name],
+      format: read.format,
+    })),
+    write: {
+      port: pass.write,
+      format: pass.kernel.write.atomic
+        ? `atomic<${pass.kernel.write.format}>`
+        : pass.kernel.write.format,
+    },
+  }));
+}

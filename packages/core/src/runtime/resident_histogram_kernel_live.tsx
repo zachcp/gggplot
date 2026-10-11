@@ -3,7 +3,7 @@
 // The stat_bin grid as real Use.GPU <Kernel>s (gggplot-vs7.8).
 //
 // The largest of the three ports, and structurally the count port plus a tile
-// pass: see resident_count_kernel_live.tsx for the pattern and
+// pass: see runtime/product_kernels.ts, which replaced the count grid's copy of this pattern, and
 // render/resident_grid_kernels.ts for the two binding preambles each body
 // compiles under. Three of these eight passes (the u32 clear, the summary and
 // the palette expansion) are the SAME bundles the count grid drives.
