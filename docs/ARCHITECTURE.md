@@ -1,5 +1,11 @@
 # gggplot Architecture
 
+> **Direction change: [ADR 007](ADR_007_COMPONENT_FIRST.md).** gggplot is moving
+> to Live components as the only authoring form. `GGSpec`, the fluent DSL,
+> `compile()`, `renderTree()` and `emitSource()` are removed when the component
+> path ships. This document still describes the current spec-based pipeline;
+> `gggplot-vnh.13` rewrites it around the component tiers.
+
 gggplot transpiles a **grammar-of-graphics specification** into a **UseGPU
 Live** component tree. This document covers the three concerns the project must
 get right: the **API** (how users describe plots), the **UseGPU mapping** (what
