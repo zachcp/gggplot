@@ -3,7 +3,7 @@
 // vnh.3: one canvas that renders scatterLine either through compile() or
 // through the Capture root, so pixels and upload counters compare like for like.
 import { createElement, type LiveElement, useOne } from "@use-gpu/live";
-import * as Jsx from "./live_jsx.ts";
+import * as Jsx from "@gggplot/core/jsx";
 import { AutoCanvas, WebGPU } from "@use-gpu/webgpu";
 import {
   FlatCamera,

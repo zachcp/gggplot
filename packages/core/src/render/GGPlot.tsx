@@ -659,20 +659,16 @@ const GlyphMeasuredPlot = (
  * renders visibly when the host supplies real font sources.
  */
 /**
- * What GGPlot actually returns is a `LiveElement`, but it cannot say so.
- * Hosts consume it from .tsx files running use.gpu's classic-runtime JSX
- * (`@jsx createElement`) while TypeScript still resolves the JSX namespace to
- * React, so a `LiveElement` return makes `<GGPlot />` fail to compile as "not
- * a valid JSX element type". Naming the escape hatch once keeps it explicit —
- * which also keeps the published API fast-typed for JSR — instead of leaving
- * the return inferred.
+ * Returns a real `LiveElement` (gggplot-05w). Hosts render it from Live JSX
+ * with the qualified pragma from `@gggplot/core/jsx`, or with its typed
+ * `createElement`. An unqualified JSX pragma checks against React's JSX
+ * namespace and rejects any Live component. (Never write the pragma itself in
+ * a comment here: esbuild reads it from any comment, and a stray one breaks
+ * this file's real factory.)
  */
-// deno-lint-ignore no-explicit-any
-type LiveJsxElement = any;
-
 export const GGPlot = (
   { spec, interactive, fonts, fontResources, sceneExtras }: GGPlotProps,
-): LiveJsxElement => {
+): LiveElement => {
   const resources = useMemo(
     () => fontResources ?? (fonts?.length ? createFontResources(fonts) : null),
     [fontResources, fonts],

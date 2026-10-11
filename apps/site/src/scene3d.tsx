@@ -1,8 +1,8 @@
 /** @jsxRuntime classic */
-/** @jsx createElement */
+/** @jsx Jsx.createElement */
 // The shared GGPlot host compiles dimensionality and realizes Scene3D's orbit
 // and flat-overlay passes. Callers provide only GGSpec, exactly as in 2D.
-import { createElement } from "@use-gpu/live";
+import * as Jsx from "@gggplot/core/jsx";
 import { AutoCanvas, WebGPU } from "@use-gpu/webgpu";
 import {
   createFontResources,
@@ -47,10 +47,10 @@ export const Scene3D = (
   // the flat overlay's.
   const extras = [
     ...(prismInstances?.length
-      ? [createElement(PrismInstances3D, { instances: prismInstances })]
+      ? [Jsx.createElement(PrismInstances3D, { instances: prismInstances })]
       : []),
     ...(publishPick
-      ? [createElement(ScenePicker, { publish: publishPick })]
+      ? [Jsx.createElement(ScenePicker, { publish: publishPick })]
       : []),
   ];
   return (

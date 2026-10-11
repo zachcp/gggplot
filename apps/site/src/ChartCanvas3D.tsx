@@ -1,5 +1,8 @@
 import React from "react";
 import { LiveCanvas } from "@use-gpu/react";
+// Live elements are built with the typed factory, not React JSX: a Live
+// scene returns a LiveElement, which React's JSX namespace rejects.
+import { createElement as liveElement } from "@gggplot/core/jsx";
 import type {
   GGSpec,
   PrismInstance3D,
@@ -106,14 +109,13 @@ export function ChartCanvas3D(
         {...handlers}
       >
         <LiveCanvas key={cameraEpoch}>
-          {(canvas: HTMLCanvasElement) => (
-            <Scene3D
-              canvas={canvas}
-              spec={spec}
-              prismInstances={prismInstances}
-              publishPick={onPick ? publishPick : undefined}
-            />
-          )}
+          {(canvas: HTMLCanvasElement) =>
+            liveElement(Scene3D, {
+              canvas,
+              spec,
+              prismInstances,
+              publishPick: onPick ? publishPick : undefined,
+            })}
         </LiveCanvas>
         <div style={styles.navigation} aria-label="3D camera controls">
           <span>Drag orbit · Shift-drag / right-drag pan · scroll zoom</span>

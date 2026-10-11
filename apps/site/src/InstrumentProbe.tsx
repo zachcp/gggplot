@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { LiveCanvas } from "@use-gpu/react";
+// Live elements are built with the typed factory, not React JSX: a Live
+// scene returns a LiveElement, which React's JSX namespace rejects.
+import { createElement as liveElement } from "@gggplot/core/jsx";
 import {
   aes,
   geomLine,
@@ -140,7 +143,7 @@ export function InstrumentProbe(): React.ReactElement {
       style={{ width: 480, height: 360 }}
     >
       <LiveCanvas>
-        {(canvas: HTMLCanvasElement) => <Scene canvas={canvas} spec={spec} />}
+        {(canvas: HTMLCanvasElement) => liveElement(Scene, { canvas, spec })}
       </LiveCanvas>
     </div>
   );
