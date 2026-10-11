@@ -186,7 +186,19 @@
                   },
                   "concave": true
                 },
-                "children": []
+                "children": [],
+                "owners": {
+                  "$u32": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    3,
+                    2,
+                    1,
+                    0
+                  ]
+                }
               },
               {
                 "component": "ChunkedLine",
@@ -265,7 +277,15 @@
                     ]
                   }
                 },
-                "children": []
+                "children": [],
+                "owners": {
+                  "$u32": [
+                    0,
+                    1,
+                    2,
+                    3
+                  ]
+                }
               },
               {
                 "component": "ChunkedLine",
@@ -365,7 +385,18 @@
                     ]
                   }
                 },
-                "children": []
+                "children": [],
+                "owners": {
+                  "$u32": [
+                    0,
+                    0,
+                    1,
+                    1,
+                    2,
+                    2,
+                    3
+                  ]
+                }
               }
             ]
           }
@@ -676,7 +707,19 @@
                   },
                   "concave": true
                 },
-                "children": []
+                "children": [],
+                "owners": {
+                  "$u32": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    3,
+                    2,
+                    1,
+                    0
+                  ]
+                }
               },
               {
                 "component": "ChunkedLine",
@@ -755,7 +798,15 @@
                     ]
                   }
                 },
-                "children": []
+                "children": [],
+                "owners": {
+                  "$u32": [
+                    0,
+                    1,
+                    2,
+                    3
+                  ]
+                }
               },
               {
                 "component": "ChunkedLine",
@@ -855,7 +906,18 @@
                     ]
                   }
                 },
-                "children": []
+                "children": [],
+                "owners": {
+                  "$u32": [
+                    0,
+                    0,
+                    1,
+                    1,
+                    2,
+                    2,
+                    3
+                  ]
+                }
               }
             ]
           }

@@ -13,6 +13,9 @@ import {
   type FaceLoop,
   packFaceLoops,
   positionsOf,
+  rowsOf,
+  withOwners,
+  withRowIndex,
 } from "./shared.ts";
 
 export function lowerPolygon(
@@ -27,7 +30,7 @@ export function lowerPolygon(
   const colorScale = ctx.scales.color;
   const fillScale = ctx.scales.fill;
 
-  const groups = splitByEffectiveGroup(mapping, data);
+  const groups = splitByEffectiveGroup(mapping, withRowIndex(data));
   const loops: FaceLoop[] = [];
 
   for (const { mapping: m, data: d } of groups) {
@@ -36,6 +39,7 @@ export function lowerPolygon(
     const colors = colorsOf(m, d, colorScale, fillScale, "fillOrColor");
     loops.push({
       positions,
+      owners: rowsOf(d).slice(0, positions.length),
       fill: colors?.[0] ?? (layer.params.fill as string) ??
         (layer.params.color as string) ?? "#3b82f6",
     });
@@ -43,10 +47,13 @@ export function lowerPolygon(
 
   if (loops.length === 0) return [];
   const packed = packFaceLoops(loops);
-  return [node("ChunkedFace", {
-    positions: packed.positions,
-    topology: packed.topology,
-    colors: packed.colors,
-    concave: true,
-  })];
+  return [withOwners(
+    node("ChunkedFace", {
+      positions: packed.positions,
+      topology: packed.topology,
+      colors: packed.colors,
+      concave: true,
+    }),
+    packed.owners,
+  )];
 }

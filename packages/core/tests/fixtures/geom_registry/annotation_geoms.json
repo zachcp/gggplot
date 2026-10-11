@@ -125,7 +125,13 @@
                   "color": "#3b82f6",
                   "size": 5
                 },
-                "children": []
+                "children": [],
+                "owners": {
+                  "$u32": [
+                    0,
+                    1
+                  ]
+                }
               },
               {
                 "component": "Line",
@@ -223,7 +229,15 @@
                   },
                   "concave": false
                 },
-                "children": []
+                "children": [],
+                "owners": {
+                  "$u32": [
+                    0,
+                    0,
+                    0,
+                    0
+                  ]
+                }
               },
               {
                 "component": "Line",
@@ -642,7 +656,13 @@
                   "color": "#3b82f6",
                   "size": 5
                 },
-                "children": []
+                "children": [],
+                "owners": {
+                  "$u32": [
+                    0,
+                    1
+                  ]
+                }
               },
               {
                 "component": "Line",
@@ -740,7 +760,15 @@
                   },
                   "concave": false
                 },
-                "children": []
+                "children": [],
+                "owners": {
+                  "$u32": [
+                    0,
+                    0,
+                    0,
+                    0
+                  ]
+                }
               },
               {
                 "component": "Line",

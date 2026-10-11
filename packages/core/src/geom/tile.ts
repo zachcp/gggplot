@@ -24,6 +24,7 @@ import {
   packFaceLoops,
   resolutionOf,
   valuesOf,
+  withOwners,
 } from "./shared.ts";
 
 /**
@@ -192,17 +193,23 @@ export function lowerTile(
     : {};
 
   if (positions.length === 0) return [];
-  const loops: FaceLoop[] = colors
-    ? positions.map((position, i) => ({ positions: position, fill: colors[i] }))
-    : positions.map((position) => ({ positions: position, fill }));
+  // One cell per row, four vertices each (gggplot-8e1).
+  const loops: FaceLoop[] = positions.map((position, i) => ({
+    positions: position,
+    fill: colors ? colors[i] : fill,
+    owners: [i, i, i, i],
+  }));
   const packed = packFaceLoops(loops);
   return [
-    node("ChunkedFace", {
-      positions: packed.positions,
-      topology: packed.topology,
-      colors: packed.colors,
-      concave: false,
-      ...metadata,
-    }),
+    withOwners(
+      node("ChunkedFace", {
+        positions: packed.positions,
+        topology: packed.topology,
+        colors: packed.colors,
+        concave: false,
+        ...metadata,
+      }),
+      packed.owners,
+    ),
   ];
 }
