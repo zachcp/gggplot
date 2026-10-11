@@ -18,6 +18,16 @@ export * from "./dsl/mod.ts";
 // Data ingestion prototype — row/column-store raw data -> typed columns.
 export * from "./data/mod.ts";
 
+// Component tier (ADR-007): data mounted once, shared below.
+export {
+  GGData,
+  type GGDataColumn,
+  GGDataContext,
+  type GGDataProps,
+  type GGDataValue,
+  useGGData,
+} from "./components/gg_data.ts";
+
 // Compiler + render tree
 export { compile, type CompileOptions } from "./compile/mod.ts";
 export {
