@@ -68,6 +68,9 @@ export type ComponentName =
   | "Scene3D"
   /** Runtime-only host extension injected into the live 3D Cartesian scene. */
   | "SceneExtras"
+  // Component path only (gggplot-fbq): a point whose mapped aesthetics are GPU
+  // scale bindings. Never emitted; compile() never produces it.
+  | "BoundPoint"
   /**
    * Not a real @use-gpu/plot export — a small custom Live component (defined
    * in render/GGPlot.tsx, inlined by emit/mod.ts) that divides the ambient

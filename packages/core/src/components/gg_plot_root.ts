@@ -54,6 +54,12 @@ import type {
 } from "../ir/types.ts";
 import { renderTree } from "../render/render_tree.tsx";
 import {
+  createScaleBindingRefs,
+  isGpuBindable,
+  updateScaleBindingRefs,
+} from "../render/scale_bindings.ts";
+import { typedArrayForColumn } from "../data/mod.ts";
+import {
   createGlyphTextMeasurer,
   type FontResources,
   validateFontRequests,
@@ -178,11 +184,66 @@ interface LoweredEntry {
   nodes: RenderNode[];
 }
 
+/** Which of a point layer's mapped aesthetics bind on the GPU (gggplot-fbq). */
+interface BoundPlan {
+  color?: { column: string; aes: "color" | "fill" };
+  size?: string;
+  alpha?: string;
+}
+
+/**
+ * Plan GPU-bound aesthetics for a layer, or null to CPU-pack it as before.
+ * Narrow on purpose: a 2D point with a continuous mapped color (or fill), and
+ * optionally continuous size/alpha; no shape split, stroke ring or layer-wide
+ * alpha. Alpha binds only with color, since it folds into the color.
+ */
+function boundPlan(args: LowerMarksArgs): BoundPlan | null {
+  const { layer, mapping, data, ctx } = args;
+  if (layer.geom !== "point" || mapping.z) return null;
+  if (mapping.shape || mapping.stroke) return null;
+  if (layer.params.stroke != null || layer.params.alpha != null) return null;
+  const numeric = (column: string | undefined) =>
+    !!column && data[column]?.type === "numeric";
+  const plan: BoundPlan = {};
+  const colorAes = mapping.color ? "color" : mapping.fill ? "fill" : undefined;
+  if (colorAes) {
+    const column = mapping[colorAes] as string;
+    if (!numeric(column) || !isGpuBindable(ctx.scales[colorAes])) return null;
+    plan.color = { column, aes: colorAes };
+  }
+  if (mapping.size) {
+    if (!numeric(mapping.size) || !isGpuBindable(ctx.scales.size)) return null;
+    plan.size = mapping.size;
+  }
+  if (mapping.alpha) {
+    if (!plan.color) return null;
+    if (!numeric(mapping.alpha) || !isGpuBindable(ctx.scales.alpha)) {
+      return null;
+    }
+    plan.alpha = mapping.alpha;
+  }
+  return plan.color || plan.size ? plan : null;
+}
+
 /** Every input lowerLayer reads off its LayerContext, as a comparable string. */
-function contextSignature(args: LowerMarksArgs, layoutBound: boolean): string {
+function contextSignature(
+  args: LowerMarksArgs,
+  layoutBound: boolean,
+  bound: BoundPlan | null,
+): string {
   const { ctx } = args;
+  // A bound aesthetic's domain reaches the GPU through refs, not through the
+  // lowered marks, so its retrain must not re-lower the layer.
+  const scales = bound
+    ? Object.fromEntries(
+      Object.entries(ctx.scales).filter(([aes]) =>
+        !(bound.color && aes === bound.color.aes) &&
+        !(bound.size && aes === "size") && !(bound.alpha && aes === "alpha")
+      ),
+    )
+    : ctx.scales;
   return JSON.stringify({
-    scales: ctx.scales,
+    scales,
     domains: ctx.domains,
     // Only text/label/rug read the theme and panel size for packed output
     // (compile/pack_cache.ts UNCACHEABLE_GEOMS); the rest are layout-free.
@@ -203,6 +264,52 @@ function plotSpec(
   if (labels) plot.add({ tag: "labels", value: labels });
   plot.add(...specParts);
   return plot.build();
+}
+
+/** The bound aesthetics, as a key: a different set is a different hook layout. */
+function boundKey(bound: BoundPlan): string {
+  return [
+    bound.color ? bound.color.aes : "",
+    bound.size ? "size" : "",
+    bound.alpha ? "alpha" : "",
+  ].join(":");
+}
+
+/**
+ * Turn a point layer's CPU-lowered Point node into a BoundPoint: keep its
+ * positions and owners, drop the packed per-vertex colors/sizes, and hand over
+ * each bound column's raw values for the GPU to scale.
+ */
+function bindPoints(
+  nodes: RenderNode[],
+  bound: BoundPlan,
+  data: DataFrame,
+  layer: Layer,
+): RenderNode[] {
+  const values = (column: string) =>
+    typedArrayForColumn(data[column]) as Float32Array;
+  return nodes.map((mark) => {
+    if (mark.component !== "Point" || !mark.owners) return mark;
+    const { colors: _c, sizes: _s, color: _fc, size: _fs, ...rest } =
+      mark.props;
+    return {
+      ...mark,
+      component: "BoundPoint" as const,
+      props: {
+        ...rest,
+        owners: mark.owners,
+        ...(bound.color
+          ? {
+            color: { values: values(bound.color.column), aes: bound.color.aes },
+          }
+          : { fixedColor: (layer.params.color as string) ?? "#3b82f6" }),
+        ...(bound.size
+          ? { size: { values: values(bound.size) } }
+          : { fixedSize: (layer.params.size as number) ?? 5 }),
+        ...(bound.alpha ? { alpha: { values: values(bound.alpha) } } : {}),
+      },
+    };
+  });
 }
 
 /** Phase 2: train across the parts and assemble, memoized per layer. */
@@ -266,6 +373,8 @@ const PlotView = (
   const preparedCache = useOne(() => new Map<string, PreparedEntry>());
   const loweredCache = useOne(() => new Map<string, LoweredEntry>());
   const scalesRef = useOne(() => ({ value: null as GGScalesValue | null }));
+  // One stable set of GPU refs for the root's lifetime (gggplot-fbq).
+  const gpuRefs = useOne(() => createScaleBindingRefs());
   const panelRef = useOne(() => ({ value: null as GGPanelValue | null }));
 
   const pending = layers.some((layer) => layer.pending);
@@ -312,7 +421,8 @@ const PlotView = (
       const key = `${id}:${panelIndex}`;
       liveLowered.add(key);
       const layoutBound = UNCACHEABLE_GEOMS.has(layer.geom);
-      const signature = contextSignature(args, layoutBound);
+      const bound = boundPlan(args);
+      const signature = contextSignature(args, layoutBound, bound);
       const prev = loweredCache.get(key);
       if (
         prev && prev.layer === layer && prev.mapping === mapping &&
@@ -322,10 +432,14 @@ const PlotView = (
       componentProbe.lowerCalls++;
       // Keyed per layer, so a sibling inserted before this layer does not
       // shift its marks to a new position and remount them.
-      const fresh = lowerLayer(layer, mapping, data, ctx).map((node, i) => ({
-        ...node,
-        key: `layer-${id}-${panelIndex}-${i}`,
-      }));
+      const lowered = lowerLayer(layer, mapping, data, ctx);
+      const fresh = (bound ? bindPoints(lowered, bound, data, layer) : lowered)
+        .map((node, i) => ({
+          ...node,
+          key: bound
+            ? `layer-${id}-${panelIndex}-${i}-bound-${boundKey(bound)}`
+            : `layer-${id}-${panelIndex}-${i}`,
+        }));
       const nodes = reuseUnchanged(fresh, prev?.nodes);
       loweredCache.set(key, {
         layer,
@@ -366,9 +480,13 @@ const PlotView = (
   if (info) {
     const prev = scalesRef.value;
     if (!prev || JSON.stringify(prev.scales) !== JSON.stringify(info.scales)) {
+      // Written in place before the marks render, so bound shaders draw this
+      // revision's domains in the same frame its guides do.
+      updateScaleBindingRefs(gpuRefs, info.scales);
       scalesRef.value = {
         scales: info.scales,
         revision: (prev?.revision ?? 0) + 1,
+        gpu: gpuRefs,
       };
     }
     const panel = panelRef.value;

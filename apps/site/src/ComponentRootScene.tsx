@@ -13,10 +13,13 @@ import {
   geomLine,
   geomPoint,
   GGData,
+  GGPart,
   GGPlot,
   ggplot,
   type GGSpec,
   type Layer,
+  scaleColor,
+  type SpecPart,
   typedArrayForColumn,
 } from "@gggplot/core";
 import { installGpuInstrumentation } from "../../../packages/core/src/render/gpu_instrument.ts";
@@ -34,6 +37,12 @@ export interface ComponentRootState {
   /** Adds a third layer BEFORE the first two, the harder case for keyed reconciliation. */
   third: boolean;
   width: number;
+  /**
+   * A point layer with color and size mapped to continuous columns, its color
+   * domain declared (gggplot-fbq): the GPU-bound path against compile().
+   */
+  scaled?: boolean;
+  colorDomain?: [number, number];
 }
 
 const data = scatterLine.spec!.data;
@@ -53,13 +62,32 @@ const pointLayer = (color: string) => {
   return pointLayers.get(color)!;
 };
 
+const SCALED_MAPPING = { x: "wt", y: "mpg", color: "mpg", size: "wt" };
+const SCALED_LAYER = geomPoint().value as Layer;
+const colorParts = new Map<string, SpecPart>();
+const colorPart = (domain: [number, number]) => {
+  const key = domain.join(",");
+  if (!colorParts.has(key)) colorParts.set(key, scaleColor({ domain }));
+  return colorParts.get(key)!;
+};
+
 /** The same plot as a spec, for the compile path. */
 export function compiledSpec(state: ComponentRootState): GGSpec {
+  if (state.scaled) {
+    return withSiteChartTheme(
+      ggplot(data, SCALED_MAPPING)
+        .add(geomPoint(), colorPart(state.colorDomain ?? [10, 30]))
+        .build(),
+    );
+  }
   const plot = ggplot(data, mapping);
   if (state.third) plot.add(geomPoint(THIRD));
   plot.add(geomPoint({ size: 6, color: state.pointColor }), geomLine(LINE));
   return withSiteChartTheme(plot.build());
 }
+
+/** Shader modules and render pipelines built (vnh.16's rebuild counters). */
+export const builds = { shaderModules: 0, pipelines: 0 };
 
 /** Uploads whose payload is a frame column's typed array, by column name. */
 export const columnUploads: Record<string, number> = {};
@@ -74,6 +102,21 @@ function Instrumented({ children }: { children: LiveElement }): LiveElement {
   const device = useDeviceContext();
   useOne(() => {
     installGpuInstrumentation(device);
+    const module = device.createShaderModule.bind(device);
+    device.createShaderModule = (descriptor) => {
+      builds.shaderModules++;
+      return module(descriptor);
+    };
+    const render = device.createRenderPipelineAsync.bind(device);
+    device.createRenderPipelineAsync = (descriptor) => {
+      builds.pipelines++;
+      return render(descriptor);
+    };
+    const renderSync = device.createRenderPipeline.bind(device);
+    device.createRenderPipeline = (descriptor) => {
+      builds.pipelines++;
+      return renderSync(descriptor);
+    };
     const write = device.queue.writeBuffer.bind(device.queue);
     device.queue.writeBuffer = ((buffer, offset, payload, ...rest) => {
       const name = columnBuffers.get(
@@ -99,6 +142,19 @@ function Plot(
           <GGLayerPart layer={LINE_LAYER} />
         </GGPlot>
       </GGData>
+    );
+  }
+  if (state.mode === "component" && state.scaled) {
+    return (
+      <GGPlot
+        data={data}
+        mapping={SCALED_MAPPING}
+        theme={theme}
+        fontResources={fonts}
+      >
+        <GGLayerPart layer={SCALED_LAYER} />
+        <GGPart part={colorPart(state.colorDomain ?? [10, 30])} />
+      </GGPlot>
     );
   }
   if (state.mode === "compile") {
