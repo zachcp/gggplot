@@ -8,7 +8,11 @@ import type {
   PositionAxis,
 } from "../ir/types.ts";
 import { node, type RenderNode, type RowRemoval } from "./rendertree.ts";
-import { applyStat } from "../stat/mod.ts";
+import {
+  applyStat,
+  CPU_STAT_PRODUCTS,
+  type CpuStatCache,
+} from "../stat/mod.ts";
 import {
   censorToScaleLimits,
   removeMissingPositions,
@@ -328,7 +332,7 @@ export function prepareLayer(
   spec: GGSpec,
   layer: Layer,
   panelData: DataFrame,
-  options: { resident?: boolean; faceted: boolean },
+  options: { resident?: boolean; faceted: boolean; statCache?: CpuStatCache },
 ): { prepared: PreparedLayer; removed: LayerRemovals } {
   const mapping = effectiveMapping(spec, layer);
   const geom = GEOM_REGISTRY[layer.geom];
@@ -359,7 +363,10 @@ export function prepareLayer(
   if (resident) {
     return { prepared: { layer, data, mapping, resident }, removed };
   }
-  const res = applyStat(layer, mapping, data);
+  // A cache (the component root's) reuses a run whose inputs did not change.
+  const res = options.statCache
+    ? options.statCache.run(CPU_STAT_PRODUCTS[layer.stat], layer, mapping, data)
+    : applyStat(layer, mapping, data);
   return {
     prepared: { layer, data: res.data, mapping: res.mapping },
     removed,

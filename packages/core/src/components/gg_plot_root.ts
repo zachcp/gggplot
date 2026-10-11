@@ -44,6 +44,7 @@ import { reuseUnchanged } from "../compile/stable_tensors.ts";
 import { GG, type SpecPart } from "../dsl/base.ts";
 import { ingest, type InputData } from "../data/mod.ts";
 import { lowerLayer } from "../geom/mod.ts";
+import { createCpuStatCache } from "../stat/mod.ts";
 import type {
   Aes,
   DataFrame,
@@ -371,6 +372,10 @@ const PlotView = (
   );
 
   const preparedCache = useOne(() => new Map<string, PreparedEntry>());
+  // CPU stat runs memoized per input version (gggplot-l82): a layer
+  // re-prepared because a plot-level part changed reruns no stat when its
+  // rows, params and mapping did not.
+  const statCache = useOne(() => createCpuStatCache());
   const loweredCache = useOne(() => new Map<string, LoweredEntry>());
   const scalesRef = useOne(() => ({ value: null as GGScalesValue | null }));
   // One stable set of GPU refs for the root's lifetime (gggplot-fbq).
@@ -402,6 +407,7 @@ const PlotView = (
           componentProbe.statCalls++;
           const { prepared, removed } = prepareLayer(spec, layer, panel.data, {
             faceted,
+            statCache,
           });
           entry = { layer, data: panel.data, spec: base, prepared, removed };
           preparedCache.set(key, entry);
