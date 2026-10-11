@@ -2,7 +2,7 @@
 /** @jsx Jsx.createElement */
 // Path, band, polygon, distribution, contour and connected-mark geoms, written
 // as component JSX (gggplot-vnh.10.1); see examples_basics.tsx for the
-// chart/jsxSource convention.
+// chart convention.
 import * as Jsx from "@gggplot/core/jsx";
 import {
   GeomArea,
@@ -59,9 +59,6 @@ export const pathOrder: DocExample = {
   whatChanged:
     "The path lowering consumes rows exactly as supplied, making trajectories and ordered traces distinct from line charts.",
   dataPreview: scatterData,
-  jsxSource: `<GGPlot data={scatterData} mapping={{ x: "wt", y: "mpg" }}>
-  <GeomPath color="#7c3aed" linewidth={3} />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={scatterData} mapping={{ x: "wt", y: "mpg" }}>
       <GeomPath color="#7c3aed" linewidth={3} />
@@ -79,14 +76,6 @@ export const areaAndRibbon: DocExample = {
   whatChanged:
     "Both geoms lower to closed polygons, but only the ribbon reads two boundary aesthetics.",
   dataPreview: bandData,
-  jsxSource: `<GGPlot data={bandData} mapping={{ x: "x", y: "y" }}>
-  <GeomArea fill="#60a5fa" opacity={0.45} />
-  <GeomRibbon
-    mapping={{ x: "x", ymin: "ymin", ymax: "ymax" }}
-    fill="#f59e0b"
-    opacity={0.35}
-  />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={bandData} mapping={{ x: "x", y: "y" }}>
       <GeomArea fill="#60a5fa" opacity={0.45} />
@@ -109,18 +98,6 @@ export const rectBounds: DocExample = {
   whatChanged:
     "All four corner aesthetics are required, so the mark carries its own extent instead of borrowing a width from a discrete scale the way <GeomTile> does.",
   dataPreview: rectData,
-  jsxSource: `<GGPlot
-  data={rectData}
-  mapping={{
-    xmin: "xmin",
-    xmax: "xmax",
-    ymin: "ymin",
-    ymax: "ymax",
-    fill: "phase",
-  }}
->
-  <GeomRect opacity={0.55} />
-</GGPlot>`,
   chart: () => (
     <SitePlot
       data={rectData}
@@ -147,12 +124,6 @@ export const polygonShapes: DocExample = {
   whatChanged:
     "The group aesthetic partitions row-ordered vertices before each loop is lowered.",
   dataPreview: polygonData,
-  jsxSource: `<GGPlot
-  data={polygonData}
-  mapping={{ x: "x", y: "y", group: "group", fill: "group" }}
->
-  <GeomPolygon opacity={0.72} />
-</GGPlot>`,
   chart: () => (
     <SitePlot
       data={polygonData}
@@ -172,10 +143,6 @@ export const rasterGrid: DocExample = {
   whatChanged:
     "The raster form keeps cells edge-to-edge while the fill scale maps the numeric value column.",
   dataPreview: heatmapData,
-  jsxSource:
-    `<GGPlot data={heatmapData} mapping={{ x: "x", y: "y", fill: "value" }}>
-  <GeomRaster />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={heatmapData} mapping={{ x: "x", y: "y", fill: "value" }}>
       <GeomRaster />
@@ -193,19 +160,6 @@ export const labelsAndIntervals: DocExample = {
   whatChanged:
     "The boxplot uses raw grouped values, while the error bars and labels use layer-specific mappings over the same rows.",
   dataPreview: intervalData,
-  jsxSource: `<GGPlot data={intervalData} mapping={{ x: "group", y: "value" }}>
-  <GeomBoxplot fill="#bfdbfe" />
-  <GeomErrorbar
-    mapping={{ x: "group", ymin: "low", ymax: "high" }}
-    width={0.35}
-    color="#1d4ed8"
-  />
-  <GeomLabel
-    mapping={{ x: "group", y: "high", label: "group" }}
-    color="#111827"
-    angle={-12}
-  />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={intervalData} mapping={{ x: "group", y: "value" }}>
       <GeomBoxplot fill="#bfdbfe" />
@@ -232,10 +186,6 @@ export const boxplotReference: DocExample = {
   whatChanged:
     "<GeomBoxplot> owns the example so its stat_boxplot inputs and box topology can be read without unrelated layers.",
   dataPreview: distributionData,
-  jsxSource:
-    `<GGPlot data={distributionData} mapping={{ x: "group", y: "value" }}>
-  <GeomBoxplot fill="#bfdbfe" coef={1.5} />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={distributionData} mapping={{ x: "group", y: "value" }}>
       <GeomBoxplot fill="#bfdbfe" coef={1.5} />
@@ -252,10 +202,6 @@ export const densityCurve: DocExample = {
   whatChanged:
     "The density stat emits a regular evaluation grid before line lowering.",
   dataPreview: distributionData,
-  jsxSource:
-    `<GGPlot data={distributionData} mapping={{ x: "value", color: "group" }}>
-  <GeomDensity n={48} linewidth={3} />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={distributionData} mapping={{ x: "value", color: "group" }}>
       <GeomDensity n={48} linewidth={3} />
@@ -273,19 +219,6 @@ export const violinAndDots: DocExample = {
   whatChanged:
     "The violin produces polygon density products; the dot layer uses its own x mapping and a fixed bin width.",
   dataPreview: distributionData,
-  jsxSource: `<GGPlot
-  data={distributionData}
-  mapping={{ x: "group", y: "value", fill: "group" }}
->
-  <GeomViolin n={36} opacity={0.45} />
-  <GeomDotplot
-    mapping={{ x: "value" }}
-    inheritAes={false}
-    binwidth={0.35}
-    color="#111827"
-    size={4}
-  />
-</GGPlot>`,
   chart: () => (
     <SitePlot
       data={distributionData}
@@ -311,12 +244,6 @@ export const violinReference: DocExample = {
   whatChanged:
     "The dedicated example exposes <GeomViolin>'s ydensity stat and bandwidth-controlled polygon product.",
   dataPreview: distributionData,
-  jsxSource: `<GGPlot
-  data={distributionData}
-  mapping={{ x: "group", y: "value", fill: "group" }}
->
-  <GeomViolin n={48} opacity={0.55} />
-</GGPlot>`,
   chart: () => (
     <SitePlot
       data={distributionData}
@@ -337,10 +264,6 @@ export const rectangularAndHexBins: DocExample = {
   whatChanged:
     "Both stats count observed cells; tile lowering emits four vertices and hex lowering emits six.",
   dataPreview: pointCloud2dData,
-  jsxSource: `<GGPlot data={pointCloud2dData} mapping={{ x: "x", y: "y" }}>
-  <GeomBin2d bins={5} opacity={0.38} />
-  <GeomHex bins={5} opacity={0.72} />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={pointCloud2dData} mapping={{ x: "x", y: "y" }}>
       <GeomBin2d bins={5} opacity={0.38} />
@@ -359,10 +282,6 @@ export const qqDiagnostics: DocExample = {
   whatChanged:
     "Both layers consume the same y sample but produce distinct point and two-endpoint line products.",
   dataPreview: distributionData,
-  jsxSource: `<GGPlot data={distributionData} mapping={{ y: "value" }}>
-  <GeomQq size={6} color="#2563eb" />
-  <GeomQqLine color="#ef4444" linewidth={2} />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={distributionData} mapping={{ y: "value" }}>
       <GeomQq size={6} color="#2563eb" />
@@ -381,10 +300,6 @@ export const contourBands: DocExample = {
   whatChanged:
     "The shared grid is lowered once into filled cells and again into line segments at explicit breaks.",
   dataPreview: contourData,
-  jsxSource: `<GGPlot data={contourData} mapping={{ x: "x", y: "y", z: "z" }}>
-  <GeomContourFilled breaks={[0.5, 1.5, 2.5]} opacity={0.7} />
-  <GeomContour breaks={[0.5, 1.5, 2.5]} color="#111827" linewidth={2} />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={contourData} mapping={{ x: "x", y: "y", z: "z" }}>
       <GeomContourFilled breaks={[0.5, 1.5, 2.5]} opacity={0.7} />
@@ -393,7 +308,7 @@ export const contourBands: DocExample = {
   ),
 };
 
-const aliasData = {
+export const aliasData = {
   x: [0, 0.2, 0.7, 1.1, 1.2, 1.8, 2.1, 2.4, 2.8, 3],
   y: [1, 1.4, 1.1, 2, 1.7, 2.6, 2.1, 3, 2.7, 3.4],
 };
@@ -408,16 +323,6 @@ export const freqpolyAndJitter: DocExample = {
   whatChanged:
     "Both components are concise forms: a line with stat_bin, and points with position_jitter (seeded, so every render matches).",
   dataPreview: aliasData,
-  jsxSource: `<GGPlot data={aliasData} mapping={{ x: "x", y: "y" }}>
-  <GeomFreqpoly
-    mapping={{ x: "x" }}
-    inheritAes={false}
-    bins={7}
-    color="#dc2626"
-    linewidth={3}
-  />
-  <GeomJitter width={0.08} height={0.08} color="#2563eb" size={5} />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={aliasData} mapping={{ x: "x", y: "y" }}>
       <GeomFreqpoly
@@ -432,7 +337,7 @@ export const freqpolyAndJitter: DocExample = {
   ),
 };
 
-const connectedData = {
+export const connectedData = {
   x: [0, 1, 2],
   y: [0.5, 1.8, 1.1],
   xend: [0.8, 1.8, 2.8],
@@ -451,19 +356,6 @@ export const connectedGeomVariants: DocExample = {
   whatChanged:
     "Steps insert corner vertices, curves use fixed quadratic tessellation, spokes derive endpoints from angle/radius, and rugs convert CSS pixels into panel units.",
   dataPreview: connectedData,
-  jsxSource: `<GGPlot data={connectedData} mapping={{ x: "x", y: "y" }}>
-  <GeomStep direction="mid" color="#2563eb" linewidth={3} />
-  <GeomCurve
-    mapping={{ x: "x", y: "y", xend: "xend", yend: "yend" }}
-    curvature={0.25}
-    color="#7c3aed"
-  />
-  <GeomSpoke
-    mapping={{ x: "x", y: "y", angle: "angle", radius: "radius" }}
-    color="#ea580c"
-  />
-  <GeomRug sides="bl" length={7} color="#111827" />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={connectedData} mapping={{ x: "x", y: "y" }}>
       <GeomStep direction="mid" color="#2563eb" linewidth={3} />
@@ -481,8 +373,10 @@ export const connectedGeomVariants: DocExample = {
   ),
 };
 
-const functionRange = { x: [-2, 2] };
-const blankBounds = { bx: [-3, 3], by: [-1, 10] };
+export const functionRange = { x: [-2, 2] };
+/** The function GeomFunction samples. */
+export const square = (x: number) => x * x;
+export const blankBounds = { bx: [-3, 3], by: [-1, 10] };
 
 export const functionAndBlank: DocExample = {
   id: "FunctionAndBlank",
@@ -494,17 +388,9 @@ export const functionAndBlank: DocExample = {
   whatChanged:
     "The blank layer participates in scale training but draws no marks and adds no guide keys.",
   dataPreview: functionRange,
-  jsxSource: `<GGPlot data={functionRange} mapping={{ x: "x" }}>
-  <GeomFunction fun={(x) => x * x} n={64} color="#059669" linewidth={3} />
-  <GeomBlank
-    data={blankBounds}
-    mapping={{ x: "bx", y: "by" }}
-    inheritAes={false}
-  />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={functionRange} mapping={{ x: "x" }}>
-      <GeomFunction fun={(x) => x * x} n={64} color="#059669" linewidth={3} />
+      <GeomFunction fun={square} n={64} color="#059669" linewidth={3} />
       <GeomBlank
         data={blankBounds}
         mapping={{ x: "bx", y: "by" }}
@@ -514,7 +400,7 @@ export const functionAndBlank: DocExample = {
   ),
 };
 
-const repeatedData = {
+export const repeatedData = {
   x: [0, 0, 0, 1, 1, 2],
   y: [1, 1, 1, 2, 2, 1.5],
 };
@@ -529,9 +415,6 @@ export const countedPoints: DocExample = {
   whatChanged:
     "stat_sum emits serializable n and prop columns per x/y/group tuple before the size scale is trained.",
   dataPreview: repeatedData,
-  jsxSource: `<GGPlot data={repeatedData} mapping={{ x: "x", y: "y" }}>
-  <GeomCount color="#2563eb" />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={repeatedData} mapping={{ x: "x", y: "y" }}>
       <GeomCount color="#2563eb" />
@@ -549,10 +432,6 @@ export const density2dContours: DocExample = {
   whatChanged:
     "Both layers share KDE bandwidth and contour-break semantics; one lowers grid bands and the other line segments.",
   dataPreview: pointCloud2dData,
-  jsxSource: `<GGPlot data={pointCloud2dData} mapping={{ x: "x", y: "y" }}>
-  <GeomDensity2dFilled n={32} bins={8} opacity={0.65} />
-  <GeomDensity2d n={32} bins={8} contourVar="density" color="#172554" />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={pointCloud2dData} mapping={{ x: "x", y: "y" }}>
       <GeomDensity2dFilled n={32} bins={8} opacity={0.65} />

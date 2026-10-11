@@ -203,3 +203,25 @@ async producer, such as a fetched file, a decoder or a GPU loader. Nothing below
 mounts until it resolves, and the function's identity is the load, so keep it
 stable. Resident stat products read the data tier's columns directly when they
 plot its frame, rather than uploading copies.
+
+## Printing JSX (`emitSource` → `printJsx`)
+
+`emitSource(compile(spec))` printed a standalone module with the data inlined as
+typed-array literals. That emitter is gone. `printJsx(element, { refs })` prints
+a component tree as the JSX you would write, and data passes by reference: each
+frame, array or loader prints as the name you give it in `refs`.
+
+```ts
+import { printJsx } from "@gggplot/core";
+printJsx(chart, { refs: new Map([[cars, "cars"]]) }).source;
+// <GGPlot data={cars} mapping={{ x: "wt", y: "mpg" }}>
+//   <GeomPoint size={6} />
+// </GGPlot>
+```
+
+The CLI follows the same model. `gggplot compile spec.ts` is replaced by
+`gggplot print chart.tsx [out.tsx]`. The CLI loads a module that exports a tree
+(a `chart` or default export) and writes a type-checked `.tsx`:
+
+- gggplot's components are imported from `@gggplot/core`.
+- Data and helpers are imported from the input module, which must export them.

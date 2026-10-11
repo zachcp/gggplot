@@ -138,25 +138,21 @@ RenderTree
 
 ### Why a RenderTree in the middle?
 
-It **decouples the front-end from the back-end** and gives us _two backends from
-one compiler_:
+It **decouples the front-end from the back-end**:
 
 ```
 RenderTree
-  ├── renderLive()   → UseGPU Live elements via createElement   (runtime)
-  └── emitSource()   → .tsx source string                        (codegen)
+  └── renderLive()   → UseGPU Live elements via createElement   (runtime)
 ```
 
 - **`renderLive` (`src/render/GGPlot.tsx`)** — `<GGPlot spec>` compiles and maps
   each node to a real `@use-gpu/plot` component. Used by the interactive doc
   page; hosts inside a `<WebGPU><AutoCanvas><FlatCamera><Pass>` shell and a
   host-configurable `FontLoader` so `Label` nodes can render real text.
-- **`emitSource` (`src/emit/mod.ts`)** — walks the same tree and prints a
-  self-contained UseGPU Live `.tsx` module. This is the literal "transpiler" and
-  the basis for a future `gggplot compile` CLI.
-
-Both consume the identical RenderTree, so behavior can't drift between "live"
-and "emitted," and either can be tested in isolation.
+- **`printJsx` (`src/emit/jsx.ts`)** replaced the frozen-literal `emitSource`
+  emitter (gggplot-vnh.11). It prints a component element tree, not a
+  RenderTree, as the JSX a user would write, and passes data by reference.
+  `gggplot print` and the doc site's source panels use it.
 
 ### Module layout (`packages/core/src`)
 

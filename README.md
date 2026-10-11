@@ -29,7 +29,7 @@ detailed [CPU/GPU residency matrix](docs/RESIDENCY_MATRIX.md).
 ## Quick start
 
 ```bash
-# Transpiler end-to-end, no browser (prints render tree + emitted source):
+# Build a component tree in code and print it as JSX, no browser:
 deno task demo
 
 # Type-check the library:
@@ -68,8 +68,9 @@ ggplot(data, aes(...)).add(geomPoint())      DSL
 GGSpec (IR)                                   the transpiler's "AST"
         │  compile()  — stat → scales → facet → coord → geoms → guides
 RenderTree                                    abstract UseGPU node tree
-        ├── renderLive()  → UseGPU Live elements   (<GGPlot spec>, runtime)
-        └── emitSource()  → .tsx source string     (codegen)
+        └── renderLive()  → UseGPU Live elements   (<GGPlot spec>, runtime)
+
+Component trees print back to JSX with printJsx() (`gggplot print`).
 ```
 
 `@use-gpu/plot` already provides the target vocabulary — `Plot`, `Cartesian`/

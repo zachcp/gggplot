@@ -8,7 +8,6 @@ import * as Jsx from "@gggplot/core/jsx";
 import type { LiveElement } from "@use-gpu/live";
 import { AutoCanvas, WebGPU } from "@use-gpu/webgpu";
 import {
-  createFontResources,
   GGPanel,
   GGPlot,
   type GGSpec,
@@ -18,7 +17,6 @@ import {
   type ScenePickPublish,
 } from "@gggplot/core";
 import { withSiteChartTheme3d } from "./chart_theme.ts";
-import { assetUrl } from "./asset_url.ts";
 import { specChildren } from "./spec_components.tsx";
 
 interface Props {
@@ -31,20 +29,8 @@ interface Props {
   publishPick?: ScenePickPublish;
 }
 
-export const fontResources = createFontResources([
-  {
-    family: "Basic",
-    weight: 400,
-    style: "normal",
-    src: assetUrl("/fonts/Basic-Regular.ttf"),
-  },
-  {
-    family: "Lato",
-    weight: 400,
-    style: "normal",
-    src: assetUrl("/fonts/Lato-Regular.ttf"),
-  },
-]);
+export { fontResources3d as fontResources } from "./site_fonts.ts";
+import { fontResources3d as fontResources } from "./site_fonts.ts";
 
 export const Scene3D = (
   { canvas, spec, chart, prismInstances, publishPick }: Props,

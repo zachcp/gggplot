@@ -5,6 +5,7 @@ import { ExampleSection, Panel } from "./ExampleSection.tsx";
 import { ModelInspectionSection } from "./ModelInspectionSection.tsx";
 import { ChartCanvas3D } from "./ChartCanvas3D.tsx";
 import { useViewportWidth } from "./hooks.ts";
+import { printedSource } from "./docs/printed_source.ts";
 import { styles } from "./styles.ts";
 
 // Vite publishes the repository's normative architecture document as an asset,
@@ -247,7 +248,9 @@ export function App() {
                 }}
               >
                 <Panel title="Component JSX">
-                  <pre style={styles.pre}>{threeD.jsxSource}</pre>
+                  <pre style={styles.pre} data-printed-source="">
+                    {printedSource(threeD)}
+                  </pre>
                 </Panel>
                 <Panel title="live WebGPU render (3D)">
                   <ChartCanvas3D

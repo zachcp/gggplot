@@ -2,7 +2,7 @@
 /** @jsx Jsx.createElement */
 // Interval, smoothing, label, distribution, area and waffle geoms, written as
 // component JSX (gggplot-vnh.10.1); see examples_basics.tsx for the
-// chart/jsxSource convention.
+// chart convention.
 import * as Jsx from "@gggplot/core/jsx";
 import {
   GeomArea,
@@ -30,7 +30,7 @@ import { SitePlot } from "../site_plot.tsx";
 import type { DocExample } from "./types.ts";
 import { scatterData } from "./data/demo.ts";
 
-const intervalFamilyData = {
+export const intervalFamilyData = {
   x: [1, 2, 3, 4],
   y: [2.2, 3.4, 2.8, 4.1],
   ymin: [1.4, 2.5, 2, 3.2],
@@ -47,21 +47,6 @@ export const intervalFamily: DocExample = {
   whatChanged:
     "Endpoint domains and orientation inference are shared; each component only selects the additional caps, point, or box topology.",
   dataPreview: intervalFamilyData,
-  jsxSource: `<GGPlot
-  data={intervalFamilyData}
-  mapping={{ x: "x", y: "y", ymin: "ymin", ymax: "ymax" }}
->
-  <GeomLinerange color="#64748b" />
-  <GeomPointrange color="#2563eb" size={6} />
-  <GeomErrorbar width={0.35} color="#dc2626" />
-  <GeomCrossbar width={0.55} color="#7c3aed" />
-  <GeomErrorbarh
-    mapping={{ y: "y", xmin: "ymin", xmax: "ymax" }}
-    inheritAes={false}
-    width={0.18}
-    color="#059669"
-  />
-</GGPlot>`,
   chart: () => (
     <SitePlot
       data={intervalFamilyData}
@@ -91,9 +76,6 @@ export const quantileRegression: DocExample = {
   whatChanged:
     "Each quantile emits a separate two-endpoint group and maps its probability through the color scale.",
   dataPreview: scatterData,
-  jsxSource: `<GGPlot data={scatterData} mapping={{ x: "wt", y: "mpg" }}>
-  <GeomQuantile quantiles={[0.25, 0.5, 0.75]} linewidth={3} />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={scatterData} mapping={{ x: "wt", y: "mpg" }}>
       <GeomQuantile quantiles={[0.25, 0.5, 0.75]} linewidth={3} />
@@ -101,7 +83,7 @@ export const quantileRegression: DocExample = {
   ),
 };
 
-const loessData = {
+export const loessData = {
   x: [-2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2],
   y: [4.2, 2.1, 1.2, 0.4, 0.1, 0.5, 1.1, 2.4, 4.1],
 };
@@ -116,16 +98,6 @@ export const loessSmooth: DocExample = {
   whatChanged:
     "span controls each local neighborhood; level controls covariance-derived confidence limits.",
   dataPreview: loessData,
-  jsxSource: `<GGPlot data={loessData} mapping={{ x: "x", y: "y" }}>
-  <GeomPoint color="#475569" />
-  <GeomSmooth
-    method="loess"
-    span={0.75}
-    robustIterations={2}
-    level={0.9}
-    color="#7c3aed"
-  />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={loessData} mapping={{ x: "x", y: "y" }}>
       <GeomPoint color="#475569" />
@@ -140,7 +112,7 @@ export const loessSmooth: DocExample = {
   ),
 };
 
-const logisticData = {
+export const logisticData = {
   x: [-2, -2, -1, -1, 0, 0, 1, 1, 2, 2],
   y: [0, 0, 0, 1, 0, 1, 0, 1, 1, 1],
 };
@@ -155,10 +127,6 @@ export const logisticSmooth: DocExample = {
   whatChanged:
     "Deterministic IRLS fits the serializable family/link contract; unsupported GAM models belong in an extension adapter.",
   dataPreview: logisticData,
-  jsxSource: `<GGPlot data={logisticData} mapping={{ x: "x", y: "y" }}>
-  <GeomJitter width={0.04} height={0.025} color="#475569" />
-  <GeomSmooth method="glm" family="binomial" link="logit" color="#059669" />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={logisticData} mapping={{ x: "x", y: "y" }}>
       <GeomJitter width={0.04} height={0.025} color="#475569" />
@@ -167,7 +135,7 @@ export const logisticSmooth: DocExample = {
   ),
 };
 
-const labelData = {
+export const labelData = {
   x: [1, 2, 3],
   y: [1, 2, 1.4],
   label: ["plain", "two\nlines", "rotated"],
@@ -183,18 +151,6 @@ export const labelBackgrounds: DocExample = {
   whatChanged:
     "Box, border, and text share font metrics, rotation center, missing-row alignment, and compositional alpha.",
   dataPreview: labelData,
-  jsxSource:
-    `<GGPlot data={labelData} mapping={{ x: "x", y: "y", label: "label" }}>
-  <GeomLabel
-    fill="#f8fafc"
-    color="#0f172a"
-    borderColor="#38bdf8"
-    labelPadding={4}
-    labelR={3}
-    angle={20}
-  />
-  <ThemeDark />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={labelData} mapping={{ x: "x", y: "y", label: "label" }}>
       <GeomLabel
@@ -210,7 +166,7 @@ export const labelBackgrounds: DocExample = {
   ),
 };
 
-const ecdfData = {
+export const ecdfData = {
   value: [1, 1, 1.5, 2, 2.2, 2.2, 3, 3.4, 4],
   group: ["a", "a", "a", "a", "a", "b", "b", "b", "b"],
 };
@@ -224,9 +180,6 @@ export const empiricalCdf: DocExample = {
   whatChanged:
     "Semantic infinite padding reaches the trained panel edges without leaking into scale domains; weighted ECDFs are deferred.",
   dataPreview: ecdfData,
-  jsxSource: `<GGPlot data={ecdfData} mapping={{ x: "value", color: "group" }}>
-  <GeomEcdf linewidth={3} />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={ecdfData} mapping={{ x: "value", color: "group" }}>
       <GeomEcdf linewidth={3} />
@@ -234,7 +187,7 @@ export const empiricalCdf: DocExample = {
   ),
 };
 
-const duplicateData = { x: [1, 1, 2, 2, 3], y: [2, 2, 3, 4, 4] };
+export const duplicateData = { x: [1, 1, 2, 2, 3], y: [2, 2, 3, 4, 4] };
 
 export const uniqueRows: DocExample = {
   id: "UniqueRows",
@@ -246,9 +199,6 @@ export const uniqueRows: DocExample = {
   whatChanged:
     "Deduplication preserves source order and mappings and runs independently within each facet panel.",
   dataPreview: duplicateData,
-  jsxSource: `<GGPlot data={duplicateData} mapping={{ x: "x", y: "y" }}>
-  <StatUnique color="#7c3aed" size={7} />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={duplicateData} mapping={{ x: "x", y: "y" }}>
       <StatUnique color="#7c3aed" size={7} />
@@ -256,7 +206,7 @@ export const uniqueRows: DocExample = {
   ),
 };
 
-const summaryCellData = {
+export const summaryCellData = {
   x: [0.1, 0.2, 0.8, 0.9, 1.1, 1.2, 1.8, 1.9],
   y: [0.1, 0.2, 0.8, 0.9, 1.1, 1.2, 1.8, 1.9],
   score: [2, 4, 8, 12, 18, 22, 28, 34],
@@ -272,12 +222,6 @@ export const summaryHexCells: DocExample = {
   whatChanged:
     "The shared 2D summary contract supports mean, median, sum, min, and max; custom functions remain a CPU/reference feature and weights are intentionally unsupported in V1.",
   dataPreview: summaryCellData,
-  jsxSource:
-    `<GGPlot data={summaryCellData} mapping={{ x: "x", y: "y", z: "score" }}>
-  <StatSummary2d binwidth={[0.75, 0.75]} fun="mean" opacity={0.35} />
-  <StatSummaryBin bins={4} fun="max" opacity={0.25} />
-  <StatSummaryHex binwidth={[0.75, 0.75]} fun="median" />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={summaryCellData} mapping={{ x: "x", y: "y", z: "score" }}>
       <StatSummary2d binwidth={[0.75, 0.75]} fun="mean" opacity={0.35} />
@@ -287,7 +231,7 @@ export const summaryHexCells: DocExample = {
   ),
 };
 
-const streamgraphData = {
+export const streamgraphData = {
   month: [1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4],
   titles: [8, 12, 10, 14, 5, 9, 13, 8, 4, 6, 9, 12],
   genre: [
@@ -315,12 +259,6 @@ export const streamgraph: DocExample = {
   whatChanged:
     'This is ordinary <GeomArea> topology with position "stack" and offset "silhouette", not a streamgraph-specific geom.',
   dataPreview: streamgraphData,
-  jsxSource: `<GGPlot
-  data={streamgraphData}
-  mapping={{ x: "month", y: "titles", fill: "genre" }}
->
-  <GeomArea position="stack" offset="silhouette" />
-</GGPlot>`,
   chart: () => (
     <SitePlot
       data={streamgraphData}
@@ -341,12 +279,6 @@ export const stackedArea: DocExample = {
   whatChanged:
     "position stack carries each group's lower boundary forward at every x value and trains the y scale on cumulative totals.",
   dataPreview: streamgraphData,
-  jsxSource: `<GGPlot
-  data={streamgraphData}
-  mapping={{ x: "month", y: "titles", fill: "genre" }}
->
-  <GeomArea position="stack" />
-</GGPlot>`,
   chart: () => (
     <SitePlot
       data={streamgraphData}
@@ -357,7 +289,7 @@ export const stackedArea: DocExample = {
   ),
 };
 
-const mismatchedAreaData = {
+export const mismatchedAreaData = {
   x: [0, 2, 4, 1, 3, 5],
   y: [3, 7, 4, 5, 2, 6],
   series: ["A", "A", "A", "B", "B", "B"],
@@ -372,12 +304,6 @@ export const alignedStackedArea: DocExample = {
   whatChanged:
     "Each group is linearly interpolated on the sorted union of x values; outside support is zero and the resulting rows feed ordinary position stack.",
   dataPreview: mismatchedAreaData,
-  jsxSource: `<GGPlot
-  data={mismatchedAreaData}
-  mapping={{ x: "x", y: "y", fill: "series" }}
->
-  <StatAlign />
-</GGPlot>`,
   chart: () => (
     <SitePlot
       data={mismatchedAreaData}
@@ -388,7 +314,7 @@ export const alignedStackedArea: DocExample = {
   ),
 };
 
-const bumpData = {
+export const bumpData = {
   round: [1, 2, 3, 4, 1, 2, 3, 4],
   rank: [3, 2, 1, 2, 1, 1, 3, 1],
   team: ["A", "A", "A", "A", "B", "B", "B", "B"],
@@ -403,10 +329,6 @@ export const bumpChart: DocExample = {
   whatChanged:
     "Bump charts compose a reusable sigmoid connection stat with ordinary line rendering; groups and facets never connect across boundaries.",
   dataPreview: bumpData,
-  jsxSource:
-    `<GGPlot data={bumpData} mapping={{ x: "round", y: "rank", color: "team" }}>
-  <StatConnect connection="sigmoid" samples={24} steepness={8} />
-</GGPlot>`,
   chart: () => (
     <SitePlot
       data={bumpData}
@@ -417,7 +339,7 @@ export const bumpChart: DocExample = {
   ),
 };
 
-const waffleData = {
+export const waffleData = {
   status: ["resolved", "progress", "blocked", "new"],
   count: [58, 27, 9, 6],
 };
@@ -431,9 +353,6 @@ export const waffleChart: DocExample = {
   whatChanged:
     "Waffle charts are a regular core geom: fill mappings train ordinary scales and guides, while stat_waffle supplies tile positions.",
   dataPreview: waffleData,
-  jsxSource: `<GGPlot data={waffleData} mapping={{ fill: "status" }}>
-  <GeomWaffle weight="count" rows={10} maxCells={100} />
-</GGPlot>`,
   chart: () => (
     <SitePlot data={waffleData} mapping={{ fill: "status" }}>
       <GeomWaffle weight="count" rows={10} maxCells={100} />

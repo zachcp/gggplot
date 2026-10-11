@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
+import { assertEquals, assertThrows } from "@std/assert";
 // Headless pipeline: DSL → compile → emit, no UseGPU runtime import.
 import {
   annotate,
@@ -78,7 +78,6 @@ import {
   statFunction,
   statSum,
   statSummary2d,
-  statSummaryBin,
   statSummaryHex,
   statUnique,
   statWaffle,
@@ -95,7 +94,6 @@ import {
 import { compile } from "../src/compile/mod.ts";
 import { facetCellLayouts } from "../src/compile/facet_layout.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
-import { emitSource } from "../src/emit/mod.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
 import { asFactor, asNumeric, columnValues, ingest } from "../src/data/mod.ts";
 import { applyStat } from "../src/stat/mod.ts";
@@ -590,7 +588,6 @@ Deno.test("silhouette stacking centers bars and area bands around zero", () => {
     [1, -1],
     [0, -1],
   ]);
-  assertStringIncludes(emitSource(tree, "StreamgraphChart"), "<ChunkedFace");
 });
 
 Deno.test("dodgeBars keeps a group's slot stable across different x values", () => {
@@ -623,10 +620,6 @@ Deno.test("geom_text renders a Label with per-point positions and text", () => {
   const label = panel.children.find((c) => c.component === "Label");
   assertEquals(decodePositions(label!.props.positions), [[0, 10], [1, 20]]);
   assertEquals(label?.props.labels, ["Alice", "Bob"]);
-
-  const src = emitSource(tree, "LabeledChart");
-  assertStringIncludes(src, "Label");
-  assertStringIncludes(src, "Alice");
 });
 
 Deno.test("geom_label emits measured backgrounds, borders, and text in z order", () => {
@@ -678,7 +671,6 @@ Deno.test("geom_label emits measured backgrounds, borders, and text in z order",
     Math.max(...loop.map(([, y]) => y)) - Math.min(...loop.map(([, y]) => y));
   assertEquals(height(loops[1]) > height(loops[0]), true);
   assertEquals(decodeChunkColors(box), ["#fef3c7", "#fef3c7"]);
-  assertStringIncludes(emitSource(tree, "LabelBoxChart"), "<ChunkedFace");
 });
 
 Deno.test("geom_label rotates its boxes and retains mapped styling after missing labels", () => {
@@ -1006,23 +998,6 @@ Deno.test("2D summary stats reduce z in rectangular and hex cells", () => {
     ).flatMap((node) => decodeChunks(node)).length,
     2,
   );
-
-  for (
-    const part of [
-      statSummaryHex({ bins: 2, fun: "sum" }),
-      statSummaryBin({ bins: 2, fun: "max" }),
-    ]
-  ) {
-    const tree = compile(
-      ggplot(data, { x: "x", y: "y", z: "z" }).add(part).build(),
-    );
-    assertEquals(
-      findNodes(tree, "ChunkedFace").filter((node) => !node.props.guideKind)
-        .flatMap((node) => decodeChunks(node)).length,
-      2,
-    );
-    assertStringIncludes(emitSource(tree, "Summary2dChart"), "ChunkedFace");
-  }
 });
 
 Deno.test("2D summary stats support built-ins, grouping, custom reducers, and validation", () => {
@@ -1061,11 +1036,6 @@ Deno.test("2D summary stats support built-ins, grouping, custom reducers, and va
       "value",
     ),
     [4],
-  );
-  assertThrows(
-    () => emitSource(compile(custom), "CustomSummary"),
-    TypeError,
-    "cannot serialize a custom 2D summary reducer",
   );
   const literalFill = ggplot(data, { x: "x", y: "y", z: "z" }).add(
     statSummary2d({ bins: 1, fill: "#ef4444" }),
@@ -1556,11 +1526,6 @@ Deno.test("coord_polar selects the Polar view and passes through bend/on params"
     [0, 20],
     [Math.PI, 30],
   ]);
-  const src = emitSource(tree, "CircularPolar");
-  assertStringIncludes(src, "const RadialViewport");
-  // The viewport is a plot <Transform> (gggplot-vnh.17), bound like the rest.
-  assertStringIncludes(src, "createElement(Transform, { scale }, children)");
-  assertStringIncludes(src, "Grid, Point, Transform } = PlotComponents");
 });
 
 Deno.test("coord_radial and coord_fixed preserve their declarative view transforms", () => {
@@ -2116,7 +2081,6 @@ Deno.test("stat_align resamples mismatched groups onto a deterministic union gri
     decodeChunks(node)
   ).filter((loop) => loop.length === 8);
   assertEquals(bands.length, 2);
-  assertStringIncludes(emitSource(tree, "AlignedAreaChart"), "positions");
 });
 
 Deno.test("stat_align handles missing rows, duplicate policies, and explicit grids", () => {
@@ -3082,10 +3046,6 @@ Deno.test("labels() overrides legend titles and emits plot title text", () => {
   assertEquals(labelTexts, [["Penguins"], ["By species"], ["Source: demo"], [
     "Species",
   ], ["a", "b"]]);
-
-  const src = emitSource(tree, "LabeledPlot");
-  assertStringIncludes(src, "Penguins");
-  assertStringIncludes(src, "Species");
 });
 
 Deno.test("labels() renames facet strip variables", () => {
@@ -3473,7 +3433,6 @@ Deno.test("grid rules and labels share pretty or explicit scale breaks", () => {
     [[3, 0], [3, 2]],
     [[10, 0], [10, 2]],
   ]);
-  assertStringIncludes(emitSource(explicit), "const GuideLines = Line;");
 });
 
 Deno.test("facet grid rules and labels share the reduced per-panel break count", () => {
@@ -3676,17 +3635,6 @@ Deno.test("mapped family and fontface split text into semantic face batches", ()
       ["Second", "bold", "normal", ["other"]],
     ],
   );
-  assertStringIncludes(emitSource(tree, "TextFaces"), 'family="Second"');
-});
-
-Deno.test("emitSource produces UseGPU Live source with a classic pragma", () => {
-  const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint()).build();
-  const src = emitSource(compile(spec), "MyChart");
-
-  assertStringIncludes(src, "@jsx createElement");
-  assertStringIncludes(src, 'from "@use-gpu/plot"');
-  assertStringIncludes(src, "export const MyChart");
-  assertStringIncludes(src, "<Point");
 });
 
 Deno.test("facet_wrap partitions data into panels laid out in an auto-sized grid", () => {
@@ -3952,73 +3900,6 @@ Deno.test("facet partitions before stats, so stat_count aggregates within each p
   assertEquals(panels[1].flatMap((node) => decodeChunks(node)).length, 2);
 });
 
-Deno.test("emitSource inlines a standalone FacetGrid definition for faceted specs", () => {
-  const facetData = { grp: ["a", "b"], x: [1, 2], y: [10, 20] };
-  const spec = ggplot(facetData, { x: "x", y: "y" }).add(
-    geomPoint(),
-    facetWrap(["grp"]),
-  ).build();
-  const src = emitSource(compile(spec), "FacetedChart");
-
-  assertStringIncludes(src, "<FacetGrid");
-  assertStringIncludes(src, "<FacetPanel>");
-  // Inline defs carry `: any` param annotations so the generated module
-  // type-checks standalone (see the generated-module deno-check test below).
-  assertStringIncludes(src, "const FacetPanel = ({ children }: any)");
-  assertStringIncludes(src, "const FacetGrid = (");
-  // gggplot-q24 drift tripwire: the emitted module embeds the COMPILED
-  // facetCellLayouts function itself, so the emitted grid math is the live
-  // backend's grid math by construction — any edit to facet_layout.ts flows
-  // into emitted source automatically, and the emitted FacetGrid consumes it
-  // the same way render/GGPlot.tsx's FacetGrid does (layouts[i].panel).
-  assertStringIncludes(src, facetCellLayouts.toString());
-  assertStringIncludes(
-    src,
-    "facetCellLayouts(width, height, nrow, ncol, gap, stripHeight)",
-  );
-  assertStringIncludes(src, "const panel = layouts[i].panel;");
-  assertStringIncludes(src, "import { FontLoader, LayoutContext }");
-  assertStringIncludes(
-    src,
-    "createElement(Transform, { position, scale }, children)",
-  );
-  assertStringIncludes(
-    src,
-    "createElement, Fragment, useAwait, useContext, useMemo",
-  );
-  assertStringIncludes(src, "const EmittedFontHost =");
-  assertStringIncludes(src, "({ fontResources }: any = {})");
-});
-
-// gggplot-tzc.6: the emit backend serializes FlatTensor/MarkTopology props as
-// executable Float32Array/Uint32Array literals and inlines standalone
-// ChunkedLine/ChunkedFace definitions (mirroring render/chunked_line.tsx +
-// render/chunked_face.tsx) while plain guide/annotation nodes stay plot
-// components. These three tests are the bead's acceptance surface.
-
-Deno.test("gggplot-tzc.6 guide-vs-mark: an hline annotation emits a plot Line while a grouped geom line emits the inlined ChunkedLine", () => {
-  const spec = ggplot(
-    { x: [0, 1, 0, 1], y: [10, 20, 15, 25], grp: ["a", "a", "b", "b"] },
-    { x: "x", y: "y", color: "grp" },
-  ).add(geomLine(), geomHline({ yintercept: 18 })).build();
-  const src = emitSource(compile(spec), "GuideVsMark");
-
-  // The data-driven grouped line mark selects the inlined ChunkedLine, which is
-  // DEFINED in-module (not a plot import) and pulls its hooks from workbench.
-  assertStringIncludes(src, "<ChunkedLine");
-  assertStringIncludes(src, "const ChunkedLine = (props: any)");
-  assertStringIncludes(src, 'import * as Workbench from "@use-gpu/workbench"');
-
-  // The hline reference annotation stays a plain plot Line, bound from plot.
-  assertStringIncludes(src, "<Line ");
-  assertStringIncludes(src, 'import * as PlotComponents from "@use-gpu/plot"');
-  const plotBinding = src.split("\n").find((line) =>
-    line.startsWith("const {") && line.includes("} = Plot")
-  )!;
-  assertEquals(/\bLine\b/.test(plotBinding), true);
-  assertEquals(plotBinding.includes("ChunkedLine"), false);
-});
-
 Deno.test("gggplot-tzc.6 mark emission: a grouped-line + stacked-bar spec emits exactly one ChunkedLine and one ChunkedFace with typed-array literals, no nested arrays in marks, and no owners", () => {
   const spec = ggplot(
     { cat: ["a", "a", "b", "b"], y: [3, 5, 2, 4], grp: ["p", "q", "p", "q"] },
@@ -4028,62 +3909,6 @@ Deno.test("gggplot-tzc.6 mark emission: a grouped-line + stacked-bar spec emits 
 
   assertEquals(findNodes(tree, "ChunkedLine").length, 1);
   assertEquals(findNodes(tree, "ChunkedFace").length, 1);
-
-  const src = emitSource(tree, "GroupedLineStackedBar");
-  assertEquals((src.match(/<ChunkedLine\b/g) ?? []).length, 1);
-  assertEquals((src.match(/<ChunkedFace\b/g) ?? []).length, 1);
-
-  // Flat tensors serialize to executable typed-array literals — no base64.
-  assertStringIncludes(src, "new Float32Array(");
-  assertStringIncludes(src, "new Uint32Array(");
-
-  // No compiler-internal owners key ever reaches the emitted source.
-  assertEquals(src.includes("owners"), false);
-
-  // Each mark node serializes a FlatTensor 'positions', never a nested
-  // [[x,y],...] array (guide/legend nodes may still use nested arrays; the
-  // marks must not).
-  for (const tag of ["<ChunkedLine", "<ChunkedFace"]) {
-    const markLine = src.split("\n").find((line) => line.includes(tag))!;
-    assertStringIncludes(markLine, "positions={{ array: new Float32Array(");
-    assertEquals(markLine.includes("[["), false);
-  }
-});
-
-Deno.test("gggplot-tzc.6 generated module type-checks: emit to a temp .tsx and deno check it clean", async () => {
-  const spec = ggplot(
-    { cat: ["a", "a", "b", "b"], y: [3, 5, 2, 4], grp: ["p", "q", "p", "q"] },
-    { x: "cat", y: "y", fill: "grp", color: "grp", group: "grp" },
-  ).add(geomCol(), geomLine(), geomHline({ yintercept: 3 })).build();
-  const src = emitSource(compile(spec), "GeneratedChart");
-
-  // Write inside packages/core so the emitted module's bare @use-gpu/* imports
-  // resolve through this package's deno.json import map, then type-check it as
-  // its own standalone module — the inlined Chunked* definitions and every
-  // FlatTensor/MarkTopology literal must compile.
-  const packageDir = new URL("../", import.meta.url).pathname;
-  const outPath = await Deno.makeTempFile({
-    dir: packageDir,
-    prefix: "gen_module_",
-    suffix: ".tsx",
-  });
-  try {
-    await Deno.writeTextFile(outPath, src);
-    const { code, stderr } = await new Deno.Command("deno", {
-      args: ["check", outPath],
-      stdout: "piped",
-      stderr: "piped",
-    }).output();
-    assertEquals(
-      code,
-      0,
-      `deno check on the generated module failed:\n${
-        new TextDecoder().decode(stderr)
-      }`,
-    );
-  } finally {
-    await Deno.remove(outPath);
-  }
 });
 
 Deno.test("simple geom aliases expose their exact IR defaults", () => {
@@ -4215,7 +4040,6 @@ Deno.test("statConnect emits deterministic grouped sigmoid vertices", () => {
     findNodes(tree, "ChunkedLine").flatMap((node) => decodeChunks(node)).length,
     2,
   );
-  assertStringIncludes(emitSource(tree, "BumpChart"), "<ChunkedLine");
 
   for (const connection of ["linear", "hv", "vh", "mid"] as const) {
     const layer = ggplot({ x: [0, 1], y: [0, 1] }, { x: "x", y: "y" }).add(
@@ -4321,10 +4145,6 @@ Deno.test("freqpoly, function, and jitter aliases compile and emit source", () =
   assertEquals(decodeChunks(findNodes(fnTree, "ChunkedLine")[0])[0].length, 5);
   const jitterSpec = ggplot(data, { x: "x", y: "y" }).add(geomJitter()).build();
   assertEquals(findNodes(compile(jitterSpec), "Point").length, 1);
-  assertStringIncludes(
-    emitSource(compile(jitterSpec), "JitterChart"),
-    "<Point",
-  );
 });
 
 Deno.test("stat_sum aggregates complete tuples with weighted group-local proportions", () => {
@@ -4357,7 +4177,6 @@ Deno.test("geomCount uses area-scaled counts, supports literal size, facets, and
   const spec = ggplot(countData, { x: "x", y: "y" }).add(geomCount()).build();
   const point = findNodes(compile(spec), "Point")[0];
   assertScalars(point.props.sizes, [6, 1]);
-  assertStringIncludes(emitSource(compile(spec), "CountChart"), "sizes=");
 
   const literal = compile(
     ggplot(countData, { x: "x", y: "y" }).add(geomCount({ size: 9 })).build(),
@@ -4435,7 +4254,6 @@ Deno.test("density2d line/filled constructors contour and reject invalid control
     ).build(),
   );
   assertEquals(findNodes(filledTree, "Polygon").length > 0, true);
-  assertStringIncludes(emitSource(lineTree, "Density2dChart"), "<Line");
   for (
     const opts of [{ n: 1 }, { h: [0, 1] }, { adjust: [1] }, {
       contourVar: "bad",
@@ -4495,7 +4313,6 @@ Deno.test("interval family shares orientation-aware stem, cap, box, and point to
     ).build().layers[0].params.orientation,
     "y",
   );
-  assertStringIncludes(emitSource(horizontal, "HorizontalIntervals"), "<Line");
 });
 
 Deno.test("interval family rejects incomplete and ambiguous orientation mappings", () => {
@@ -4640,7 +4457,6 @@ Deno.test("geomQuantile handles degenerate x, emits source, and validates V1 con
   // gggplot-tzc.3: geom_quantile lowers via lowerLine → ChunkedLine.
   const fitted = findNodes(tree, "ChunkedLine")[0];
   assertEquals(decodeChunks(fitted), [[[1, 1.5], [1, 1.5]]]);
-  assertStringIncludes(emitSource(tree, "QuantileChart"), "<ChunkedLine");
   for (
     const opts of [{ method: "loess" }, { quantiles: [] }, {
       quantiles: [0, 0.5],
@@ -4717,7 +4533,6 @@ Deno.test("stat_smooth glm fits bounded logistic probabilities and validates cap
   );
   // gggplot-tzc.4: the SE ribbon packs into a ChunkedFace node.
   assertEquals(findNodes(tree, "ChunkedFace").length > 0, true);
-  assertStringIncludes(emitSource(tree, "GlmSmooth"), "<ChunkedLine");
 
   const invalid = [
     { method: "gam" },
@@ -4861,10 +4676,6 @@ Deno.test("geomLabel rotates boxes, aligns mapped fills after missing rows, and 
     ),
     true,
   );
-  assertStringIncludes(
-    emitSource(compileAngle(45), "LabelChart"),
-    "<ChunkedFace",
-  );
 });
 
 Deno.test("statEcdf collapses ties, filters non-finite values, groups, and pads semantically", () => {
@@ -4935,7 +4746,6 @@ Deno.test("geomEcdf clips padded endpoints to finite panel domains and emits mon
     ),
     true,
   );
-  assertStringIncludes(emitSource(tree, "EcdfChart"), "<ChunkedLine");
 });
 
 Deno.test("statUnique retains stable first exact rows and runs independently in facets", () => {
@@ -5021,7 +4831,6 @@ Deno.test("geomWaffle expands weighted groups into core tiles with ordinary fill
     new Set(decodeChunkColors(waffleFace)).size,
     4,
   );
-  assertStringIncludes(emitSource(tree, "WaffleChart"), "<ChunkedFace");
 });
 
 Deno.test("statWaffle supports unit rows, panel isolation, and bounded validation", () => {

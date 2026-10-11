@@ -29,12 +29,12 @@ const points = CENTERS.flatMap((c) =>
     value: c.value + (random() - 0.5) * 8,
   }))
 );
-const clusters = {
+export const clusters = {
   x: points.map((p) => p.x),
   y: points.map((p) => p.y),
   value: points.map((p) => p.value),
 };
-const centers = {
+export const centers = {
   x: CENTERS.map((c) => c.x),
   y: CENTERS.map((c) => c.y),
   value: CENTERS.map((c) => c.value),
@@ -45,7 +45,7 @@ const CENTER_POSITIONS = Float32Array.from(
 const CENTER_VALUES = Float32Array.from(CENTERS.map((c) => c.value));
 
 /** A raw workbench primitive, colored by the plot's own color scale. */
-function Halos() {
+export function Halos() {
   const positions = useRawSource(CENTER_POSITIONS, "vec2<f32>");
   const colors = useGGColors(CENTER_VALUES);
   return (
@@ -81,22 +81,14 @@ export const composeWithUseGpu: DocExample = {
     "Three colored point clusters, each ringed by a hollow halo in its cluster's color, with a continuous color legend.",
   whatChanged:
     "<GGLayer> declares the halo rows, so they train the axes and the color scale like a geom's. The halo primitive itself is workbench's PointLayer, colored by useGGColors with the plot's own GPU color function, so halos, points and legend always agree.",
-  jsxSource: `function Halos() {
+  sourcePrelude: `function Halos() {
   const positions = useRawSource(CENTER_POSITIONS, "vec2<f32>");
   const colors = useGGColors(CENTER_VALUES);
   return (
     <PointLayer positions={positions} colors={colors}
       count={3} size={64} hollow outline={3} />
   );
-}
-
-<GGPlot data={clusters} mapping={{ x: "x", y: "y", color: "value" }}>
-  <GeomPoint size={4} />
-  <GGLayer data={centers}>
-    <Halos />
-  </GGLayer>
-  <Labs title="Clusters with halo centers" color="value" />
-</GGPlot>`,
+}`,
   dataPreview: centers,
   chart: ComposeChart,
 };

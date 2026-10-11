@@ -1,12 +1,6 @@
-import {
-  assert,
-  assertEquals,
-  assertStringIncludes,
-  assertThrows,
-} from "@std/assert";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 import { geomContour, geomHline, geomSegment, ggplot } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
-import { emitSource } from "../src/emit/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
 
 const data = {
@@ -116,7 +110,7 @@ Deno.test("reference lines cannot become planes because they do not inherit", ()
   );
 });
 
-Deno.test("3D segments carry depth props and survive emitSource", () => {
+Deno.test("3D segments carry depth props", () => {
   const opaque = segmentNode(ggplot(data, mapping).add(geomSegment()).build());
   assertEquals(opaque.props.depthTest, true);
   assertEquals(opaque.props.depthWrite, true);
@@ -126,13 +120,6 @@ Deno.test("3D segments carry depth props and survive emitSource", () => {
   );
   assertEquals(faded.props.depthWrite, false);
   assertEquals(faded.props.mode, "transparent");
-
-  const source = emitSource(
-    compile(ggplot(data, mapping).add(geomSegment()).build()),
-    "Segment3D",
-  );
-  assert(source.includes("vec4<f32>"), "emitted positions stay vec4");
-  assert(source.includes("depthWrite"), "emitted node keeps depth props");
 });
 
 Deno.test("3D segment rejects non-identity stats and positions", () => {
@@ -161,19 +148,5 @@ Deno.test("a scalar mark colour is parsed before it reaches a raw layer", () => 
     node.props.colors,
     undefined,
     "3D segments carry no color tensor",
-  );
-
-  // The emitted standalone module must parse it too, or the two backends
-  // disagree about what the same RenderTree looks like.
-  const source = emitSource(
-    compile(
-      ggplot(data, mapping).add(geomSegment({ color: "#38bdf8" })).build(),
-    ),
-    "Segment3D",
-  );
-  assertStringIncludes(source, "const parseColorRGBA");
-  assertStringIncludes(
-    source,
-    'color: parseColorRGBA(color ?? "#3b82f6", opacity ?? 1)',
   );
 });

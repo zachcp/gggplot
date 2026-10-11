@@ -1,13 +1,14 @@
 #!/usr/bin/env -S deno run -A
-// gggplot CLI — `gggplot compile <spec.ts> [out.tsx]` reads a spec module
-// (a `spec` or default export of type GGSpec), compiles it, and writes the
-// emitted UseGPU Live .tsx source. See emit/mod.ts for the source shape.
+// gggplot CLI — `gggplot print <chart.tsx> [out.tsx] [--name=Component]`
+// loads a module that builds a component tree (a `chart` or default export:
+// an element, or a function returning one) and writes it out as the JSX a
+// user would write (emit/jsx.ts). Data and helpers are imported from the
+// input module by reference, never inlined.
 
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { compile } from "./compile/mod.ts";
-import { emitSource } from "./emit/mod.ts";
-import type { GGSpec } from "./ir/types.ts";
+import type { LiveElement } from "@use-gpu/live";
+import { printModule } from "./emit/jsx.ts";
 
 function pascalCase(name: string): string {
   return name
@@ -19,43 +20,67 @@ function pascalCase(name: string): string {
     .join("") || "GGChart";
 }
 
-async function loadSpec(specPath: string): Promise<GGSpec> {
-  const url = pathToFileURL(resolve(specPath)).href;
-  const mod = await import(url);
-  const spec = mod.spec ?? mod.default;
-  if (!spec) {
-    throw new Error(
-      `${specPath} must export a GGSpec as 'spec' or as the default export`,
-    );
-  }
-  return spec as GGSpec;
-}
-
-function defaultOutPath(specPath: string): string {
+function defaultOutPath(chartPath: string): string {
   return join(
-    dirname(specPath),
-    `${basename(specPath, extname(specPath))}.tsx`,
+    dirname(chartPath),
+    `${basename(chartPath, extname(chartPath))}.printed.tsx`,
   );
 }
 
-/** Programmatic entry point — takes argv-style args, writes the .tsx, and returns the path written. */
+/** The specifier `outPath`'s module imports `chartPath` by. */
+function specifierFor(outPath: string, chartPath: string): string {
+  const path = relative(dirname(resolve(outPath)), resolve(chartPath))
+    .split("\\").join("/");
+  return path.startsWith(".") ? path : `./${path}`;
+}
+
+/** Programmatic entry point: takes argv-style args, writes the .tsx, returns its path. */
 export async function runCli(args: string[]): Promise<string> {
-  const [command, specPath, ...rest] = args;
-  if (command !== "compile" || !specPath) {
+  const [command, chartPath, ...rest] = args;
+  if (command !== "print" || !chartPath) {
     throw new Error(
-      "Usage: gggplot compile <spec.ts> [out.tsx] [--name=ComponentName]",
+      "Usage: gggplot print <chart.tsx> [out.tsx] [--name=ComponentName]",
     );
   }
-
   const nameFlag = rest.find((a) => a.startsWith("--name="));
   const outPath = rest.find((a) => !a.startsWith("--")) ??
-    defaultOutPath(specPath);
-  const componentName = nameFlag
+    defaultOutPath(chartPath);
+  const name = nameFlag
     ? nameFlag.slice("--name=".length)
-    : pascalCase(basename(outPath, extname(outPath)));
+    : pascalCase(basename(outPath, extname(outPath)).replace(/\.printed$/, ""));
 
-  const spec = await loadSpec(specPath);
-  const source = emitSource(compile(spec), componentName);
+  const mod = await import(pathToFileURL(resolve(chartPath)).href) as Record<
+    string,
+    unknown
+  >;
+  const chart = mod.chart ?? mod.default;
+  if (!chart) {
+    throw new Error(
+      `${chartPath} must export a component tree as 'chart' or as the default export`,
+    );
+  }
+  const element =
+    (typeof chart === "function" ? chart() : chart) as LiveElement;
+  // Everything else the module exports is nameable: capitalized functions
+  // are components, the rest are values passed by reference.
+  const refs = new Map<unknown, string>();
+  const names = new Map<unknown, string>();
+  for (const [key, value] of Object.entries(mod)) {
+    if (value === chart || key === "default") continue;
+    if (typeof value === "function" && /^[A-Z]/.test(key)) {
+      names.set(value, key);
+    } else if (
+      value !== null && typeof value !== "string" && typeof value !== "number"
+    ) {
+      refs.set(value, key);
+    }
+  }
+  const source = printModule(element, {
+    name,
+    from: specifierFor(outPath, chartPath),
+    refs,
+    names,
+  });
   await Deno.writeTextFile(outPath, source);
   return outPath;
 }

@@ -17,8 +17,9 @@
 //                             it is NOT a clean isolate of packing (it
 //                             necessarily repeats stage (a)'s cost inside
 //                             each geom's lower()) — documented, not hidden.
-//   (d) emission            — emit/mod.ts's emitSource(tree) on stage (c)'s
-//                             output.
+//   (Stage (d), the frozen emitter's literal inlining, went with the emitter
+//   in gggplot-vnh.11: the JSX printer passes data by reference, so printing
+//   costs nothing per row.)
 //
 // 10k/100k rows run as ordinary Deno.bench cases (deno's own adaptive
 // repeat-until-~1s harness). The 1M-row case is BOUNDED per the bead's
@@ -44,7 +45,6 @@ import {
 } from "../src/compile/coordinates.ts";
 import { node, type RenderNode } from "../src/compile/rendertree.ts";
 import { compile } from "../src/compile/mod.ts";
-import { emitSource } from "../src/emit/mod.ts";
 import { aes, geomBar, geomLine, geomPoint, ggplot } from "../src/dsl/mod.ts";
 
 // ---------------------------------------------------------------------------
@@ -190,7 +190,7 @@ function transformPolarStackedBar(n: number): void {
 }
 
 // ---------------------------------------------------------------------------
-// Stage (c): RenderTree construction (full compile()) + Stage (d): emission
+// Stage (c): RenderTree construction (full compile())
 // ---------------------------------------------------------------------------
 
 function pointSpec(n: number) {
@@ -229,10 +229,6 @@ function constructTree(
   buildSpec: () => ReturnType<typeof pointSpec>,
 ): RenderNode {
   return compile(buildSpec());
-}
-
-function emit(buildSpec: () => ReturnType<typeof pointSpec>): string {
-  return emitSource(compile(buildSpec()));
 }
 
 // ---------------------------------------------------------------------------
@@ -286,20 +282,6 @@ for (const n of SIZES) {
     group: "construct-bar",
   }, () => {
     constructTree(() => barSpec(n));
-  });
-
-  Deno.bench(`(d) emit point — ${n} rows`, { group: "emit-point" }, () => {
-    emit(() => pointSpec(n));
-  });
-  Deno.bench(
-    `(d) emit grouped line — ${n} rows`,
-    { group: "emit-line" },
-    () => {
-      emit(() => lineSpec(n));
-    },
-  );
-  Deno.bench(`(d) emit stacked bar — ${n} rows`, { group: "emit-bar" }, () => {
-    emit(() => barSpec(n));
   });
 }
 
@@ -384,23 +366,6 @@ boundedOnce(
   12_000,
   () => constructTree(() => barSpec(ONE_MILLION)),
 );
-
-boundedOnce(
-  "(d) emit point — 1,000,000 rows",
-  8_000,
-  () => emit(() => pointSpec(ONE_MILLION)),
-);
-boundedOnce(
-  "(d) emit grouped line — 1,000,000 rows",
-  10_000,
-  () => emit(() => lineSpec(ONE_MILLION)),
-);
-boundedOnce(
-  "(d) emit stacked bar — 1,000,000 rows",
-  14_000,
-  () => emit(() => barSpec(ONE_MILLION)),
-);
-
 console.log(
   "\n1M-row bounded stage results (fixed 1 warmup + 1 measured run):",
 );

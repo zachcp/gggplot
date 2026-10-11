@@ -76,7 +76,7 @@ export {
 } from "./geom/mod.ts";
 
 // Backends
-export { emitSource } from "./emit/mod.ts";
+export { type PrintedJsx, printJsx, type PrintJsxOptions } from "./emit/jsx.ts";
 export { ggsave, type GgSaveOptions, saveLivePng } from "./export/png.ts";
 export {
   type ExportUnit,

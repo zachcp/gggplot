@@ -8,8 +8,7 @@ import * as Jsx from "@gggplot/core/jsx";
 import type { LiveElement } from "@use-gpu/live";
 import { GGPlot, type GGPlotComponentProps } from "@gggplot/core";
 import { SITE_CHART_COLORS, SITE_CHART_THEME } from "./chart_theme.ts";
-import { fontResources } from "./scene.tsx";
-import { fontResources as fontResources3d } from "./scene3d.tsx";
+import { fontResources, fontResources3d } from "./site_fonts.ts";
 
 export function SitePlot(
   props: Omit<GGPlotComponentProps, "fontResources" | "fonts">,

@@ -7,10 +7,11 @@ export interface ThreeDShowcase {
   id: string;
   title: string;
   description: string;
-  /** The showcase as a component-form <GGPlot> tree (gggplot-vnh.10.1). */
+  /**
+   * The showcase as a component-form <GGPlot> tree (gggplot-vnh.10.1); the
+   * reader sees it printed (printJsx).
+   */
   chart: () => LiveElement;
-  /** The same code as the reader sees it. */
-  jsxSource: string;
 }
 
 export type DocSection =
@@ -41,12 +42,16 @@ export interface DocExample {
   dataPreview?: Record<string, unknown[]>;
   computedDataPreview?: DataFrame;
   /**
-   * The example: a Live component rendering a <GGPlot> tree (SitePlot), with
-   * its JSX shown to the reader in `jsxSource` (jsx_source_test.ts keeps the
-   * two in step).
+   * The example: a Live component rendering a <GGPlot> tree (SitePlot). The
+   * reader sees it printed by printJsx (gggplot-vnh.11), and
+   * printed_source_test.ts checks the print is the chart's own code.
    */
   chart: () => LiveElement;
-  jsxSource: string;
+  /**
+   * Code the printed tree depends on that is not itself a tree (a custom
+   * Use.GPU component's definition), shown above it.
+   */
+  sourcePrelude?: string;
   /** Explanation shown beside the execution flow detected from the live tree. */
   executionDetail?: string;
   /** Optional route for an interactive or instrumented companion demonstration. */

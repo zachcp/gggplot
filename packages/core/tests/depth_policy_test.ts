@@ -1,7 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { geomLine, geomPoint, ggplot } from "../src/dsl/mod.ts";
 import { compile } from "../src/compile/mod.ts";
-import { emitSource } from "../src/emit/mod.ts";
 import { depthProps } from "../src/geom/shared.ts";
 import { GEOM_REGISTRY } from "../src/geom/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
@@ -92,27 +91,6 @@ Deno.test("point and line depth behaviour is unchanged by the refactor", () => {
     assertEquals(line.props.depthWrite, expected.depthWrite);
     assertEquals(line.props.mode, expected.mode);
   }
-});
-
-Deno.test("the resolved policy survives emitSource", () => {
-  const opaque = emitSource(
-    compile(
-      ggplot(data, { x: "x", y: "y", z: "z" }).add(geomPoint()).build(),
-    ),
-    "Opaque3D",
-  );
-  assertEquals(opaque.includes("depthWrite={true}"), true);
-  assertEquals(opaque.includes('mode="transparent"'), false);
-
-  const translucent = emitSource(
-    compile(
-      ggplot(data, { x: "x", y: "y", z: "z" }).add(geomPoint({ alpha: 0.4 }))
-        .build(),
-    ),
-    "Translucent3D",
-  );
-  assertEquals(translucent.includes("depthWrite={false}"), true);
-  assertEquals(translucent.includes('mode="transparent"'), true);
 });
 
 Deno.test("an explicit depthTest param still overrides the policy", () => {
