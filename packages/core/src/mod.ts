@@ -33,6 +33,7 @@ export {
   type GeomLayerProps,
   layerFromProps,
 } from "./components/geom_layer.ts";
+export * from "./components/geoms.ts";
 export {
   GGPanelContext,
   type GGPanelValue,

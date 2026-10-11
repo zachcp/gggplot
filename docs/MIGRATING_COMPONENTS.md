@@ -61,10 +61,21 @@ A layer is now a child of the component root, in z-order:
 
 ```tsx
 <GGPlot data={mpg} mapping={{ x: "displ", y: "hwy", color: "drv" }}>
-  <GeomLayer geom="point" size={3} opacity={0.55} />
-  <GeomLayer geom="smooth" method="loess" se={false} />
+  <GeomPoint size={3} opacity={0.55} />
+  <GeomSmooth method="loess" se={false} />
 </GGPlot>;
 ```
+
+Every DSL constructor has a named component: `geomPoint(opts)` becomes
+`<GeomPoint {...opts} />`, `statSummary2d(opts)` becomes `<StatSummary2d />`,
+and `annotate("text", opts)` becomes `<Annotate geom="text" />`. Their props are
+typed per geom family, so a parameter the geom does not read is a type error
+(`<GeomPoint bins={3} />`). Parameters a component does not type go through
+`params`, for example another stat's after a `stat` override:
+`<GeomPoint stat="summary" params={{ fun: "max" }} />`.
+`geomFunction(fun, opts)` becomes `<GeomFunction fun={fun} />`.
+
+The untyped form underneath is `<GeomLayer geom="point" ... />`.
 
 `<GeomLayer geom>` takes what the DSL's `geomX(opts)` took: `mapping`, a
 layer-only `data` (with `dataOptions`), `stat`, `position`, `inheritAes`, and
