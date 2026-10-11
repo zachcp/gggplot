@@ -1,10 +1,39 @@
 import { lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
-import { ggsave, type GgSaveOptions, pngDimensions } from "@gggplot/core";
-import { scatterLine } from "./docs/examples.tsx";
-import { helix3dSpec } from "./docs/example_3d.ts";
+import {
+  geomLine,
+  geomPath,
+  geomPoint,
+  ggplot,
+  ggsave,
+  type GgSaveOptions,
+  labels,
+  pngDimensions,
+} from "@gggplot/core";
+import { scatterData } from "./docs/data/demo.ts";
+import { helixData } from "./docs/example_3d.tsx";
 import { InstrumentProbe } from "./InstrumentProbe.tsx";
+
+// The export probe's charts (the ScatterLine and Helix3D examples). ggsave
+// still takes a spec; it moves onto component trees with gggplot-vnh.18.
+const SCATTER_SPEC = ggplot(scatterData, { x: "wt", y: "mpg" })
+  .add(geomPoint({ size: 6, color: "#3b82f6" }), geomLine({ color: "#ef4444" }))
+  .build();
+const HELIX_SPEC = ggplot(helixData, { x: "x", y: "y", z: "z", color: "band" })
+  .add(
+    geomPath({ linewidth: 3, alpha: 0.7 }),
+    geomPoint({ size: 24 }),
+    labels({
+      title: "Helix",
+      subtitle: "x/z trace a circle while y climbs",
+      x: "cos(t)",
+      y: "height",
+      z: "sin(t)",
+      color: "band",
+    }),
+  )
+  .build();
 
 const PerformanceProbe = lazy(() =>
   import("./PerformanceProbe.tsx").then((module) => ({
@@ -59,8 +88,8 @@ if (exportProbeMode) {
       backgroundColor: [1, 1, 1, 1],
     };
     const blob = exportProbeMode === "3d"
-      ? await ggsave(helix3dSpec, options)
-      : await ggsave(scatterLine.spec!, options);
+      ? await ggsave(HELIX_SPEC, options)
+      : await ggsave(SCATTER_SPEC, options);
     const bytes = new Uint8Array(await blob.arrayBuffer());
     return {
       type: blob.type,

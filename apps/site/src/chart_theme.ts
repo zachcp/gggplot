@@ -1,7 +1,7 @@
 import type { GGSpec } from "@gggplot/core";
 
 /** The dark-canvas palette both the 2D and 3D hosts hand their charts. */
-const SITE_CHART_COLORS = {
+export const SITE_CHART_COLORS = {
   textColor: "#e5e7eb",
   axisColor: "#a8adbd",
   gridColor: "#343447",

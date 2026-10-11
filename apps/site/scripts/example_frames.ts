@@ -2,6 +2,7 @@
 //
 //   deno run -A scripts/example_frames.ts capture <outDir> <ExampleId>...
 //   deno run -A scripts/example_frames.ts capture-component <outDir> <ExampleId>...
+//   deno run -A scripts/example_frames.ts capture-chart <outDir> <ExampleId>...
 //   deno run -A scripts/example_frames.ts compare <dirA> <dirB>
 //
 // For refactors that must not change output: capture before, capture after,
@@ -71,10 +72,17 @@ const dataUrl = (bytes: Uint8Array) =>
   "data:image/png;base64," +
   btoa(Array.from(bytes, (c) => String.fromCharCode(c)).join(""));
 
-if (mode === "capture" || mode === "capture-component") {
+if (
+  mode === "capture" || mode === "capture-component" || mode === "capture-chart"
+) {
   // capture-component renders each example through the component root
   // (?capture=<id>&path=component) instead of compile().
-  const pathQuery = mode === "capture-component" ? "&path=component" : "";
+  // capture-chart renders each example's hand-written JSX (DocExample.chart).
+  const pathQuery = mode === "capture-component"
+    ? "&path=component"
+    : mode === "capture-chart"
+    ? "&path=chart"
+    : "";
   const [outDir, ...ids] = rest;
   await Deno.mkdir(outDir, { recursive: true });
   await buildGate("frames");

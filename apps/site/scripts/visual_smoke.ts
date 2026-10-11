@@ -201,14 +201,16 @@ async function verifyForcedFailure(browser: import("playwright").Browser) {
     await page.goto(`${baseUrl}/?forceChartFailure#start`, {
       waitUntil: "networkidle",
     });
-    const [errors, examples, dslPanels] = await Promise.all([
+    // Each example keeps its source panel (the component JSX) beside the
+    // contained error.
+    const [errors, examples, sourcePanels] = await Promise.all([
       page.locator("[data-chart-error]").count(),
       page.locator("[data-doc-example]").count(),
-      page.getByText("ggplot DSL", { exact: true }).count(),
+      page.getByText("Component JSX", { exact: true }).count(),
     ]);
-    if (errors !== examples || dslPanels !== examples) {
+    if (errors !== examples || sourcePanels !== examples) {
       throw new Error(
-        `Forced chart failure escaped its panel (errors=${errors}, examples=${examples}, DSL=${dslPanels}).`,
+        `Forced chart failure escaped its panel (errors=${errors}, examples=${examples}, source=${sourcePanels}).`,
       );
     }
   } finally {

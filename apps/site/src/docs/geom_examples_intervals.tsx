@@ -1,26 +1,32 @@
+/** @jsxRuntime classic */
+/** @jsx Jsx.createElement */
+// Interval, smoothing, label, distribution, area and waffle geoms, written as
+// component JSX (gggplot-vnh.10.1); see examples_basics.tsx for the
+// chart/jsxSource convention.
+import * as Jsx from "@gggplot/core/jsx";
 import {
-  geomArea,
-  geomCrossbar,
-  geomEcdf,
-  geomErrorbar,
-  geomErrorbarh,
-  geomJitter,
-  geomLabel,
-  geomLinerange,
-  geomPoint,
-  geomPointrange,
-  geomQuantile,
-  geomSmooth,
-  geomWaffle,
-  ggplot,
-  statAlign,
-  statConnect,
-  statSummary2d,
-  statSummaryBin,
-  statSummaryHex,
-  statUnique,
-  themeDark,
+  GeomArea,
+  GeomCrossbar,
+  GeomEcdf,
+  GeomErrorbar,
+  GeomErrorbarh,
+  GeomJitter,
+  GeomLabel,
+  GeomLinerange,
+  GeomPoint,
+  GeomPointrange,
+  GeomQuantile,
+  GeomSmooth,
+  GeomWaffle,
+  StatAlign,
+  StatConnect,
+  StatSummary2d,
+  StatSummaryBin,
+  StatSummaryHex,
+  StatUnique,
+  ThemeDark,
 } from "@gggplot/core";
+import { SitePlot } from "../site_plot.tsx";
 import type { DocExample } from "./types.ts";
 import { scatterData } from "./data/demo.ts";
 
@@ -39,50 +45,60 @@ export const intervalFamily: DocExample = {
   visualSummary:
     "Five offset interval forms showing stems, caps, center points, and crossbars.",
   whatChanged:
-    "Endpoint domains and orientation inference are shared; each constructor only selects the additional caps, point, or box topology.",
+    "Endpoint domains and orientation inference are shared; each component only selects the additional caps, point, or box topology.",
   dataPreview: intervalFamilyData,
-  dslSource: `ggplot(data, { x: "x", y: "y", ymin: "ymin", ymax: "ymax" })
-  .add(geomLinerange({ color: "#64748b" }))
-  .add(geomPointrange({ color: "#2563eb", size: 6 }))
-  .add(geomErrorbar({ width: 0.35, color: "#dc2626" }))
-  .add(geomCrossbar({ width: 0.55, color: "#7c3aed" }))
-  .add(geomErrorbarh({ mapping: { y: "y", xmin: "ymin", xmax: "ymax" }, inheritAes: false, width: 0.18, color: "#059669" }))
-  .build();`,
-  spec: ggplot(intervalFamilyData, {
-    x: "x",
-    y: "y",
-    ymin: "ymin",
-    ymax: "ymax",
-  }).add(
-    geomLinerange({ color: "#64748b" }),
-    geomPointrange({ color: "#2563eb", size: 6 }),
-    geomErrorbar({ width: 0.35, color: "#dc2626" }),
-    geomCrossbar({ width: 0.55, color: "#7c3aed" }),
-    geomErrorbarh({
-      mapping: { y: "y", xmin: "ymin", xmax: "ymax" },
-      inheritAes: false,
-      width: 0.18,
-      color: "#059669",
-    }),
-  ).build(),
+  jsxSource: `<GGPlot
+  data={intervalFamilyData}
+  mapping={{ x: "x", y: "y", ymin: "ymin", ymax: "ymax" }}
+>
+  <GeomLinerange color="#64748b" />
+  <GeomPointrange color="#2563eb" size={6} />
+  <GeomErrorbar width={0.35} color="#dc2626" />
+  <GeomCrossbar width={0.55} color="#7c3aed" />
+  <GeomErrorbarh
+    mapping={{ y: "y", xmin: "ymin", xmax: "ymax" }}
+    inheritAes={false}
+    width={0.18}
+    color="#059669"
+  />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot
+      data={intervalFamilyData}
+      mapping={{ x: "x", y: "y", ymin: "ymin", ymax: "ymax" }}
+    >
+      <GeomLinerange color="#64748b" />
+      <GeomPointrange color="#2563eb" size={6} />
+      <GeomErrorbar width={0.35} color="#dc2626" />
+      <GeomCrossbar width={0.55} color="#7c3aed" />
+      <GeomErrorbarh
+        mapping={{ y: "y", xmin: "ymin", xmax: "ymax" }}
+        inheritAes={false}
+        width={0.18}
+        color="#059669"
+      />
+    </SitePlot>
+  ),
 };
 
 export const quantileRegression: DocExample = {
   id: "QuantileRegression",
   title: "Linear quantile regression",
   description:
-    "geomQuantile fits grouped linear pinball-loss regressions at selected probabilities.",
+    "<GeomQuantile> fits grouped linear pinball-loss regressions at selected probabilities.",
   visualSummary:
     "Three regression lines summarize the lower, median, and upper response trends.",
   whatChanged:
     "Each quantile emits a separate two-endpoint group and maps its probability through the color scale.",
   dataPreview: scatterData,
-  dslSource: `ggplot(data, { x: "wt", y: "mpg" })
-  .add(geomQuantile({ quantiles: [0.25, 0.5, 0.75], linewidth: 3 }))
-  .build();`,
-  spec: ggplot(scatterData, { x: "wt", y: "mpg" }).add(
-    geomQuantile({ quantiles: [0.25, 0.5, 0.75], linewidth: 3 }),
-  ).build(),
+  jsxSource: `<GGPlot data={scatterData} mapping={{ x: "wt", y: "mpg" }}>
+  <GeomQuantile quantiles={[0.25, 0.5, 0.75]} linewidth={3} />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={scatterData} mapping={{ x: "wt", y: "mpg" }}>
+      <GeomQuantile quantiles={[0.25, 0.5, 0.75]} linewidth={3} />
+    </SitePlot>
+  ),
 };
 
 const loessData = {
@@ -100,20 +116,28 @@ export const loessSmooth: DocExample = {
   whatChanged:
     "span controls each local neighborhood; level controls covariance-derived confidence limits.",
   dataPreview: loessData,
-  dslSource: `ggplot(data, { x: "x", y: "y" })
-  .add(geomPoint({ color: "#475569" }))
-  .add(geomSmooth({ method: "loess", span: 0.75, robustIterations: 2, level: 0.9, color: "#7c3aed" }))
-  .build();`,
-  spec: ggplot(loessData, { x: "x", y: "y" }).add(
-    geomPoint({ color: "#475569" }),
-    geomSmooth({
-      method: "loess",
-      span: 0.75,
-      robustIterations: 2,
-      level: 0.9,
-      color: "#7c3aed",
-    }),
-  ).build(),
+  jsxSource: `<GGPlot data={loessData} mapping={{ x: "x", y: "y" }}>
+  <GeomPoint color="#475569" />
+  <GeomSmooth
+    method="loess"
+    span={0.75}
+    robustIterations={2}
+    level={0.9}
+    color="#7c3aed"
+  />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={loessData} mapping={{ x: "x", y: "y" }}>
+      <GeomPoint color="#475569" />
+      <GeomSmooth
+        method="loess"
+        span={0.75}
+        robustIterations={2}
+        level={0.9}
+        color="#7c3aed"
+      />
+    </SitePlot>
+  ),
 };
 
 const logisticData = {
@@ -131,53 +155,59 @@ export const logisticSmooth: DocExample = {
   whatChanged:
     "Deterministic IRLS fits the serializable family/link contract; unsupported GAM models belong in an extension adapter.",
   dataPreview: logisticData,
-  dslSource: `ggplot(data, { x: "x", y: "y" })
-  .add(geomJitter({ width: 0.04, height: 0.025, color: "#475569" }))
-  .add(geomSmooth({ method: "glm", family: "binomial", link: "logit", color: "#059669" }))
-  .build();`,
-  spec: ggplot(logisticData, { x: "x", y: "y" }).add(
-    geomJitter({ width: 0.04, height: 0.025, color: "#475569" }),
-    geomSmooth({
-      method: "glm",
-      family: "binomial",
-      link: "logit",
-      color: "#059669",
-    }),
-  ).build(),
+  jsxSource: `<GGPlot data={logisticData} mapping={{ x: "x", y: "y" }}>
+  <GeomJitter width={0.04} height={0.025} color="#475569" />
+  <GeomSmooth method="glm" family="binomial" link="logit" color="#059669" />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={logisticData} mapping={{ x: "x", y: "y" }}>
+      <GeomJitter width={0.04} height={0.025} color="#475569" />
+      <GeomSmooth method="glm" family="binomial" link="logit" color="#059669" />
+    </SitePlot>
+  ),
+};
+
+const labelData = {
+  x: [1, 2, 3],
+  y: [1, 2, 1.4],
+  label: ["plain", "two\nlines", "rotated"],
 };
 
 export const labelBackgrounds: DocExample = {
   id: "LabelBackgrounds",
   title: "Measured label backgrounds",
   description:
-    "geomLabel measures each resolved glyph run and places a padded rounded box and border behind it.",
+    "<GeomLabel> measures each resolved glyph run and places a padded rounded box and border behind it.",
   visualSummary:
     "Rotated multiline labels with contrasting boxes on a dark panel.",
   whatChanged:
     "Box, border, and text share font metrics, rotation center, missing-row alignment, and compositional alpha.",
-  dataPreview: {
-    x: [1, 2, 3],
-    y: [1, 2, 1.4],
-    label: ["plain", "two\nlines", "rotated"],
-  },
-  dslSource: `ggplot(data, { x: "x", y: "y", label: "label" })
-  .add(geomLabel({ fill: "#f8fafc", color: "#0f172a", borderColor: "#38bdf8", labelPadding: 4, labelR: 3, angle: 20 }))
-  .add(themeDark())
-  .build();`,
-  spec: ggplot(
-    { x: [1, 2, 3], y: [1, 2, 1.4], label: ["plain", "two\nlines", "rotated"] },
-    { x: "x", y: "y", label: "label" },
-  ).add(
-    geomLabel({
-      fill: "#f8fafc",
-      color: "#0f172a",
-      borderColor: "#38bdf8",
-      labelPadding: 4,
-      labelR: 3,
-      angle: 20,
-    }),
-    themeDark(),
-  ).build(),
+  dataPreview: labelData,
+  jsxSource:
+    `<GGPlot data={labelData} mapping={{ x: "x", y: "y", label: "label" }}>
+  <GeomLabel
+    fill="#f8fafc"
+    color="#0f172a"
+    borderColor="#38bdf8"
+    labelPadding={4}
+    labelR={3}
+    angle={20}
+  />
+  <ThemeDark />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={labelData} mapping={{ x: "x", y: "y", label: "label" }}>
+      <GeomLabel
+        fill="#f8fafc"
+        color="#0f172a"
+        borderColor="#38bdf8"
+        labelPadding={4}
+        labelR={3}
+        angle={20}
+      />
+      <ThemeDark />
+    </SitePlot>
+  ),
 };
 
 const ecdfData = {
@@ -189,36 +219,41 @@ export const empiricalCdf: DocExample = {
   id: "EmpiricalCdf",
   title: "Grouped empirical distributions",
   description:
-    "geomEcdf collapses ties and renders cumulative proportions as clipped step functions.",
+    "<GeomEcdf> collapses ties and renders cumulative proportions as clipped step functions.",
   visualSummary: "Two monotone step curves ending at probability one.",
   whatChanged:
     "Semantic infinite padding reaches the trained panel edges without leaking into scale domains; weighted ECDFs are deferred.",
   dataPreview: ecdfData,
-  dslSource: `ggplot(data, { x: "value", color: "group" })
-  .add(geomEcdf({ linewidth: 3 }))
-  .build();`,
-  spec: ggplot(ecdfData, { x: "value", color: "group" }).add(
-    geomEcdf({ linewidth: 3 }),
-  ).build(),
+  jsxSource: `<GGPlot data={ecdfData} mapping={{ x: "value", color: "group" }}>
+  <GeomEcdf linewidth={3} />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={ecdfData} mapping={{ x: "value", color: "group" }}>
+      <GeomEcdf linewidth={3} />
+    </SitePlot>
+  ),
 };
+
+const duplicateData = { x: [1, 1, 2, 2, 3], y: [2, 2, 3, 4, 4] };
 
 export const uniqueRows: DocExample = {
   id: "UniqueRows",
   title: "Stable unique-row transform",
   description:
-    "statUnique keeps the first occurrence of each exact all-column tuple before rendering.",
+    "<StatUnique> keeps the first occurrence of each exact all-column tuple before rendering.",
   visualSummary:
     "A point set where repeated identical records appear only once.",
   whatChanged:
     "Deduplication preserves source order and mappings and runs independently within each facet panel.",
-  dataPreview: { x: [1, 1, 2, 2, 3], y: [2, 2, 3, 4, 4] },
-  dslSource: `ggplot(data, { x: "x", y: "y" })
-  .add(statUnique({ color: "#7c3aed", size: 7 }))
-  .build();`,
-  spec: ggplot(
-    { x: [1, 1, 2, 2, 3], y: [2, 2, 3, 4, 4] },
-    { x: "x", y: "y" },
-  ).add(statUnique({ color: "#7c3aed", size: 7 })).build(),
+  dataPreview: duplicateData,
+  jsxSource: `<GGPlot data={duplicateData} mapping={{ x: "x", y: "y" }}>
+  <StatUnique color="#7c3aed" size={7} />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={duplicateData} mapping={{ x: "x", y: "y" }}>
+      <StatUnique color="#7c3aed" size={7} />
+    </SitePlot>
+  ),
 };
 
 const summaryCellData = {
@@ -237,20 +272,19 @@ export const summaryHexCells: DocExample = {
   whatChanged:
     "The shared 2D summary contract supports mean, median, sum, min, and max; custom functions remain a CPU/reference feature and weights are intentionally unsupported in V1.",
   dataPreview: summaryCellData,
-  dslSource: `ggplot(data, { x: "x", y: "y", z: "score" })
-  .add(statSummary2d({ binwidth: [0.75, 0.75], fun: "mean", opacity: 0.35 }))
-  .add(statSummaryBin({ bins: 4, fun: "max", opacity: 0.25 }))
-  .add(statSummaryHex({ binwidth: [0.75, 0.75], fun: "median" }))
-  .build();`,
-  spec: ggplot(summaryCellData, { x: "x", y: "y", z: "score" }).add(
-    statSummary2d({
-      binwidth: [0.75, 0.75],
-      fun: "mean",
-      opacity: 0.35,
-    }),
-    statSummaryBin({ bins: 4, fun: "max", opacity: 0.25 }),
-    statSummaryHex({ binwidth: [0.75, 0.75], fun: "median" }),
-  ).build(),
+  jsxSource:
+    `<GGPlot data={summaryCellData} mapping={{ x: "x", y: "y", z: "score" }}>
+  <StatSummary2d binwidth={[0.75, 0.75]} fun="mean" opacity={0.35} />
+  <StatSummaryBin bins={4} fun="max" opacity={0.25} />
+  <StatSummaryHex binwidth={[0.75, 0.75]} fun="median" />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={summaryCellData} mapping={{ x: "x", y: "y", z: "score" }}>
+      <StatSummary2d binwidth={[0.75, 0.75]} fun="mean" opacity={0.35} />
+      <StatSummaryBin bins={4} fun="max" opacity={0.25} />
+      <StatSummaryHex binwidth={[0.75, 0.75]} fun="median" />
+    </SitePlot>
+  ),
 };
 
 const streamgraphData = {
@@ -279,16 +313,22 @@ export const streamgraph: DocExample = {
     "A reusable silhouette stack offset centers grouped area thickness around zero.",
   visualSummary: "Three flowing area bands sharing a centered baseline.",
   whatChanged:
-    "This is ordinary geomArea topology with position stack offset silhouette, not a streamgraph-specific geom.",
+    'This is ordinary <GeomArea> topology with position "stack" and offset "silhouette", not a streamgraph-specific geom.',
   dataPreview: streamgraphData,
-  dslSource: `ggplot(data, { x: "month", y: "titles", fill: "genre" })
-  .add(geomArea({ position: "stack", offset: "silhouette" }))
-  .build();`,
-  spec: ggplot(streamgraphData, {
-    x: "month",
-    y: "titles",
-    fill: "genre",
-  }).add(geomArea({ position: "stack", offset: "silhouette" })).build(),
+  jsxSource: `<GGPlot
+  data={streamgraphData}
+  mapping={{ x: "month", y: "titles", fill: "genre" }}
+>
+  <GeomArea position="stack" offset="silhouette" />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot
+      data={streamgraphData}
+      mapping={{ x: "month", y: "titles", fill: "genre" }}
+    >
+      <GeomArea position="stack" offset="silhouette" />
+    </SitePlot>
+  ),
 };
 
 export const stackedArea: DocExample = {
@@ -301,12 +341,20 @@ export const stackedArea: DocExample = {
   whatChanged:
     "position stack carries each group's lower boundary forward at every x value and trains the y scale on cumulative totals.",
   dataPreview: streamgraphData,
-  dslSource: `ggplot(data, { x: "month", y: "titles", fill: "genre" })
-  .add(geomArea({ position: "stack" }))
-  .build();`,
-  spec: ggplot(streamgraphData, { x: "month", y: "titles", fill: "genre" })
-    .add(geomArea({ position: "stack" }))
-    .build(),
+  jsxSource: `<GGPlot
+  data={streamgraphData}
+  mapping={{ x: "month", y: "titles", fill: "genre" }}
+>
+  <GeomArea position="stack" />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot
+      data={streamgraphData}
+      mapping={{ x: "month", y: "titles", fill: "genre" }}
+    >
+      <GeomArea position="stack" />
+    </SitePlot>
+  ),
 };
 
 const mismatchedAreaData = {
@@ -318,17 +366,26 @@ export const alignedStackedArea: DocExample = {
   id: "AlignedStackedArea",
   title: "Shared-grid stacked areas",
   description:
-    "statAlign resamples mismatched grouped x values before cumulative stacking.",
+    "<StatAlign> resamples mismatched grouped x values before cumulative stacking.",
   visualSummary:
     "Two area series aligned onto one union grid and stacked without crossed boundaries.",
   whatChanged:
     "Each group is linearly interpolated on the sorted union of x values; outside support is zero and the resulting rows feed ordinary position stack.",
   dataPreview: mismatchedAreaData,
-  dslSource: `ggplot(data, { x: "x", y: "y", fill: "series" })
-  .add(statAlign())
-  .build();`,
-  spec: ggplot(mismatchedAreaData, { x: "x", y: "y", fill: "series" })
-    .add(statAlign()).build(),
+  jsxSource: `<GGPlot
+  data={mismatchedAreaData}
+  mapping={{ x: "x", y: "y", fill: "series" }}
+>
+  <StatAlign />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot
+      data={mismatchedAreaData}
+      mapping={{ x: "x", y: "y", fill: "series" }}
+    >
+      <StatAlign />
+    </SitePlot>
+  ),
 };
 
 const bumpData = {
@@ -341,17 +398,23 @@ export const bumpChart: DocExample = {
   id: "BumpChart",
   title: "Sigmoid bump connectors",
   description:
-    "statConnect inserts deterministic logistic vertices between grouped rank observations.",
+    "<StatConnect> inserts deterministic logistic vertices between grouped rank observations.",
   visualSummary: "Two team rank paths easing smoothly between rounds.",
   whatChanged:
     "Bump charts compose a reusable sigmoid connection stat with ordinary line rendering; groups and facets never connect across boundaries.",
   dataPreview: bumpData,
-  dslSource: `ggplot(data, { x: "round", y: "rank", color: "team" })
-  .add(statConnect({ connection: "sigmoid", samples: 24, steepness: 8 }))
-  .build();`,
-  spec: ggplot(bumpData, { x: "round", y: "rank", color: "team" }).add(
-    statConnect({ connection: "sigmoid", samples: 24, steepness: 8 }),
-  ).build(),
+  jsxSource:
+    `<GGPlot data={bumpData} mapping={{ x: "round", y: "rank", color: "team" }}>
+  <StatConnect connection="sigmoid" samples={24} steepness={8} />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot
+      data={bumpData}
+      mapping={{ x: "round", y: "rank", color: "team" }}
+    >
+      <StatConnect connection="sigmoid" samples={24} steepness={8} />
+    </SitePlot>
+  ),
 };
 
 const waffleData = {
@@ -363,15 +426,17 @@ export const waffleChart: DocExample = {
   id: "WaffleChart",
   title: "Waffle chart",
   description:
-    "geomWaffle expands integer group weights into bounded, column-major unit tiles.",
+    "<GeomWaffle> expands integer group weights into bounded, column-major unit tiles.",
   visualSummary: "One hundred colored cells grouped by issue status.",
   whatChanged:
-    "Waffle charts are a regular core geom: fill mappings train ordinary scales and guides, while statWaffle supplies tile positions.",
+    "Waffle charts are a regular core geom: fill mappings train ordinary scales and guides, while stat_waffle supplies tile positions.",
   dataPreview: waffleData,
-  dslSource: `ggplot(data, { fill: "status" })
-  .add(geomWaffle({ weight: "count", rows: 10, maxCells: 100 }))
-  .build();`,
-  spec: ggplot(waffleData, { fill: "status" }).add(
-    geomWaffle({ weight: "count", rows: 10, maxCells: 100 }),
-  ).build(),
+  jsxSource: `<GGPlot data={waffleData} mapping={{ fill: "status" }}>
+  <GeomWaffle weight="count" rows={10} maxCells={100} />
+</GGPlot>`,
+  chart: () => (
+    <SitePlot data={waffleData} mapping={{ fill: "status" }}>
+      <GeomWaffle weight="count" rows={10} maxCells={100} />
+    </SitePlot>
+  ),
 };

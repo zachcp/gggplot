@@ -85,7 +85,8 @@ export interface DensityParams {
 /** stat_bin2d / stat_binhex / stat_summary2d. */
 export interface Bin2dParams {
   bins?: number;
-  binwidth?: number;
+  /** One width for both axes, or [x, y]. */
+  binwidth?: number | [number, number];
   boundary?: number;
   xbins?: number;
   ybins?: number;
@@ -136,6 +137,9 @@ type Common = LayerProps & ColorProps & PositionParams;
 
 export type PointProps = Common & FillProps & {
   size?: number;
+  /** With position "jitter": the horizontal and vertical jitter amounts. */
+  width?: number;
+  height?: number;
   stroke?: number;
   strokeColor?: string;
   /** "perspective" sizes 3D points by depth. */
@@ -149,7 +153,10 @@ export type BarProps = Common & FillProps & WidthProps & {
   weight?: Weight;
 };
 export type HistogramProps = BarProps & BinParams;
-export type AreaProps = Common & FillProps & LineProps & { offset?: number };
+export type AreaProps = Common & FillProps & LineProps & {
+  /** With position "stack": "silhouette" centers the stack on zero. */
+  offset?: "silhouette";
+};
 export type PolygonProps = Common & FillProps & LineProps;
 export type TileProps = Common & FillProps & WidthProps & {
   height?: number;
@@ -199,6 +206,8 @@ export type Bin2dProps = Common & FillProps & Bin2dParams;
 export type HexProps = Bin2dProps;
 export type SummaryBinProps = Bin2dProps & { fun?: SummaryFun };
 export type WaffleProps = TileProps & {
+  /** The column whose integer counts become cells. */
+  weight?: Weight;
   rows?: number;
   maxCells?: number;
   direction?: "column";

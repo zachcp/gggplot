@@ -8,6 +8,8 @@ import type { DocExample } from "./docs/types.ts";
 import { Scene } from "./scene.tsx";
 import { ComponentScene } from "./component_scene.tsx";
 import { ChartScene } from "./chart_scene.tsx";
+import { Scene3D } from "./scene3d.tsx";
+import { threeDShowcases } from "./docs/example_3d.tsx";
 import { useResolvedExample } from "./hooks.ts";
 import { loadStaticDataset } from "./docs/data/real.ts";
 
@@ -23,6 +25,8 @@ const datasetLoader = (id: "mpg" | "mtcars" | "iris") => {
  * script can grab its swap-chain frame (scripts/example_frames.ts). Used to
  * hold pixel parity across refactors that should not change any output.
  */
+const hasSpec = (example: DocExample) => !!example.spec || !!example.buildSpec;
+
 export function CaptureProbe(
   { id, path = "compile" }: { id: string; path?: string },
 ) {
@@ -30,9 +34,27 @@ export function CaptureProbe(
     ...allDocExamples,
     ...docPages.flatMap((page) => page.examples ?? []),
   ].find((e) => e.id === id);
+  const showcase = threeDShowcases.find((s) => s.id === id);
+  if (!example && showcase) {
+    // A 3D showcase: its spec on the compile path, its chart on `chart`.
+    return (
+      <div id="capture-canvas" style={{ width: 640, height: 400 }}>
+        <LiveCanvas>
+          {(canvas: HTMLCanvasElement) =>
+            liveElement(
+              Scene3D,
+              path === "chart" || !showcase.spec
+                ? { canvas, chart: showcase.chart }
+                : { canvas, spec: showcase.spec },
+            )}
+        </LiveCanvas>
+      </div>
+    );
+  }
   if (!example) return <p id="capture-missing">No example {id}</p>;
-  if (example.chart) {
-    // A component-form example has one path: the component root.
+  if (example.chart && (path === "chart" || !hasSpec(example))) {
+    // `&path=chart` renders the hand-written JSX (gggplot-vnh.10.1); an
+    // example with no spec has only that path.
     return (
       <div id="capture-canvas" style={{ width: 640, height: 400 }}>
         <LiveCanvas>

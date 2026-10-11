@@ -1,6 +1,6 @@
 import type { DocPage } from "./types.ts";
 import { geomReferenceEntries } from "./geom_reference.ts";
-import { threeDShowcases } from "./example_3d.ts";
+import { threeDShowcases } from "./example_3d.tsx";
 import { composeWithUseGpu } from "./compose_example.tsx";
 import {
   alignedStackedArea,
@@ -373,7 +373,7 @@ export const docPages: DocPage[] = [
       {
         heading: "How do I add an example?",
         body:
-          "Add a typed or lazily loaded dataset module, declare a DocExample with synchronized DSL text and a spec or buildSpec, place it on its owning page, and map every public geom it teaches in geomExampleCoverage. Then run the core, site, coverage, and visual checks. Real-data examples load only when mounted, so ordinary additions do not create eager page-wide data transfers.",
+          "Add a typed or lazily loaded dataset module (a stable loader for <GGData load>), declare a DocExample whose `chart` is the component JSX and whose `jsxSource` shows the same code (jsx_source_test.ts checks they agree), place it on its owning page, and map every public geom it teaches in geomExampleCoverage. Then run the core, site, coverage, and visual checks. Real-data examples load only when mounted, so ordinary additions do not create eager page-wide data transfers.",
       },
       {
         heading: "Where is the architecture reference?",

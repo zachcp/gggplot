@@ -81,7 +81,7 @@ Deno.test("every public geom constructor has a live documentation example", asyn
   // in @use-gpu/plot, a browser-only module that fails to load under Deno.
   // The DocExample scan above already works this way.
   const showcaseSource = await Deno.readTextFile(
-    new URL("./example_3d.ts", import.meta.url),
+    new URL("./example_3d.tsx", import.meta.url),
   );
   const showcaseVars = new Map<string, string>();
   for (
@@ -105,7 +105,7 @@ Deno.test("every public geom constructor has a live documentation example", asyn
   assertEquals(
     showcaseIds.size > 0,
     true,
-    "no ThreeDShowcase ids found in example_3d.ts",
+    "no ThreeDShowcase ids found in example_3d.tsx",
   );
   const known = new Set([...ids, ...showcaseIds]);
   for (const reference of geomReferenceEntries) {

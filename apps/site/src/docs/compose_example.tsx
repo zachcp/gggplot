@@ -45,14 +45,14 @@ const CENTER_POSITIONS = Float32Array.from(
 const CENTER_VALUES = Float32Array.from(CENTERS.map((c) => c.value));
 
 /** A raw workbench primitive, colored by the plot's own color scale. */
-function Halos(): LiveElement {
+function Halos() {
   const positions = useRawSource(CENTER_POSITIONS, "vec2<f32>");
   const colors = useGGColors(CENTER_VALUES);
   return (
     <PointLayer
       positions={positions}
       colors={colors}
-      count={CENTERS.length}
+      count={3}
       size={64}
       hollow
       outline={3}
