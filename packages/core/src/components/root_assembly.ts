@@ -7,20 +7,23 @@
 // prepared layer and lowered mark whose inputs did not change.
 import {
   type AssembledPlot,
-  assemblePlot,
   type buildFacetPanels,
   type LayerRemovals,
+  layoutPlot,
   type LowerMarksArgs,
   polarizeMark,
   type PolarTransform,
   type PreparedLayer,
+  type PreparedPlot,
   prepareLayer,
   prepareSignature,
   recordRemovals,
   type RenderNode,
   type RowRemoval,
-  rowRemovalsOf,
+  sortedRemovals,
   type TextMeasurer,
+  type TrainedPlot,
+  trainPlot,
 } from "../compile/mod.ts";
 import { reuseUnchanged } from "../compile/stable_tensors.ts";
 import { GG, type SpecPart } from "../dsl/base.ts";
@@ -233,38 +236,40 @@ function transformMark(
   return next;
 }
 
-/** One assembly of the plot: its tree, scales/panel info and row removals. */
-export interface RootAssembly {
-  tree: RenderNode;
-  info: AssembledPlot | null;
-  /** Rows each layer dropped before its stat, as compile() reports them. */
-  diagnostics: readonly RowRemoval[];
-  /** The GPU products the tree's resident marks read, one per product. */
-  residentNodes: HoistedNode[];
-}
-
 /** The layer parts a root assembles, in tree order. */
 export type LayerParts = readonly Extract<PlotPart, { kind: "layer" }>[];
 
 /**
- * Train across the layer parts and assemble the plot, reusing whatever in
- * `caches` is still valid: a layer's prepared rows while its layer, panel rows
- * and plot-level spec are unchanged, its marks while everything lowering
- * reads is. Pure but for the caches, so the component path can be exercised
- * without a Live tree. Null while any layer is pending.
+ * The layout-free half of an assembly: every layer prepared (filtered, stat
+ * run or resident plan made) and the plot trained. A resize changes none of
+ * it (gggplot-d14).
  */
-export function assembleRoot(
+export interface PreparedRoot {
+  /** The plot-level spec with the parts' layers. */
+  spec: GGSpec;
+  layers: LayerParts;
+  prepared: PreparedPlot;
+  trained: TrainedPlot;
+  /** Rows each layer dropped before its stat, as compile() reports them. */
+  diagnostics: readonly RowRemoval[];
+}
+
+/**
+ * Prepare every layer part and train the plot, reusing each prepared layer
+ * whose layer, panel rows and prepareSignature are unchanged (gggplot-2gu).
+ * Null while any layer is pending.
+ */
+export function prepareRoot(
   base: GGSpec,
   layers: LayerParts,
   panels: ReturnType<typeof buildFacetPanels>,
-  layout: { width: number; height: number; measureText: TextMeasurer },
   caches: RootCaches,
-): RootAssembly | null {
+): PreparedRoot | null {
   // vs7 trap 2: a layer whose domain contribution is still in flight would
   // train as empty, so nothing is trained or assembled until every layer has
   // reported. The previous assembly stays on screen meanwhile.
   if (layers.some((layer) => layer.pending)) return null;
-  componentProbe.assembleCalls++;
+  componentProbe.trainCalls++;
   const spec: GGSpec = { ...base, layers: layers.map((l) => l.layer) };
   const faceted = spec.facet.kind !== "none";
   const standalone = !faceted && layers.length === 1;
@@ -292,13 +297,7 @@ export function assembleRoot(
           // root hosts (gggplot-280); the rest take their CPU stat.
           resident: true,
         });
-        entry = {
-          layer,
-          data: panel.data,
-          signature,
-          prepared,
-          removed,
-        };
+        entry = { layer, data: panel.data, signature, prepared, removed };
         caches.prepared.set(key, entry);
       }
       recordRemovals(removals, layerIndex, layer.geom, entry.removed);
@@ -308,7 +307,41 @@ export function assembleRoot(
   for (const key of caches.prepared.keys()) {
     if (!livePrepared.has(key)) caches.prepared.delete(key);
   }
+  const prepared: PreparedPlot = {
+    panels: panels.panels,
+    nrow: panels.nrow,
+    ncol: panels.ncol,
+    panelLayers,
+    removals,
+  };
+  return {
+    spec,
+    layers,
+    prepared,
+    trained: trainPlot(spec, prepared),
+    diagnostics: sortedRemovals(removals),
+  };
+}
 
+/** The layout half of an assembly: the tree for one size. */
+export interface LaidOutRoot {
+  tree: RenderNode;
+  info: AssembledPlot | null;
+  /** The GPU products the tree's resident marks read, one per product. */
+  residentNodes: HoistedNode[];
+}
+
+/**
+ * Lay out a prepared plot at one size: guides, grids, and each panel's marks,
+ * lowered or taken from cache (only layout-bound geoms re-lower on a resize).
+ */
+export function layoutRoot(
+  root: PreparedRoot,
+  layout: { width: number; height: number; measureText: TextMeasurer },
+  caches: RootCaches,
+): LaidOutRoot {
+  componentProbe.assembleCalls++;
+  const { spec, layers } = root;
   const liveLowered = new Set<string>();
   const lowerMarks = (args: LowerMarksArgs): RenderNode[] => {
     const { layer, mapping, data, ctx, layerIndex, panelIndex } = args;
@@ -348,13 +381,7 @@ export function assembleRoot(
   };
 
   let info: AssembledPlot | null = null;
-  const tree = assemblePlot(spec, {
-    panels: panels.panels,
-    nrow: panels.nrow,
-    ncol: panels.ncol,
-    panelLayers,
-    removals,
-  }, {
+  const tree = layoutPlot(spec, root.prepared, root.trained, {
     layout,
     lowerMarks,
     transformMark: (mark, polar) => transformMark(caches, mark, polar),
@@ -365,13 +392,33 @@ export function assembleRoot(
   for (const key of caches.lowered.keys()) {
     if (!liveLowered.has(key)) caches.lowered.delete(key);
   }
-  const assembled = info as AssembledPlot | null;
   // Each distinct product once, every consumer stamped with its id.
   const hosted = collectResidentNodes(tree);
   return {
     tree: hosted.tree,
-    info: assembled,
-    diagnostics: rowRemovalsOf(tree),
+    info: info as AssembledPlot | null,
     residentNodes: hosted.nodes,
   };
+}
+
+/** One whole assembly: prepareRoot then layoutRoot. */
+export interface RootAssembly extends LaidOutRoot {
+  diagnostics: readonly RowRemoval[];
+}
+
+/**
+ * Prepare, train and lay out in one call, reusing whatever in `caches` is
+ * still valid. Pure but for the caches, so the component path can be
+ * exercised without a Live tree. Null while any layer is pending.
+ */
+export function assembleRoot(
+  base: GGSpec,
+  layers: LayerParts,
+  panels: ReturnType<typeof buildFacetPanels>,
+  layout: { width: number; height: number; measureText: TextMeasurer },
+  caches: RootCaches,
+): RootAssembly | null {
+  const root = prepareRoot(base, layers, panels, caches);
+  if (!root) return null;
+  return { ...layoutRoot(root, layout, caches), diagnostics: root.diagnostics };
 }

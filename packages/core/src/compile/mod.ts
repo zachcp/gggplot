@@ -275,10 +275,16 @@ function removalProps(
   removals: Map<string, RowRemoval>,
 ): Record<string, unknown> {
   if (removals.size === 0) return {};
-  const diagnostics = [...removals.values()].sort((a, b) =>
+  return { diagnostics: sortedRemovals(removals) };
+}
+
+/** Per-layer removal totals as diagnostics, in layer then reason order. */
+export function sortedRemovals(
+  removals: Map<string, RowRemoval>,
+): RowRemoval[] {
+  return [...removals.values()].sort((a, b) =>
     a.layer - b.layer || a.reason.localeCompare(b.reason)
   );
-  return { diagnostics };
 }
 
 /** A tree's row removals, in layer then reason order; empty when none. */
@@ -506,45 +512,56 @@ export function compile(
   return tree;
 }
 
-/**
- * Train scales across prepared layers, lay out guides, lower marks, and
- * assemble the RenderTree. `spec.layers` must be the layers `prepared` was
- * built from, in the same order.
- */
-export function assemblePlot(
-  spec: GGSpec,
-  prepared: PreparedPlot,
-  options: CompileOptions = {},
-): RenderNode {
-  const dimensionality = resolvePlotDimension(spec);
-  const labels = spec.labels ?? {};
-  const { panels, nrow, ncol, panelLayers } = prepared;
-  const removalTotals = prepared.removals;
-  const faceted = spec.facet.kind !== "none";
+/** One panel's trained position scales and view domains (layout-free). */
+export interface PanelTrain {
+  xScale: TrainedScale | undefined;
+  yScale: TrainedScale | undefined;
+  /** Widened, then narrowed by coord_cartesian limits. */
+  xDomain: [number, number];
+  yDomain: [number, number];
+}
 
+/**
+ * Everything assembly derives from the prepared layers alone, before any
+ * layout: trained scales, widened domains, each panel's (possibly free)
+ * position scales and zoomed view domains. A resize changes none of it, so
+ * the component root keeps it across resizes (gggplot-d14).
+ */
+export interface TrainedPlot {
+  scales: Map<string, TrainedScale>;
+  xDomain: [number, number];
+  yDomain: [number, number];
+  /** x/y with the widened domains, plus every non-position scale. */
+  guideScales: Partial<Record<AesName, TrainedScale>>;
+  /** The plot-wide non-position scales every panel's LayerContext shares. */
+  aestheticScales: Partial<Record<AesName, TrainedScale>>;
+  /** Per panel, in `prepared.panels` order (2D plots only). */
+  panelTrains: PanelTrain[];
+}
+
+/**
+ * Train scales across prepared layers (ggplot2's default scales="fixed", with
+ * free per-panel position scales for facets) and resolve each panel's view
+ * domains. Layout-free: the half of assemblePlot a resize never re-runs.
+ */
+export function trainPlot(spec: GGSpec, prepared: PreparedPlot): TrainedPlot {
+  const { panelLayers } = prepared;
   // ② train scales across all panels combined → shared x/y domains for every
-  // panel's view range (ggplot2's default scales="fixed"; free per-panel
-  // scales aren't implemented).
+  // panel's view range.
   const allPerLayer = panelLayers.flat();
   const scales = trainScales(spec, allPerLayer);
-  if (dimensionality.dimensions === 3) {
-    options.onAssembled?.({
-      scales: Object.fromEntries(scales) as AssembledPlot["scales"],
-      panelBounds: [-1, -1, 1, 1],
-      dimensions: 3,
-    });
-    return compileThreeDimensionalPlot(spec, allPerLayer, scales, options);
-  }
   const xScale = scales.get("x");
   const yScale = scales.get("y");
-  const colorScale = scales.get("color");
-  const fillScale = scales.get("fill");
-  const sizeScale = scales.get("size");
-  const alphaScale = scales.get("alpha");
-  const shapeScale = scales.get("shape");
-  const linetypeScale = scales.get("linetype");
-  const linewidthScale = scales.get("linewidth");
-  const strokeScale = scales.get("stroke");
+  if (resolvePlotDimension(spec).dimensions === 3) {
+    return {
+      scales,
+      xDomain: [0, 1],
+      yDomain: [0, 1],
+      guideScales: Object.fromEntries(scales),
+      aestheticScales: {},
+      panelTrains: [],
+    };
+  }
   const [xDomain, yDomain] = widenDomains(
     allPerLayer,
     xScale,
@@ -565,20 +582,106 @@ export function assemblePlot(
   // and legend layout, while each panel spreads `aestheticScales` over its own
   // (possibly free-scaled) x/y when building its LayerContext.
   const aestheticScales = {
-    color: colorScale,
-    fill: fillScale,
-    size: sizeScale,
-    alpha: alphaScale,
-    shape: shapeScale,
-    linetype: linetypeScale,
-    linewidth: linewidthScale,
-    stroke: strokeScale,
+    color: scales.get("color"),
+    fill: scales.get("fill"),
+    size: scales.get("size"),
+    alpha: scales.get("alpha"),
+    shape: scales.get("shape"),
+    linetype: scales.get("linetype"),
+    linewidth: scales.get("linewidth"),
+    stroke: scales.get("stroke"),
   };
   const guideScales: Partial<Record<AesName, TrainedScale>> = {
     x: xGuideScale,
     y: yGuideScale,
     ...aestheticScales,
   };
+
+  const free = spec.facet.scales ?? "fixed";
+  const limits = coordLimits(spec);
+  const panelTrains = panelLayers.map((perLayer): PanelTrain => {
+    const panelScales = free === "fixed" ? scales : trainScales(spec, perLayer);
+    const panelXScale = free === "free" || free === "free_x"
+      ? panelScales.get("x")
+      : xScale;
+    const panelYScale = free === "free" || free === "free_y"
+      ? panelScales.get("y")
+      : yScale;
+    let panelXDomain = free === "free" || free === "free_x"
+      ? numericRange(panelXScale) ?? xDomain
+      : xDomain;
+    let panelYDomain = free === "free" || free === "free_y"
+      ? numericRange(panelYScale) ?? yDomain
+      : yDomain;
+    [panelXDomain, panelYDomain] = widenDomains(
+      perLayer,
+      panelXScale,
+      panelYScale,
+      panelXDomain,
+      panelYDomain,
+    );
+    // coord_cartesian zoom, applied AFTER training and widening and BEFORE
+    // lowering: the marks are positioned against the narrowed view, which is
+    // the zoom, while the data behind them is untouched. Row filtering lives
+    // in scale/censor.ts and is driven by scale domains only, so nothing here
+    // can change what a stat saw (gggplot-b06).
+    return {
+      xScale: panelXScale,
+      yScale: panelYScale,
+      xDomain: zoomed(panelXDomain, limits.x),
+      yDomain: zoomed(panelYDomain, limits.y),
+    };
+  });
+  return {
+    scales,
+    xDomain,
+    yDomain,
+    guideScales,
+    aestheticScales,
+    panelTrains,
+  };
+}
+
+/**
+ * Train scales across prepared layers, lay out guides, lower marks, and
+ * assemble the RenderTree. `spec.layers` must be the layers `prepared` was
+ * built from, in the same order.
+ */
+export function assemblePlot(
+  spec: GGSpec,
+  prepared: PreparedPlot,
+  options: CompileOptions = {},
+): RenderNode {
+  return layoutPlot(spec, prepared, trainPlot(spec, prepared), options);
+}
+
+/**
+ * The layout half of assemblePlot: guide layout, per-panel grids and marks,
+ * and the RenderTree, from an already trained plot.
+ */
+export function layoutPlot(
+  spec: GGSpec,
+  prepared: PreparedPlot,
+  trained: TrainedPlot,
+  options: CompileOptions = {},
+): RenderNode {
+  const dimensionality = resolvePlotDimension(spec);
+  const labels = spec.labels ?? {};
+  const { panels, nrow, ncol, panelLayers } = prepared;
+  const removalTotals = prepared.removals;
+  const faceted = spec.facet.kind !== "none";
+  const allPerLayer = panelLayers.flat();
+  const { scales, guideScales, aestheticScales } = trained;
+  if (dimensionality.dimensions === 3) {
+    options.onAssembled?.({
+      scales: Object.fromEntries(scales) as AssembledPlot["scales"],
+      panelBounds: [-1, -1, 1, 1],
+      dimensions: 3,
+    });
+    return compileThreeDimensionalPlot(spec, allPerLayer, scales, options);
+  }
+  const xGuideScale = guideScales.x;
+  const yGuideScale = guideScales.y;
 
   // ④ coord → view component
   // "axes" is a swizzle string applied to Cartesian/Polar's output after the
@@ -609,35 +712,12 @@ export function assemblePlot(
     perLayer: typeof allPerLayer,
     panelIndex = 0,
   ): RenderNode {
-    const free = spec.facet.scales ?? "fixed";
-    const panelScales = free === "fixed" ? scales : trainScales(spec, perLayer);
-    const panelXScale = free === "free" || free === "free_x"
-      ? panelScales.get("x")
-      : xScale;
-    const panelYScale = free === "free" || free === "free_y"
-      ? panelScales.get("y")
-      : yScale;
-    let panelXDomain = free === "free" || free === "free_x"
-      ? numericRange(panelXScale) ?? xDomain
-      : xDomain;
-    let panelYDomain = free === "free" || free === "free_y"
-      ? numericRange(panelYScale) ?? yDomain
-      : yDomain;
-    [panelXDomain, panelYDomain] = widenDomains(
-      perLayer,
-      panelXScale,
-      panelYScale,
-      panelXDomain,
-      panelYDomain,
-    );
-    // coord_cartesian zoom, applied AFTER training and widening and BEFORE
-    // lowering: the marks are positioned against the narrowed view, which is
-    // the zoom, while the data behind them is untouched. Row filtering lives
-    // in scale/censor.ts and is driven by scale domains only, so nothing here
-    // can change what a stat saw (gggplot-b06).
-    const limits = coordLimits(spec);
-    panelXDomain = zoomed(panelXDomain, limits.x);
-    panelYDomain = zoomed(panelYDomain, limits.y);
+    const {
+      xScale: panelXScale,
+      yScale: panelYScale,
+      xDomain: panelXDomain,
+      yDomain: panelYDomain,
+    } = trained.panelTrains[panelIndex];
     // ⑤ geoms → marks. One LayerContext per panel replaces the former
     // 19-positional-parameter lowerLayer signature: the x/y scales are the
     // panel's (possibly free-scaled) scales, the other aesthetic scales are the
