@@ -8,70 +8,68 @@ instrumentation results, both from a real run on the hardware below. Re-run
 `deno bench -A packages/core/bench/flat_pipeline_bench.ts` and
 `deno task --cwd apps/site test:gpu-instrument` to refresh.
 
-> **2026-10-11:** the bench's construct and emit stages measured `compile()` and
-> `emitSource()`, which ADR-007 retired (gggplot-vnh.11, -vnh.14). Their numbers
-> below are historical; the bench is being rewritten against the component root
-> (gggplot-mhtd). The GPU upload gate is current and runs on the component root.
+> **2026-10-12:** section 1 was re-run after ADR-007 retired `compile()` and
+> `emitSource()` (gggplot-vnh.11, -vnh.14). Stage (c) now measures the component
+> root's assembly, and stage (d), the literal emitter, is gone: the JSX printer
+> passes data by reference. The 2026-07-19 numbers, including `compile()` and
+> the emitter, are in this file's git history (gggplot-mhtd).
 
 ## Hardware / software
 
 |                                    |                                                                                                              |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Date                               | 2026-07-19                                                                                                   |
+| Date                               | 2026-10-12 (section 1); 2026-07-19 (section 2)                                                               |
 | Machine                            | MacBook Air, Apple M1, 8 GB RAM                                                                              |
-| OS                                 | macOS 26.5.2 (build 25F84)                                                                                   |
-| Deno                               | 2.9.3 (aarch64-apple-darwin), V8 14.9.207.2                                                                  |
+| OS                                 | macOS 27.0 (section 1); macOS 26.5.2, build 25F84 (section 2)                                                |
+| Deno                               | 2.9.7 (section 1); 2.9.3, V8 14.9.207.2 (section 2)                                                          |
 | Browser (GPU instrumentation only) | Chromium via `npm:playwright@^1.61.1`, headless, `--enable-unsafe-webgpu --enable-webgpu-developer-features` |
 
 ## 1. Staged CPU bench
 
 Source: `packages/core/bench/flat_pipeline_bench.ts` (`deno bench` — same
-convention as `packages/reductions/bench/reductions_bench.ts`). Four stages,
-kept separate:
+convention as `packages/reductions/bench/reductions_bench.ts`).
+`deno task check` type-checks every bench, so they cannot silently rot. Three
+stages, kept separate:
 
 - **(a) packing** — `geom/shared.ts`'s `packMarkRows`/`packFaceLoops`/
   `concatPacked`+`concatFlatTensors`, called directly (no RenderNode wrapping).
 - **(b) coordinate transform/munch, polar variant** — `compile/coordinates.ts`'s
-  `polarizeNode`+`munchPolygonNode`+`munchFlatNode` (the exact composition
-  `pack_cache.ts`'s `stageBTransformedMark` uses), against a polar view. This is
-  the only view that does real munch work — Cartesian views never call
-  `polarize`/`munch` at all (`compile/mod.ts`'s `polarMarks = marks` branch), so
-  there is no analogous non-trivial Cartesian number to report here; that
-  "identity, zero cost" property is exactly what `pack_cache.ts`'s Stage B doc
-  and `tests/raw_position_domain_test.ts`'s reference-identity gate both already
-  assert structurally.
-- **(c) RenderTree construction** — the full `compile(spec)` pipeline via the
-  public DSL (stat → scale training → geom lowering, including its own packing →
-  guides). Not a clean isolate of (a) — it necessarily repeats packing inside
-  each geom's `lower()` — reported as the realistic "build the tree from a spec"
-  number.
-- **(d) emission** — `emit/mod.ts`'s `emitSource(tree)` on stage (c)'s output.
+  `polarizeMark` (`polarizeNode`, then `munchFlatNode`), which is what the
+  component root runs on each mark in a polar panel. Cartesian marks are never
+  polarized or munched, so there is no analogous Cartesian number to report.
+- **(c) plot assembly** — the component root's prepare, train and layout
+  (`components/root_assembly.ts`, driven through `tests/support/assemble.ts`) on
+  a spec built with the internal DSL: stat → scale training → geom lowering,
+  including its own packing → guides. Not a clean isolate of (a): it repeats
+  packing inside each geom's `lower()`. Each call uses fresh caches, so this is
+  a first mount, not a cached re-render (a resize re-runs layout only, and an
+  unchanged layer is not re-lowered).
 
 Point / grouped line (8 groups) / stacked bar (50 x-categories × 5 fill levels)
 — matching the epic's three named scenarios.
 
 ### 10k / 100k rows (`deno bench`'s own adaptive repeat-to-~1s harness)
 
-| Stage                    | Family       | 10,000 rows | 100,000 rows | 10k→100k scaling |
-| ------------------------ | ------------ | ----------: | -----------: | ---------------: |
-| (a) pack                 | point        |      1.8 ms |      18.3 ms |            10.4x |
-| (a) pack                 | grouped line |      1.7 ms |      17.9 ms |            10.3x |
-| (a) pack                 | stacked bar  |     11.1 ms |     152.3 ms |            13.7x |
-| (b) polar transform      | point        |      2.0 ms |      18.9 ms |             9.4x |
-| (b) polar transform      | grouped line |      5.1 ms |      53.9 ms |            10.6x |
-| (b) polar transform      | stacked bar  |     27.2 ms |     344.8 ms |            12.7x |
-| (c) construct RenderTree | point        |      1.5 ms |      20.5 ms |            13.8x |
-| (c) construct RenderTree | grouped line |      8.0 ms |      82.1 ms |            10.3x |
-| (c) construct RenderTree | stacked bar  |      5.6 ms |      51.8 ms |             9.2x |
-| (d) emit                 | point        |      3.3 ms |      44.1 ms |            13.2x |
-| (d) emit                 | grouped line |     12.7 ms |     133.0 ms |            10.5x |
-| (d) emit                 | stacked bar  |      6.1 ms |      71.4 ms |            11.7x |
+| Stage               | Family       | 10,000 rows | 100,000 rows | 10k→100k scaling |
+| ------------------- | ------------ | ----------: | -----------: | ---------------: |
+| (a) pack            | point        |      1.7 ms |      16.9 ms |             9.9x |
+| (a) pack            | grouped line |      1.6 ms |      15.2 ms |             9.5x |
+| (a) pack            | stacked bar  |      8.8 ms |     123.7 ms |            14.1x |
+| (b) polar transform | point        |      1.7 ms |      17.7 ms |            10.4x |
+| (b) polar transform | grouped line |      4.2 ms |      46.8 ms |            11.1x |
+| (b) polar transform | stacked bar  |     21.7 ms |     408.9 ms |            18.8x |
+| (c) assemble plot   | point        |      1.3 ms |      14.0 ms |            10.8x |
+| (c) assemble plot   | grouped line |      7.2 ms |      70.9 ms |             9.8x |
+| (c) assemble plot   | stacked bar  |      3.9 ms |      38.5 ms |             9.9x |
 
-Scaling is close to linear (roughly 10–14x for a 10x row increase — the
-super-linear tail on `pack`/`transform` stacked-bar is GC/allocation pressure
-from `Array<[number,number][]>` intermediate loop construction before
-`packFaceLoops` flattens it, not an algorithmic complexity issue —
-`packFaceLoops`/`concatPacked` themselves are single linear passes).
+Scaling is close to linear. The super-linear tail on `pack`/`transform` stacked
+bar is GC/allocation pressure from `Array<[number,number][]>` intermediate loop
+construction before `packFaceLoops` flattens it, not an algorithmic complexity
+issue — `packFaceLoops`/`concatPacked` themselves are single linear passes. The
+100k polar-bar case is also the noisiest (263–889 ms across iterations).
+
+Plot assembly at 100k rows is 14.0 / 70.9 / 38.5 ms (point / line / bar),
+against 20.5 / 82.1 / 51.8 ms for `compile()` on 2026-07-19.
 
 ### 1,000,000 rows — BOUNDED (fixed 1 warmup + 1 measured run, hard budget)
 
@@ -80,39 +78,33 @@ repeat harness (which would otherwise re-run a multi-second operation an
 unbounded number of times). Instead each stage runs exactly 1 discarded warmup
 call + 1 measured call at module load, asserted against a hard millisecond
 budget (the bench file throws — failing the whole `deno bench` run — if any
-stage exceeds its budget). All twelve stages passed comfortably under budget on
-this hardware:
+stage exceeds its budget). All nine stages passed under budget on this hardware:
 
-| Stage                    | Family       |   Measured |    Budget | Within budget |
-| ------------------------ | ------------ | ---------: | --------: | ------------- |
-| (a) pack                 | point        |   375.6 ms |  4,000 ms | yes           |
-| (a) pack                 | grouped line |   350.4 ms |  4,000 ms | yes           |
-| (a) pack                 | stacked bar  | 4,959.2 ms |  6,000 ms | yes           |
-| (b) polar transform      | point        |   280.6 ms |  4,000 ms | yes           |
-| (b) polar transform      | grouped line | 1,011.4 ms |  8,000 ms | yes           |
-| (b) polar transform      | stacked bar  | 8,637.5 ms | 10,000 ms | yes           |
-| (c) construct RenderTree | point        |   321.1 ms |  6,000 ms | yes           |
-| (c) construct RenderTree | grouped line | 1,096.1 ms |  8,000 ms | yes           |
-| (c) construct RenderTree | stacked bar  |   580.1 ms | 12,000 ms | yes           |
-| (d) emit                 | point        |   468.3 ms |  8,000 ms | yes           |
-| (d) emit                 | grouped line | 1,404.7 ms | 10,000 ms | yes           |
-| (d) emit                 | stacked bar  |   588.3 ms | 14,000 ms | yes           |
+| Stage               | Family       |   Measured |    Budget | Within budget |
+| ------------------- | ------------ | ---------: | --------: | ------------- |
+| (a) pack            | point        |   173.4 ms |  4,000 ms | yes           |
+| (a) pack            | grouped line |   155.2 ms |  4,000 ms | yes           |
+| (a) pack            | stacked bar  | 1,170.4 ms |  6,000 ms | yes           |
+| (b) polar transform | point        |   202.4 ms |  4,000 ms | yes           |
+| (b) polar transform | grouped line |   921.8 ms |  8,000 ms | yes           |
+| (b) polar transform | stacked bar  | 7,115.7 ms | 10,000 ms | yes           |
+| (c) assemble plot   | point        |   172.5 ms |  6,000 ms | yes           |
+| (c) assemble plot   | grouped line |   873.5 ms |  8,000 ms | yes           |
+| (c) assemble plot   | stacked bar  |   418.1 ms | 12,000 ms | yes           |
 
-Notable: 1M-row **stacked bar** is consistently the heaviest case in both (a)
-packing (~5s) and (b) polar transform (~8.6s) — `packFaceLoops` allocates 4
-vertices per bar (4M vertices total) plus a full `expandByOwners`
-color-expansion pass, and polar munching then subdivides every one of those loop
-edges 16x (`MUNCH_DETAIL`), so the polar-bar path is doing on the order of 4M ×
-16 ≈ 64M emitted vertices for 1M input rows — the budget (10s) reflects that
-real multiplier, not slack. Point and grouped-line stay well under a second at
-every stage even at 1M rows, including their own polar/munch variants (points
-never munch at all — `munchFlatNode`'s `kind: 'points'` branch is a structural
-no-op pass-through — see `compile/coordinates.ts`).
+Notable: 1M-row **stacked bar** under (b) polar transform (~7.1s) is still the
+heaviest case. `packFaceLoops` allocates 4 vertices per bar (4M vertices total)
+plus a full `expandByOwners` color-expansion pass, and polar munching then
+subdivides every one of those loop edges 16x (`MUNCH_DETAIL`), so the polar-bar
+path emits on the order of 4M × 16 ≈ 64M vertices for 1M input rows — the budget
+(10s) reflects that real multiplier, not slack. Point and grouped line stay
+under a second at every stage even at 1M rows, including their polar/munch
+variants (points never munch at all — `munchFlatNode`'s `kind: 'points'` branch
+is a structural no-op pass-through — see `compile/coordinates.ts`).
 
-Run-to-run variance observed across the two runs taken for this document (both
-included in the git history of this file's first version) was up to ~2x on the
-polar-bar/pack-bar cases specifically (shared-runner GC/thermal noise on a
-laptop, not a regression) — budgets above are set with headroom for that.
+Run-to-run variance on the polar-bar and pack-bar cases has been up to ~2x on
+this laptop (GC/thermal noise, not a regression); the budgets leave headroom for
+that.
 
 ## 2. GPU mark-data upload instrumentation
 
