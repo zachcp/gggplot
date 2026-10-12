@@ -25,7 +25,7 @@ import {
   registerKnownMarkArray,
 } from "./gpu_instrument.ts";
 import { facetCellLayouts } from "../compile/facet_layout.ts";
-import { esm } from "../runtime/usegpu_compat.ts";
+import { esm, LayoutContext, RangeContext } from "../runtime/usegpu_compat.ts";
 const {
   createElement,
   Fragment,
@@ -46,14 +46,13 @@ const {
   Point,
   Polar,
   Polygon,
-  RangeContext,
   ScissorBox,
   Tick,
   Transform,
 } = esm(UseGpuPlot, "Plot");
-const { FlatCamera, LayoutContext, OrbitCamera, Pass } = esm(
+const { FlatCamera, OrbitCamera, Pass } = esm(
   UseGpuWorkbench,
-  "LayoutContext",
+  "useDeviceContext",
 );
 const { OrbitControls } = esm(UseGpuInteract, "OrbitControls");
 

@@ -14,7 +14,10 @@ import {
   validateExportDimensions,
 } from "./utils.ts";
 import { esm } from "../runtime/usegpu_compat.ts";
-const { FlatCamera, Pass, Screenshot } = esm(UseGpuWorkbench, "LayoutContext");
+const { FlatCamera, Pass, Screenshot } = esm(
+  UseGpuWorkbench,
+  "useDeviceContext",
+);
 const Live = esm(UseGpuLive, "useMemo");
 const { LiveCanvas } = esm(UseGpuReact, "LiveCanvas");
 const { Canvas, WebGPU } = esm(UseGpuWebgpu, "WebGPU");

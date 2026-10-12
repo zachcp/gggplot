@@ -15,7 +15,7 @@ import {
 import { esm } from "../runtime/usegpu_compat.ts";
 
 const Live = esm(UseGpuLive, "useMemo");
-const Workbench = esm(UseGpuWorkbench, "LayoutContext");
+const Workbench = esm(UseGpuWorkbench, "useDeviceContext");
 
 const attachRotatedLabelTo = wgsl`
   @link fn getPosition(i: u32) -> vec4<f32>;

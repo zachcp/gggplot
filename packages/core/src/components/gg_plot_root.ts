@@ -92,10 +92,10 @@ import {
   trainRoot,
   versionKey,
 } from "./root_assembly.ts";
-import { esm } from "../runtime/usegpu_compat.ts";
-const { LayoutContext, useFontContext, useNoDeviceContext } = esm(
+import { esm, LayoutContext } from "../runtime/usegpu_compat.ts";
+const { useFontContext, useNoDeviceContext } = esm(
   UseGpuWorkbench,
-  "LayoutContext",
+  "useDeviceContext",
 );
 
 export { componentProbe };

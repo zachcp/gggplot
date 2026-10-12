@@ -19,7 +19,7 @@ import {
 } from "../components/gg_plot_root.ts";
 import { esm } from "../runtime/usegpu_compat.ts";
 const { createElement, useAwait, useMemo } = esm(UseGpuLive, "useMemo");
-const { FontLoader } = esm(UseGpuWorkbench, "LayoutContext");
+const { FontLoader } = esm(UseGpuWorkbench, "useDeviceContext");
 
 /** <GGPlot>'s props: plot parts as children (ADR-007). */
 export interface GGPlotComponentProps extends GGPlotRootProps {

@@ -11,8 +11,11 @@
 import * as Live from "@use-gpu/live";
 import * as Plot from "@use-gpu/plot";
 import * as Workbench from "@use-gpu/workbench";
-import type { LiveElement } from "@use-gpu/live";
+import type { LiveContext, LiveElement } from "@use-gpu/live";
 import type { GPUStorageSource } from "./types.ts";
+
+/** A layout rect in pixels: [left, top, right, bottom]. */
+export type Rectangle = [number, number, number, number];
 
 /** A UseGPU Live component: props in, LiveElement out. */
 export type LiveComponent<P = Record<string, unknown>> = (
@@ -134,11 +137,23 @@ export type UseMaterialContext = () => MaterialContextValue;
  * ({createElement, Fragment, Yeet, ...}), so probing on `createElement` picks
  * that shim under Vite and loses every hook — which fails as a blank canvas,
  * not as a missing export. Probe on a hook instead.
+ *
+ * A probe found in NEITHER shape throws. Falling through to the bare namespace
+ * would hand every caller `undefined` members under Deno, and nothing would
+ * say why: that is what a probe on a symbol that moves package does (Use.GPU
+ * 0.21 moved LayoutContext, QueueReconciler, LoopContext and RangeContext into
+ * @use-gpu/frame, gggplot-hn39). Probe on a symbol the package owns.
  */
 const interop = <T>(namespace: unknown, probe: string): T => {
   // deno-lint-ignore no-explicit-any
   const ns = namespace as any;
-  return (ns?.default && ns.default[probe] ? ns.default : ns) as T;
+  if (ns?.default && ns.default[probe] !== undefined) return ns.default as T;
+  if (ns?.[probe] !== undefined) return ns as T;
+  throw new Error(
+    `[gggplot] Use.GPU interop: probe "${probe}" is not exported by this ` +
+      `package in either its CommonJS or ESM shape. It moved or was removed; ` +
+      `probe on a symbol the package still owns.`,
+  );
 };
 
 /**
@@ -190,6 +205,7 @@ const workbench = interop<{
   useNoRawSource: UseNoRawSource;
   QueueReconciler: { signal: () => LiveElement };
   LoopContext: unknown;
+  LayoutContext: LiveContext<Rectangle>;
   DeviceContext: unknown;
   PointLayer: LiveComponent;
   useLambdaSource: (shader: unknown, props: { length: number }) => unknown;
@@ -204,6 +220,7 @@ const plot = interop<{
   Grid: LiveComponent;
   Axis: LiveComponent;
   Face: LiveComponent;
+  RangeContext: LiveContext<[number, number][]>;
 }>(Plot, "Cartesian");
 
 // @use-gpu/live
@@ -224,6 +241,25 @@ export const useCapture = live.useCapture;
 export const useFiberId = live.useFiberId;
 
 // @use-gpu/workbench
+/**
+ * `QueueReconciler.signal()` is an element that, when (re)rendered, tells the
+ * frame queue to run again. <RawData> renders one whenever its source version
+ * moves; a flat raw-source hook does not, so a component built on hooks must
+ * render its own or compute that reads the new data never dispatches.
+ */
+export const QueueReconciler = workbench.QueueReconciler;
+/**
+ * SyncLoop's frame request, `(fiber?) => time`. Called with no fiber it just
+ * enqueues one animation frame, and it is safe to call outside render. The
+ * default (no SyncLoop above) is a no-op.
+ */
+export const LoopContext = workbench.LoopContext;
+/**
+ * The pixel rect [left, top, right, bottom] the enclosing view lays out into.
+ * A context, so identity matters: it must be the very object the camera and
+ * view components provide, never a second copy of its package.
+ */
+export const LayoutContext = workbench.LayoutContext;
 /**
  * Gathers compute work from its children and mounts the passes that run it.
  *
@@ -270,19 +306,6 @@ export const useRawTensorSource = workbench.useRawTensorSource;
 export const useNoRawTensorSource = workbench.useNoRawTensorSource;
 export const useRawSource = workbench.useRawSource;
 export const useNoRawSource = workbench.useNoRawSource;
-/**
- * `QueueReconciler.signal()` is an element that, when (re)rendered, tells the
- * frame queue to run again. <RawData> renders one whenever its source version
- * moves; a flat raw-source hook does not, so a component built on hooks must
- * render its own or compute that reads the new data never dispatches.
- */
-export const QueueReconciler = workbench.QueueReconciler;
-/**
- * SyncLoop's frame request, `(fiber?) => time`. Called with no fiber it just
- * enqueues one animation frame, and it is safe to call outside render. The
- * default (no SyncLoop above) is a no-op.
- */
-export const LoopContext = workbench.LoopContext;
 /** The mounted GPUDevice; provided by <WebGPU>, or directly in headless tests. */
 export const DeviceContext = workbench.DeviceContext;
 /** Workbench's point layer: takes shader-bound colors/sizes, unlike plot's <Point>. */
@@ -299,3 +322,5 @@ export const Cartesian = plot.Cartesian;
 export const Grid = plot.Grid;
 export const Axis = plot.Axis;
 export const Face = plot.Face;
+/** The data range each plot shape and guide reads; Cartesian provides it. */
+export const RangeContext = plot.RangeContext;
