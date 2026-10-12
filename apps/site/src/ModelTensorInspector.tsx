@@ -8,10 +8,10 @@ import {
 import { ChartCanvas } from "./ChartCanvas.tsx";
 import {
   tensorInventory,
-  tensorInventorySpec,
-  tensorMatrixSpec,
+  tensorInventoryChart,
+  tensorMatrixChart,
   trailingMatrixRequest,
-} from "./model_tensor_views.ts";
+} from "./model_tensor_views.tsx";
 import { styles } from "./styles.ts";
 
 /**
@@ -93,19 +93,23 @@ export function ModelTensorInspector(
     );
   }
 
-  const inventorySpec = tensorInventorySpec(document);
+  const inventoryChart = React.useMemo(() => {
+    const chart = tensorInventoryChart(document);
+    return chart && (() => chart);
+  }, [document]);
   const activeProduct = product?.descriptor === document.tensors[activeId!]
     ? product
     : undefined;
-  const matrixSpec = activeProduct
-    ? tensorMatrixSpec(activeProduct)
-    : undefined;
+  const matrixChart = React.useMemo(() => {
+    const chart = activeProduct ? tensorMatrixChart(activeProduct) : undefined;
+    return chart && (() => chart);
+  }, [activeProduct]);
 
   return (
     <>
-      {inventorySpec && (
+      {inventoryChart && (
         <ChartCanvas
-          spec={inventorySpec}
+          chart={inventoryChart}
           label={"Parameter bytes by tensor for " + document.id}
         />
       )}
@@ -125,7 +129,7 @@ export function ModelTensorInspector(
         </select>
       </label>
       {error && <p role="alert" style={styles.errorCopy}>{error}</p>}
-      {activeProduct && !matrixSpec && (
+      {activeProduct && !matrixChart && (
         <p style={styles.metaCopy}>
           Bounded as “{activeProduct.representation}” — too large to draw cell
           by cell.{activeProduct.diagnostics.length > 0
@@ -133,7 +137,7 @@ export function ModelTensorInspector(
             : ""}
         </p>
       )}
-      {activeProduct && matrixSpec && (
+      {activeProduct && matrixChart && (
         <>
           <p style={styles.metaCopy}>
             {activeProduct.representation} ·{" "}
@@ -142,7 +146,7 @@ export function ModelTensorInspector(
             {JSON.stringify(activeProduct.descriptor.shape)}
           </p>
           <ChartCanvas
-            spec={matrixSpec}
+            chart={matrixChart}
             label={"Tensor value heatmap for " + activeId}
           />
         </>

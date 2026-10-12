@@ -1,19 +1,36 @@
-// @gggplot/core — a ggplot → UseGPU Live transpiler.
-//
-// Pipeline:  DSL → GGSpec (IR) → compile() → RenderTree → { renderLive | emitSource }
+// @gggplot/core — the grammar of graphics as composable Use.GPU Live
+// components (ADR-007): <GGData> mounts data, <GGPlot> assembles plot parts
+// and layers, and printJsx prints a tree back to JSX.
 // See docs/ARCHITECTURE.md for the full design.
 
-// IR types (the transpiler's AST)
-export type * from "./ir/types.ts";
+// The grammar's value types, as component props take them. (The whole-plot
+// GGSpec is internal since gggplot-vnh.18: plots are component trees.)
+export type {
+  Aes,
+  AesName,
+  Coord,
+  CoordKind,
+  DataFrame,
+  ExecutionPolicy,
+  Facet,
+  FacetKind,
+  GeomKind,
+  Guide,
+  Layer,
+  PlotLabels,
+  PositionAxis,
+  PositionKind,
+  Scale,
+  ScaleKind,
+  StatKind,
+  Theme,
+} from "./ir/types.ts";
 
 // Portable semantic declarations — CPU/GPU bindings are mounted separately.
 export * from "./plan/mod.ts";
 
 // Mounted resource lifecycle. Use.GPU adapters satisfy the opaque source factory.
 export * from "./runtime/mod.ts";
-
-// DSL — ggplot()/aes()/geom_*/scale_*/coord_*/facet_*/theme_*
-export * from "./dsl/mod.ts";
 
 // Data ingestion prototype — row/column-store raw data -> typed columns.
 export * from "./data/mod.ts";
@@ -34,6 +51,8 @@ export {
   GGPart,
   type PlotPart,
 } from "./components/parts.ts";
+/** A plot-level part's value, as `ScaleColor.part(...)` returns it for <GGPart>. */
+export type { SpecPart } from "./dsl/base.ts";
 export { useGGColors, useGGSizes } from "./components/gg_panel.ts";
 export { GGLayer, type GGLayerProps } from "./components/gg_layer.ts";
 export {
@@ -52,8 +71,7 @@ export {
   useGGScales,
 } from "./components/gg_scales.ts";
 
-// Compiler + render tree
-export { compile, type CompileOptions } from "./compile/mod.ts";
+// Render tree (retired as public API with gggplot-vnh.14)
 export {
   type ComponentName,
   node,
@@ -89,8 +107,6 @@ export {
   GGPlot,
   type GGPlotComponentProps,
   type GGPlotProps,
-  type GGPlotSpecProps,
-  renderTree,
 } from "./render/GGPlot.tsx";
 export {
   type PrismInstance3D,

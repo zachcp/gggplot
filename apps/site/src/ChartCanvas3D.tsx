@@ -3,33 +3,25 @@ import { LiveCanvas } from "@use-gpu/react";
 // Live elements are built with the typed factory, not React JSX: a Live
 // scene returns a LiveElement, which React's JSX namespace rejects.
 import { createElement as liveElement } from "@gggplot/core/jsx";
-import type {
-  GGSpec,
-  PrismInstance3D,
-  ScenePickFn,
-  SceneRay,
-} from "@gggplot/core";
+import type { PrismInstance3D, ScenePickFn, SceneRay } from "@gggplot/core";
 import { pointerToUV } from "@gggplot/core";
-import type { LiveElement } from "@use-gpu/live";
-import { Scene3D } from "./scene3d.tsx";
+import { type Chart3D, Scene3D } from "./scene3d.tsx";
 
 /** How far the pointer may travel between down and up and still count as a click. */
 const CLICK_SLOP_PX = 4;
 
 export type ScenePickPhase = "hover" | "select";
 
-/** WebGPU host for an ordinary GGSpec whose mapped positions include z. */
+/** WebGPU host for a component-form chart whose mapped positions include z. */
 export function ChartCanvas3D(
   {
-    spec,
     chart,
     label,
     prismInstances,
     onPick,
   }: {
-    /** A spec, or a component-form `chart` (gggplot-vnh.10.1). */
-    spec?: GGSpec;
-    chart?: () => LiveElement;
+    /** The chart; it places the host's extras panel inside its plot. */
+    chart: Chart3D;
     label: string;
     prismInstances?: readonly PrismInstance3D[];
     /**
@@ -41,7 +33,7 @@ export function ChartCanvas3D(
   },
 ) {
   // Remounting restores OrbitControls' initial serialized camera while leaving
-  // the spec and renderer-owned scene data untouched.
+  // the chart and renderer-owned scene data untouched.
   const [cameraEpoch, setCameraEpoch] = React.useState(0);
   // Installed by <ScenePicker> from inside the live tree; null until the scene
   // mounts, and replaced whenever a camera remount swaps the view context.
@@ -116,7 +108,6 @@ export function ChartCanvas3D(
           {(canvas: HTMLCanvasElement) =>
             liveElement(Scene3D, {
               canvas,
-              spec,
               chart,
               prismInstances,
               publishPick: onPick ? publishPick : undefined,

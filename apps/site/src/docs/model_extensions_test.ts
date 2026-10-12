@@ -36,7 +36,7 @@ Deno.test("the host registry resolves live and emit adapters", () => {
     assertEquals(typeof live.adapters.live.value, "function");
     const emit = registry.resolveEmit(definition.id);
     // Emitted source resolves a static import, never a serialized closure.
-    assert(emit.adapters.emit.importFrom.endsWith(".ts"));
+    assert(/\.tsx?$/.test(emit.adapters.emit.importFrom));
     assert(emit.adapters.emit.exportName.length > 0);
   }
 });

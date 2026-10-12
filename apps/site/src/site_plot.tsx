@@ -2,8 +2,7 @@
 /** @jsx Jsx.createElement */
 // The doc site's component-form <GGPlot>: the site's dark-canvas theme and
 // loaded fonts, so a component example's source shows only its grammar. An
-// example's own theme props and <Theme*> parts still win, as with
-// withSiteChartTheme for specs.
+// example's own theme props and <Theme*> parts still win.
 import * as Jsx from "@gggplot/core/jsx";
 import type { LiveElement } from "@use-gpu/live";
 import { GGPlot, type GGPlotComponentProps } from "@gggplot/core";
@@ -24,7 +23,8 @@ export function SitePlot(
 
 /**
  * The 3D host's <GGPlot>: the same palette with no font family (the 3D scene
- * loads its own faces; see withSiteChartTheme3d).
+ * loads its own faces, so naming a family it has not loaded would ask for a
+ * face that does not exist).
  */
 export function SitePlot3D(
   props: Omit<GGPlotComponentProps, "fontResources" | "fonts">,
