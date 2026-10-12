@@ -16,6 +16,7 @@ import { asFactor } from "../src/data/mod.ts";
 import { CATEGORICAL_PALETTE } from "../src/scale/palette.ts";
 import type { GGSpec } from "../src/ir/types.ts";
 import {
+  assembleTree,
   findNodes as nodes,
   residentPlansOf,
   residentTreeOf,
@@ -43,6 +44,31 @@ Deno.test("resident conformance: automatic histogram has no CPU stat rows", () =
     (view[0].props.options as { autoDomain: boolean }).autoDomain,
     true,
   );
+});
+
+/** The first panel's view x range, rounded past float32 noise. */
+const xRange = (tree: ReturnType<typeof assembleTree>) =>
+  (nodes(tree, "Cartesian")[0].props.range as number[][])[0].map((v) =>
+    Number(v.toFixed(5))
+  );
+
+Deno.test("resident conformance: a histogram's x range is its bin edges on both paths", () => {
+  // gggplot-py8d. ggplot2 trains x on stat_bin's xmin/xmax: the CPU bars span
+  // their whole bin, and the resident layer (raw rows, no bins on the CPU)
+  // trains the same edges the kernel's grid covers, not the raw data padded
+  // by a bar's half-width. binwidth 2 over [0, 5] runs to 6, past the data.
+  for (
+    const [params, edges] of [
+      [{ bins: 5 }, [0, 5]],
+      [{ binwidth: 2 }, [0, 6]],
+    ] as const
+  ) {
+    const spec = ggplot({ x: [0, 1, 2, 3, 4, 5] }, { x: "x" })
+      .add(geomHistogram(params))
+      .build();
+    assertEquals(xRange(assembleTree(spec)), [...edges], "CPU");
+    assertEquals(xRange(residentTreeOf(spec)), [...edges], "resident");
+  }
 });
 
 Deno.test("resident conformance: declared factor group preserves dense grid shape", () => {

@@ -1,3 +1,4 @@
+import { resolveHistogram1dBins } from "@gggplot/reductions";
 import { lowerPrism3d } from "./surface_3d.ts";
 // geom_bar / geom_col — stacked/dodged/filled rectangle Polygons.
 //
@@ -7,7 +8,11 @@ import { lowerPrism3d } from "./surface_3d.ts";
 import type { Aes, DataFrame, GGSpec, Layer } from "../ir/types.ts";
 import type { TypedDataFrame } from "../data/mod.ts";
 import { node, type RenderNode } from "../compile/rendertree.ts";
-import { scaleColorValue, scalePosition } from "../scale/mod.ts";
+import {
+  scaleColorValue,
+  scalePosition,
+  type TrainedScale,
+} from "../scale/mod.ts";
 import {
   widenForStackedBars,
   widenForTileAxis,
@@ -75,7 +80,7 @@ export function lowerBar(
     });
   }
 
-  const width = resolutionOf(xScale, scaledX) * 0.9;
+  const width = barWidth(data, xScale, scaledX);
   const placed = layer.position === "dodge2"
     ? dodge2Bars(
       bars.map((bar) => ({
@@ -166,14 +171,45 @@ export function barDomainContribution(
     ctx.yScale,
   );
   let xDomain = ctx.xDomain;
-  if (mapping.x) {
+  const residentBins = layer.stat === "bin" && !valuesOf(data, "width")
+    ? residentBinRequest(layer.params)
+    : undefined;
+  if (residentBins) {
+    // A GPU-resident histogram's rows are the raw x values, not bins. Its
+    // grid spans [lo, lo + bins * binwidth] over the trained x range (the
+    // kernel's own geometry), and that is the x range, as the CPU stat's
+    // bars give it.
+    const [lo, hi] = xDomain;
+    const { bins, binwidth } = resolveHistogram1dBins({
+      lo,
+      hi,
+      ...residentBins,
+    });
+    xDomain = [lo, Math.max(hi, lo + bins * binwidth)];
+  } else if (mapping.x) {
     const scaledX = (valuesOf(data, mapping.x) ?? []).map((v) =>
       scalePosition(ctx.xScale, v)
     );
-    const width = resolutionOf(ctx.xScale, scaledX) * 0.9;
+    const width = barWidth(data, ctx.xScale, scaledX);
     xDomain = widenForTileAxis(xDomain, scaledX, width);
   }
   return { x: xDomain, y: yDomain };
+}
+
+/**
+ * A bar's width in x: the stat's `width` column when it reports one, as
+ * stat_bin does with its binwidth so histogram bars span their bin and touch
+ * (ggplot2's geom_bar reads data$width first), else 0.9 of the x resolution.
+ */
+function barWidth(
+  data: DataFrame,
+  xScale: TrainedScale | undefined,
+  scaledX: number[],
+): number {
+  const reported = (valuesOf(data, "width") ?? []).find(
+    (v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0,
+  );
+  return reported ?? resolutionOf(xScale, scaledX) * 0.9;
 }
 
 /**
