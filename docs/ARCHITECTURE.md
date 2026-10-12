@@ -1,86 +1,102 @@
 # gggplot Architecture
 
-> **Direction change: [ADR 007](ADR_007_COMPONENT_FIRST.md).** gggplot is moving
-> to Live components as the only authoring form. `GGSpec`, the fluent DSL,
-> `compile()`, `renderTree()` and `emitSource()` are removed when the component
-> path ships. This document still describes the current spec-based pipeline;
-> `gggplot-vnh.13` rewrites it around the component tiers.
-
-gggplot transpiles a **grammar-of-graphics specification** into a **UseGPU
-Live** component tree. This document covers the three concerns the project must
-get right: the **API** (how users describe plots), the **UseGPU mapping** (what
-we compile _to_), and the **transpilation process** (how we get from one to the
-other).
+gggplot is the grammar of graphics as composable **Use.GPU Live components**
+([ADR 007](ADR_007_COMPONENT_FIRST.md)). A plot is a component tree: data,
+layers, scales, coords, facets, themes and labels are elements, and the tree
+renders on WebGPU beside any other Live component. This document covers the
+**API** (the component tiers), the **Use.GPU mapping** (what a plot renders to),
+and the **execution model** (where work runs and what it reuses).
 
 ---
 
-## 1. The API — a ggplot-shaped DSL
+## 1. The API — components
 
-ggplot2 builds a plot by adding layers with `+`. TypeScript has no operator
-overloading, so we use a fluent builder whose `.add()` plays the role of `+`:
+ggplot2 builds a plot by adding layers with `+`. gggplot composes elements:
 
-```ts
-ggplot(data, aes({ x: "wt", y: "mpg", color: "cyl" }))
-  .add(geomPoint({ size: 3 }))
-  .add(geomSmooth({ method: "lm" }))
-  .add(scaleColor())
-  .add(facetWrap(["gear"]))
-  .add(themeMinimal())
-  .build(); // → GGSpec
+```tsx
+<GGData load={loadMtcars}>
+  <GGPlot mapping={{ x: "wt", y: "mpg", color: "cyl" }}>
+    <GeomPoint size={3} />
+    <GeomSmooth method="lm" />
+    <ScaleColor />
+    <FacetWrap vars={["gear"]} />
+    <ThemeMinimal />
+    <Labs title="Weight against fuel economy" />
+  </GGPlot>
+</GGData>;
 ```
 
 Design rules:
 
-- **`aes()` maps aesthetics to _column names_** (`x: "wt"`). Fixed aesthetics
-  (`color: "red"`) go in the geom's params, exactly like ggplot's
-  aes-vs-argument distinction.
-- **Mapped aesthetics are scaled; fixed params are literal.** If a string column
-  contains `"red"` and is mapped with `aes({ color: "shade" })`, `"red"` is a
-  data value that trains the color scale. If a layer is written
-  `geomPoint({ color: "red" })`, `"red"` is the final visual color and does not
-  train a scale or create a guide.
-- **Every `geom_*`/`scale_*`/`coord_*`/`facet_*`/`theme_*` returns a
-  `SpecPart`** — a small tagged object. `.add()` folds parts into the spec. This
-  keeps the DSL a thin, pure layer over the IR, and makes parts reorderable and
-  testable.
-- **Data enters through typed ingestion.** `ggplot()` accepts row-store or
-  column-store data and normalizes it with `ingest()` into a `TypedDataFrame`
-  (`GGSpec.data`) of typed numeric/factor columns. `asFactor()` and
-  `asNumeric()` let callers override inference for numeric-coded categories and
-  numeric strings; `typedArrayForColumn` exposes each column's GPU-ready typed
-  array.
+- **`mapping` maps aesthetics to column names** (`x: "wt"`). Fixed aesthetics
+  (`color="red"`) are props on the geom, exactly like ggplot's aes-vs-argument
+  distinction.
+- **Mapped aesthetics are scaled; fixed props are literal.** A `"red"` in a
+  mapped column is a data value that trains the color scale;
+  `<GeomPoint
+  color="red" />` is the final visual color and creates no guide.
+- **Every part is a typed component.** Named geoms (`GeomPoint`,
+  `GeomHistogram`, …) type their props per geom family; plot parts
+  (`ScaleXLog10`, `CoordPolar`, `FacetGrid`, `ThemeMinimal`, `Labs`,
+  `Camera3dFit`, `Execution`) type theirs. Typed Live JSX comes from
+  `@gggplot/core/jsx` (the qualified `@jsx Jsx.createElement` pragma), or its
+  `createElement` without JSX.
+- **Data enters through typed ingestion.** `<GGPlot data>` and `<GGData>` accept
+  row-store or column-store data and normalize it with `ingest()` into typed
+  numeric/factor columns; `asFactor()`/`asNumeric()` override inference.
+  `<GGData load>` takes an async loader and mounts the columns once for every
+  plot below it.
+- **Escape hatches are components too.** `<GGPanel>` draws custom Use.GPU
+  primitives in a panel's data space; `useGGScales()`/`useGGColors()` give them
+  the plot's trained scales as GPU bindings; `<GGLayer>` lets a custom layer
+  contribute domains and legend keys; `<GeomLayer layer>` takes a raw IR layer.
 
-### The IR (`src/ir/types.ts`)
+There is no serialized plot form and no spec builder: the tree is the plot.
+`printJsx(tree, { refs })` prints a tree back to the JSX that builds it (data by
+reference), which `gggplot print` and the doc site's source panels use.
 
-`ggplot(...).build()` produces a **`GGSpec`** — plain serializable data with no
-UseGPU or DOM dependency. It is the transpiler's AST:
+### The three tiers
 
-```ts
-interface GGSpec {
-  data: DataFrame;
-  mapping: Aes; // plot-level aesthetics
-  layers: Layer[]; // geom + stat + position + param/data overrides
-  scales: Scale[]; // declared scales (domains filled in by training)
-  coord: Coord; // cartesian | polar | flip | fixed
-  facet: Facet; // none | wrap | grid
-  labels: PlotLabels; // title/subtitle/caption + axis/guide/facet labels
-  theme: Theme;
-}
+```
+<GGData>                  data tier     typed columns mounted once as GPU
+                                         sources (GGDataContext)
+  <GGPlot>                the root      captures its parts in tree order
+    parts                 product tier  each layer prepared: rows filtered,
+                                         CPU stat run, or a GPU product planned
+                          scale tier    scales trained across layers, provided
+                                         to marks and custom primitives
+                                         (GGScalesContext, GGPanelContext)
 ```
 
-Because the IR is serializable, plots can be saved, diffed, sent over the wire,
-and round-tripped through either backend.
+The root (`components/gg_plot_root.ts`, `components/root_assembly.ts`) runs in
+three phases:
+
+1. **Capture.** Every part reports itself (`GGLayerPart`, `GGPart`, `GGPanel`)
+   through a Live capture, in tree order.
+2. **Prepare and train (PlotView).** Each layer is prepared per facet panel,
+   reusing any whose layer, rows, `prepareSignature` and column versions are
+   unchanged; GPU-eligible layers become product plans the root hosts
+   (`runtime/product_host.tsx`). Scales train across the prepared layers, and a
+   resident layer that owns its y range trains it from the product's read-back
+   summary. Layout-free: a resize never reaches it.
+3. **Layout (PlotLayout).** At the host's size with the font measurer: guides,
+   panel bounds, facet strips, and each layer's marks, from the per-layer
+   lowering memo unless layout-bound. Only this phase re-renders on a resize.
+
+The layout produces an internal render tree (`compile/rendertree.ts`) that
+`render/render_tree.tsx` realizes as Use.GPU elements. It is a debug artifact,
+not API.
 
 ### Peer Dialect Alignment
 
-gggplot intentionally differs from Typst-native and SQL-native ggplot dialects:
-it is centered on lowering to a RenderTree for UseGPU live rendering and source
-emission. See [Grammar Alignment](./GRAMMAR_ALIGNMENT.md) for the comparison
-with Gribouille and ggsql, the coverage matrix, and the alignment roadmap.
+gggplot differs from Typst-native and SQL-native ggplot dialects by being
+component-native: the grammar is a set of Live components rather than a text
+syntax. See [Grammar Alignment](./GRAMMAR_ALIGNMENT.md) for the comparison with
+Gribouille and ggsql and the coverage matrix.
 
 ---
 
-## 2. The UseGPU mapping — what we compile _to_
+## 2. The Use.GPU mapping — what a plot renders to
 
 The key enabler: **`@use-gpu/plot` is already a grammar-of-graphics engine.**
 Its exports line up almost 1:1 with ggplot concepts, so gggplot is mostly a
@@ -88,136 +104,112 @@ _lowering_, not a rendering engine.
 
 | ggplot concept                | `@use-gpu/plot` target                                                                            |
 | ----------------------------- | ------------------------------------------------------------------------------------------------- |
-| `ggplot()` root               | `<Embedded normalize>` wrapping a view                                                            |
-| `coord_cartesian()`           | `<Cartesian range={[[x0,x1],[y0,y1]]} axes>`                                                      |
-| `coord_flip()`                | `<Cartesian axes="yx">` (`Coord.axes: "yx"`)                                                      |
-| `coord_polar()`               | `<Polar>` plus pre-munched polygon edges; `theta:"y"` reuses the same `axes="yx"` projection swap |
-| `geom_point()`                | `<Point positions colors/sizes shape>`                                                            |
-| `geom_line/path()`            | `<Line positions color/colors width>`                                                             |
-| bars/tiles/areas/polygon/rect | `<Polygon>` loops                                                                                 |
-| `geom_text()`                 | `<Label>`                                                                                         |
-| `annotate()`                  | literal single-row layer, reuses the target geom's node                                           |
-| `geom_hline/vline/abline()`   | `<Line>` spanning the panel's trained domain                                                      |
+| `<GGPlot>` root               | `<Embedded normalize>` wrapping a view                                                            |
+| `<CoordCartesian>`            | `<Cartesian range={[[x0,x1],[y0,y1]]} axes>`                                                      |
+| `<CoordFlip>`                 | `<Cartesian axes="yx">`                                                                           |
+| `<CoordPolar>`                | `<Polar>` plus pre-munched polygon edges; `theta="y"` reuses the same `axes="yx"` projection swap |
+| `<GeomPoint>`                 | `<Point positions colors/sizes shape>`, or a GPU-bound point layer                                |
+| `<GeomLine>`/`<GeomPath>`     | chunked `<Line>` layers, one per dash batch                                                       |
+| bars/tiles/areas/polygon/rect | chunked face layers                                                                               |
+| `<GeomText>`                  | `<Label>`                                                                                         |
+| `<GeomHline>`/`<GeomVline>`   | `<Line>` spanning the panel's trained domain                                                      |
+| GPU-resident bin/count        | a product hosted in a `<Compute>` beside the plot, drawn by `ProductMark`                         |
 | axis guides                   | `<Axis axis="x">`, `<Axis axis="y">`                                                              |
 | grid / panel.grid             | `<Grid axes="xy">`; polar rings/spokes are one `<Grid detail>` under `<Polar>`                    |
 | legends                       | overlay `<Label>` + `<Point>` guide nodes                                                         |
-| facets                        | custom `<FacetGrid>` + one `<Embedded>` per panel                                                 |
+| facets                        | `FacetGrid` + one panel viewport per facet                                                        |
+| 3D (a `z` mapping)            | `Scene3D`: an orbit pass for the marks and a flat overlay for guides                              |
 
-Two JSX worlds coexist (as in usegpu-deno): React owns the app shell; UseGPU
-Live components open with the classic pragma:
+Two JSX worlds coexist: React owns the app shell; Live components use the
+classic pragma, qualified so TypeScript checks Live props:
 
 ```ts
 /** @jsxRuntime classic */
-/** @jsx createElement */
-/** @jsxFrag Fragment */
-import { createElement, Fragment } from "@use-gpu/live";
+/** @jsx Jsx.createElement */
+/** @jsxFrag Jsx.Fragment */
+import * as Jsx from "@gggplot/core/jsx";
 ```
 
 ---
 
-## 3. The transpilation process
+## 3. From parts to marks
 
-The compiler mirrors ggplot2's own build pipeline. `compile(spec)` runs these
-stages and returns a **RenderTree** — an abstract, serializable description of
-the UseGPU component tree (`{ component, props, children }`).
+Each layer goes through ggplot2's own build stages, split across the root's
+phases:
 
 ```
-GGSpec
+parts (captured)
   │
-  ├─ ① stat transform      per layer: identity | count | bin | smooth | summary
-  │                        (core lowers groups/columns into @gggplot/reductions)
-  ├─ ② scale training      scan post-stat data across layers → domains;
-  │                        map data → visual space (position, color, size)
-  ├─ ③ facet partition     split data into panels (wrap / grid)
-  ├─ ④ coord resolution    pick the view: Cartesian | Polar (+ flip swizzle)
-  ├─ ⑤ geom → mark          scaled aesthetics → shape component + props
-  └─ ⑥ guides / theme       axes, grid, legends, background
+  ├─ ① facet partition     split rows into panels (wrap / grid)       prepare
+  ├─ ② row filtering       missing positions, then scale limits       prepare
+  ├─ ③ stat                CPU stat via @gggplot/reductions, or a     prepare
+  │                        GPU product plan (bin/count)
+  ├─ ④ scale training      domains across layers (per panel if free)  train
+  ├─ ⑤ coord resolution    Cartesian | Polar | Scene3D (+ swizzles)   layout
+  ├─ ⑥ geom → mark          scaled aesthetics → mark tensors + owners  layout
+  └─ ⑦ guides / theme       axes, grid, legends, strips, labels        layout
   ▼
-RenderTree
+Use.GPU elements
 ```
 
-### Why a RenderTree in the middle?
-
-It **decouples the front-end from the back-end**:
-
-```
-RenderTree
-  └── renderLive()   → UseGPU Live elements via createElement   (runtime)
-```
-
-- **`renderLive` (`src/render/GGPlot.tsx`)** — `<GGPlot spec>` compiles and maps
-  each node to a real `@use-gpu/plot` component. Used by the interactive doc
-  page; hosts inside a `<WebGPU><AutoCanvas><FlatCamera><Pass>` shell and a
-  host-configurable `FontLoader` so `Label` nodes can render real text.
-- **`printJsx` (`src/emit/jsx.ts`)** replaced the frozen-literal `emitSource`
-  emitter (gggplot-vnh.11). It prints a component element tree, not a
-  RenderTree, as the JSX a user would write, and passes data by reference.
-  `gggplot print` and the doc site's source panels use it.
+What each change invalidates is the point of the split: a theme, label or coord
+limit leaves prepared rows alone (it is not in `prepareSignature`); a resize
+re-runs only ⑤–⑦ and re-lowers only layout-bound geoms; an unchanged mark keeps
+its tensor identity (`reuseUnchanged`), so its GPU buffers are not re-uploaded.
 
 ### Module layout (`packages/core/src`)
 
 ```
-ir/         GGSpec types (the AST)
-dsl/        ggplot()/aes()/geom_*/scale_*/coord_*/facet_*/labels()/theme_*
-data/       row/column ingestion, typed metadata, factor/numeric lowering
-group/      effective ggplot grouping, row counts, metadata-preserving slicing
-stat/       stat transforms (identity/count/bin/smooth/summary)
-scale/      scale training + aesthetic mapping
-compile/    IR → RenderTree  (the transpiler core) + rendertree.ts
-render/     RenderTree → UseGPU Live  (runtime backend)
-emit/       RenderTree → .tsx source  (codegen backend)
-mod.ts      public API
+components/  the component API and the root (gg_plot_root, root_assembly)
+ir/          the grammar's value types (Layer, Aes, Scale, Theme, …)
+data/        row/column ingestion, typed metadata, factor/numeric lowering
+group/       effective ggplot grouping, row counts, metadata-preserving slicing
+stat/        CPU stats (identity/count/bin/smooth/summary/…)
+scale/       scale training + aesthetic mapping
+position/    stack/dodge/fill/jitter/nudge
+geom/        per-geom lowering to mark tensors, and GPU product plans
+compile/     prepare/train/layout: the stages the root runs, and the internal
+             render tree
+render/      the render tree as Use.GPU elements; GPU scale bindings; fonts
+runtime/     GPU-resident products, their host and marks; Use.GPU interop
+emit/        printJsx: a component tree printed as JSX
+export/      ggsave: a component tree to PNG
+dsl/         the internal builder for the root's plot-level spec
+mod.ts       public API
 ```
-
-The module list is intentionally stable, but the implementation has moved beyond
-the original minimum slice:
-
-- `stat/` implements `identity`, `count`, `bin`, `smooth`, and `summary`. Count,
-  bin, summary, and linear-regression smooth all call the standalone
-  `@gggplot/reductions` package after core has encoded ggplot semantics (mapped
-  aesthetics, effective groups, factor ids, and missing values).
-- `scale/` trains continuous/discrete position scales, color/fill palettes,
-  size/alpha ranges, and shape palettes.
-- `compile/` owns guide generation, domain widening for rectangular geoms, facet
-  partitioning, coord selection, polar polygon munching, and the final
-  RenderTree layout.
-- `render/` and `emit/` both understand the custom `FacetGrid` node; `emit/`
-  inlines its helper so generated source stays standalone.
 
 ---
 
 ## Current Capability Snapshot
 
-Implemented and tested:
+Implemented and tested on the component path:
 
-1. **Core DSL/IR**: `ggplot()`, `aes()`, additive `SpecPart`s, layer data and
-   mapping overrides, `inheritAes: false`, and first-class `labels()`.
-2. **Geoms**: point, line/path, bar/col, area/ribbon, tile/raster, text/label as
-   text-only labels, smooth, errorbar, boxplot, and polygon.
-3. **Annotations**: `annotate("segment"|"rect"|"text"|"point", ...)` for
-   literal, non-data marks, plus `geom_hline`/`geom_vline`/`geom_abline`
-   reference lines spanning the panel's trained domain.
-4. **Stats**: identity, count, bin, smooth, and summary. The implemented
-   reducing stats are backed by `packages/reductions`: CPU reducers are the
-   synchronous compiler path, with optional WebGPU histogram executors available
-   in the standalone package for future async/browser pipelines.
-5. **Scales**: continuous/discrete x/y, log/sqrt transforms, expand/domain
-   overrides, independent color/fill palettes, continuous size, alpha training,
-   and discrete shape palettes.
-6. **Coords**: cartesian and polar, with a shared `Coord.axes` swizzle
-   generalizing axis assignment — `coordFlip()` and `coordPolar({ theta: "y" })`
-   both reduce to `"yx"`. Polar grids are explicit ring/spoke `Line` guides;
-   polygon marks are subdivided before the nonlinear polar transform so
-   bars/areas can draw curved wedges.
-7. **Facets**: `facet_wrap` and `facet_grid` partition plot data into fixed
-   shared-scale panels using `FacetGrid` and per-panel `Embedded` children.
-8. **Theme**: panel background, grid/axis color and width, grid omission, text
-   defaults, and font-family propagation for label nodes.
-9. **Legends**: discrete color/fill, continuous size, and discrete shape legends
-   are emitted as RenderTree guide nodes with `labels()`-driven titles,
-   including for faceted plots (as plot-level overlays outside the `FacetGrid`).
-10. **Backends**: live WebGPU rendering and emitted UseGPU Live source share the
-    same RenderTree.
+1. **Components**: `<GGPlot>`, `<GGData>` (with async `load`), named geoms with
+   typed props, plot parts, `<GGPanel>`, `<GGLayer>`, `<GeomLayer>`, and typed
+   Live JSX.
+2. **Geoms**: point, line/path/step, bar/col/histogram, area/ribbon,
+   tile/raster/rect, text/label, smooth, errorbar/crossbar/pointrange,
+   boxplot/violin/dotplot, polygon, density and 2D density, contours, hex and 2D
+   bins, ECDF, QQ, quantile, rug, curve/spoke/segment, waffle, and the 3D
+   point/path/surface/voxel/prism forms.
+3. **Annotations**: `<Annotate>` for literal marks, plus `<GeomHline>`,
+   `<GeomVline>` and `<GeomAbline>` reference lines.
+4. **Stats**: identity, count, bin, smooth (lm/loess/glm), summary and the 2D
+   summaries, density, ECDF, quantile, unique, sum, align, connect, waffle.
+   Reducing stats are backed by `@gggplot/reductions`; eligible bin/count layers
+   run as GPU-resident products.
+5. **Scales**: continuous/discrete x/y/z, log/sqrt transforms, expand/domain
+   overrides, color/fill palettes (viridis, gradient2), size, alpha, shape,
+   linetype, linewidth and stroke; continuous and discrete point colors bind on
+   the GPU.
+6. **Coords**: cartesian (with zoom limits), fixed, flip, polar and radial, with
+   a shared axes swizzle.
+7. **Facets**: `<FacetWrap>` and `<FacetGrid>`, with free x/y scales.
+8. **Theme**: presets and overrides for backgrounds, grid/axis styling, text and
+   font families.
+9. **Legends**: color/fill (discrete and colorbar), size and shape guides.
+10. **Output**: live WebGPU rendering, PNG export (`ggsave`), and printing a
+    tree as JSX (`printJsx`, `gggplot print`).
 
 The phase model and execution principles live in §4–5 below. Detailed current
 executor, eligibility, and fallback status lives only in the
@@ -230,13 +222,13 @@ tracked in beads.
 
 ## 4. GPU-native execution model
 
-gggplot stays a high-level grammar-of-graphics DSL, but the live backend
-compiles plot _semantics_ into a persistent GPU dataflow rather than compiling
-rows into JSX value props. The compiler has two explicit execution domains:
+gggplot stays a high-level grammar of graphics, but the live backend realizes
+plot _semantics_ as a persistent GPU dataflow rather than turning rows into JSX
+value props. There are two explicit execution domains:
 
 ```
                   control plane (small, CPU)
-GGSpec ──► semantic plan ──► layout + guide metadata
+parts ──► semantic plan ──► layout + guide metadata
                  │                    ▲
                  ▼                    │ compact summaries only
              GPU execution plan ──────┘
@@ -247,11 +239,12 @@ raw columns → transforms → groups/stats → mark sources → Use.GPU layers
 ```
 
 **The CPU control plane** owns the small, irregular parts of plotting: schema
-inference, factor dictionaries, DSL validation, plot/facet layout, text shaping,
-and guide labels. **The GPU data plane** owns large numeric columns, derived
-fields, reductions, topology, and mark attributes. This is not a plan to port
-every JavaScript function to WGSL — the split is deliberate, and the CPU stays a
-first-class, non-WebGPU backend for compile/emit/tests.
+inference, factor dictionaries, prop validation, plot/facet layout, text
+shaping, and guide labels. **The GPU data plane** owns large numeric columns,
+derived fields, reductions, topology, and mark attributes. This is not a plan to
+port every JavaScript function to WGSL — the split is deliberate, and the CPU
+stays a first-class, non-WebGPU executor (and the reference every GPU operator
+is tested against).
 
 The live backend realizes that model through two explicit flows. Both finish in
 UseGPU/WebGPU rendering; they differ in where plot computation happens and what
@@ -286,11 +279,12 @@ row-shaped data. The component root owns Flow A end to end
   `<Compute>` beside the plot.
 - It trains y from a product's read-back stacked maximum when no y domain is
   declared.
-- It draws each resident layer as a `ProductMark` under the trained axes. Flow B
-  covers general plots: CPU work produces packed tensors whose stable references
-  prevent another upload while mapped column identities, revisions, and pack
-  keys remain unchanged. The [residency matrix](./RESIDENCY_MATRIX.md) is the
-  authoritative detailed list of which operations currently take each flow.
+- It draws each resident layer as a `ProductMark` under the trained axes.
+
+Flow B covers general plots: CPU work produces packed tensors whose stable
+references prevent another upload while the mapped columns' identities and
+versions stay unchanged. The [residency matrix](./RESIDENCY_MATRIX.md) is the
+authoritative detailed list of which operations currently take each flow.
 
 ### Component-path invariants (gggplot-bv0)
 
@@ -315,16 +309,17 @@ blocking headless tests: `component_resize_test.ts` (resize, touched columns),
 `scale_change_classes_test.ts` (what each scale change invalidates),
 `component_tensor_reuse_test.ts` and `discrete_binding_test.ts`.
 
-### Two compiler products
+### Two products of a plot
 
-- **Semantic plan (CPU, serializable).** The durable intermediate: effective
-  layer mappings, required columns, group keys, logical operators (`filter`,
-  `transform`, `bin1d`, `aggregate`, `stack`, `sort`, `segment`, `polygon`),
+- **Semantic plan (CPU).** The durable intermediate: effective layer mappings,
+  required columns, group keys, logical operators (`filter`, `transform`,
+  `bin1d`, `aggregate`, `stack`, `sort`, `segment`, `polygon`),
   scale/coord/facet policy, and the exact small summaries guides require. It
   holds no `[x, y]` arrays, hex-color arrays, `GPUBuffer`s, or component names
   as primary meaning — a `PointMark` is semantic; a Use.GPU `Point` is one
-  realization. `GGSpec` and the `plan/` declarations (versioned extension
-  metadata, `FieldSpec`/`ProductPlan`, mapping-expression AST) are this domain.
+  realization. The root's internal plot spec and the `plan/` declarations
+  (versioned extension metadata, `FieldSpec`/`ProductPlan`, mapping-expression
+  AST) are this domain.
 - **Live execution graph (GPU, ephemeral).** At mount time the backend realizes
   the plan into stable `StorageSource`s for numeric columns / factor IDs /
   validity masks, derived `ShaderSource`s for transforms and mark accessors,
@@ -389,5 +384,5 @@ individual scales, stats, geoms, and positions.
 in WGSL; do not read GPU results back merely to rebuild a row `DataFrame`; do
 not replace Use.GPU's plot/layer primitives with bespoke draw code unless a
 topology cannot be expressed through sources and layers; do not force GPU
-execution for small data; do not let backend resources leak into saved specs or
-emitted plans. Per-operator design detail and open sub-tasks live in beads.
+execution for small data; do not let backend resources leak into printed JSX or
+plan declarations. Per-operator design detail and open sub-tasks live in beads.

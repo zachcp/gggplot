@@ -83,22 +83,15 @@ residency-matrix-shaped summary.
 | Mark-data GPU buffer creation/write | GPU (via `@use-gpu/workbench`'s `useRawSource`, source-boundary-tagged) | A node's `positions`/`colors`/`widths`/`sizes` FlatTensor `array` reference (and `version`) is unchanged since the last mount/render — `PackCache`'s (`compile/pack_cache.ts`, `gggplot-tzc.5`) Stage A/B reference-identity guarantee | Not a CPU-residency row in the usual sense (nothing here runs on CPU per-frame) — listed because it's the terminal consumer of every other row in this table: a CPU deviation upstream (log/sqrt/discrete position packing, full-domain color/size packing) still produces a FRESH tensor only when ITS OWN cache key changes, so this row's "zero re-upload" property is conditional on every upstream row's packed VALUE being unchanged, not just the CPU/GPU executor choice being unchanged. |
 
 **Operational gotcha (surfaced by the in-browser instrumentation probe,
-`apps/site/src/InstrumentProbe.tsx`):** `PackCache`'s Stage A cache is rooted on
-the MAPPED COLUMN OBJECT's own identity (a `WeakMap<Column, ...>` —
-`compile/pack_cache.ts`'s `stageAPrimaryColumn`/`stageAStore`), not on data
-VALUES. Raw input is deliberately snapshotted when each `ggplot()` constructor
-runs: repeated `.build()` calls on one `GG` builder do not re-ingest, but two
-separate `ggplot(rawJsObject, ...)` calls create fresh `Column` wrappers. That
-preserves mutable-input and per-call `IngestOptions` semantics, but separate
-specs built this way miss Stage A even when the raw values did not change.
-
-Hosts that rebuild specs over unchanged data should call `ingest()` once and
-pass the resulting `TypedDataFrame` to each `ggplot()` call. Already-ingested
-frames pass through by identity, so this explicit pattern preserves snapshot
-semantics and gives the pack cache stable roots. `pack_cache_test.ts` asserts
-all three cases: repeated builds from one builder hit; separate builders sharing
-an ingested frame hit; separate builders over one mutable raw object create
-fresh snapshots and intentionally miss.
+`apps/site/src/InstrumentProbe.tsx`):** the component root's caches key on the
+mapped column objects' identity (and their versions), not on data values. A host
+that passes a raw object afresh on every render re-ingests it into fresh
+`Column` wrappers each time, so prepared layers and lowered marks miss even when
+the values did not change. Ingest once (`ingest()` at module scope, or
+`<GGData>`), or pass the same object, and unchanged marks keep their GPU
+buffers; `touchColumn` moves a column's version when it changes in place.
+`raw_position_domain_test.ts` and `component_tensor_reuse_test.ts` pin the
+reuse.
 
 ## Loaders — source bytes to GPU
 

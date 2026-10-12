@@ -1,8 +1,9 @@
 # Migrating to component-first gggplot
 
-gggplot is moving from "compile a spec, then render the tree" to Use.GPU Live
-components you compose yourself (epic `gggplot-vnh`). This guide collects what
-changes for hosts and users, one section per change as it lands.
+gggplot moved from "compile a spec, then render the tree" to Use.GPU Live
+components you compose yourself (epic `gggplot-vnh`, ADR 007). This guide
+collects what changed for hosts and users: first every removed export and its
+replacement, then one section per component feature.
 
 ## Removed: GGSpec, the DSL, `compile`, `renderTree`, `emitSource`
 
@@ -17,6 +18,31 @@ ADR-007 removes the spec path outright, with no deprecation window
 
 `<GGPlot spec>` is gone. The sections below show the component form of each
 piece, with the old DSL beside the new JSX.
+
+### Every removed export
+
+| Removed                                                        | Replacement                                                                 |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `GGSpec` (type)                                                | the component tree; `printJsx` prints it back to source                     |
+| `ggplot(data, mapping)`                                        | `<GGPlot data mapping>`, or `<GGData>` around it                            |
+| `aes({...})`                                                   | a plain `mapping={{...}}` object                                            |
+| `geomX(...)`, `statX(...)`                                     | `<GeomX ...>`, `<StatX ...>` (same name, capitalized; props typed per geom) |
+| `scaleX(...)`, `coordX(...)`, `facetX(...)`                    | `<ScaleX>`, `<CoordX>`, `<FacetX>`                                          |
+| `themeX()` presets, `theme({...})`                             | `<ThemeX>` presets, `<ThemeOverrides {...}>`                                |
+| `labels({...})`                                                | `<Labs {...}>`                                                              |
+| `annotate(...)`, `execution(...)`, `camera3d*(...)`            | `<Annotate>`, `<Execution>`, `<Camera3d*>`                                  |
+| `guideColorbar(...)`, `guideBins(...)`, `guideColorsteps(...)` | a `guide={{ kind: ... }}` value on the scale component (`Guide` type)       |
+| `GG`, `SpecPart` builders                                      | parts are components; `<GGPart part={ScaleColor.part(...)}>` for raw parts  |
+| `compile`, `CompileOptions`                                    | none: `<GGPlot>` assembles its parts                                        |
+| `renderTree`, `node`, `RenderNode`, `ComponentName`            | none: the render tree is internal (gggplot-vnh.14)                          |
+| `emitSource`                                                   | `printJsx(tree, { refs })` (below)                                          |
+| `createPackCache`, `PackCache` (`./compile`)                   | none: the root's per-layer memo reuses unchanged marks                      |
+| `GGPlotSpecProps`, the `spec` prop                             | `GGPlotComponentProps`                                                      |
+| `@gggplot/core/dsl`, `@gggplot/core/compile` entry points      | `@gggplot/core` and `@gggplot/core/jsx`                                     |
+| `ggsave(spec, options)`                                        | `ggsave(tree, options)`                                                     |
+| `gggplot compile spec.ts`                                      | `gggplot print chart.tsx`                                                   |
+
+### Side by side
 
 | Before                                | After                                        |
 | ------------------------------------- | -------------------------------------------- |
@@ -61,7 +87,7 @@ way:
 
 ```ts
 import { createElement } from "@gggplot/core/jsx";
-createElement(GGPlot, { spec }); // a wrong or missing prop is a type error
+createElement(GGPlot, { data, mapping: { x: "wt" } }); // a wrong prop is a type error
 ```
 
 ### What hosts change
@@ -77,7 +103,9 @@ createElement(GGPlot, { spec }); // a wrong or missing prop is a type error
 
   ```tsx
   import { createElement as liveElement } from "@gggplot/core/jsx";
-  <LiveCanvas>{(canvas) => liveElement(Scene, { canvas, spec })}</LiveCanvas>;
+  <LiveCanvas>
+    {(canvas) => liveElement(ChartScene, { canvas, chart })}
+  </LiveCanvas>;
   ```
 
 `apps/site/src/live_jsx_example.tsx` holds the checked examples, including the
@@ -136,25 +164,28 @@ or camera replaces an earlier one, while themes and labels merge. A theme
 preset's props override its fields. `theme()` became `<ThemeOverrides>` because
 `Theme` is already the type's name.
 
-Parity: of the 65 doc examples in the basics, stats, intervals and shapes pages,
-every example rendered through components matches the compile path pixel for
-pixel. The exception is jittered examples, which vary from run to run on either
-path (`gggplot-plrj`).
+Parity: every doc example's frame is checked against the frame the compile path
+drew before it was retired (`deno task --cwd apps/site test:goldens`, within 32
+per channel). Jitter is seeded, so jittered examples are deterministic too
+(`gggplot-plrj`). Five GPU-resident examples were re-captured where the
+component root fixed real defects (`apps/site/goldens/README.md`).
 
 ## GPU-resident stats
 
 Layers eligible for a GPU stat (stat_count and stat_bin bars and tile strips, by
 the same rules as before) render from resident products on the component path
 too. The root mounts each distinct product once and hands it to every mark that
-reads it, so two layers over one bin grid dispatch it once. Nothing changes for
-authors: `<Execution resident={false} />` still opts a plot out.
+reads it, so two layers over one bin grid dispatch it once. A lone resident
+layer with no declared y domain has its y axis trained from the product's
+read-back stacked maximum. Nothing changes for authors:
+`<Execution resident={false} />` still opts a plot out.
 
 ## Row-removal diagnostics
 
-`compile()` reported dropped rows on the tree root (`diagnostics`) and with a
-console warning. The component root keeps both. `onDiagnostics` is called with
-the same records whenever the set changes, including an empty list once it
-clears:
+`compile()` used to report dropped rows on the tree root (`diagnostics`) and
+with a console warning. The component root keeps both channels. `onDiagnostics`
+is called with the same records whenever the set changes, including an empty
+list once it clears:
 
 ```tsx
 <GGPlot data={data} mapping={{ x: "x", y: "y" }} onDiagnostics={setRemovals}>

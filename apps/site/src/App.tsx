@@ -19,7 +19,7 @@ export function App() {
   const viewportWidth = useViewportWidth();
   const compact = viewportWidth < 820;
   // Kept as an explicit visual-gate probe: it verifies a chart failure stays
-  // local while its surrounding docs/DSL/computed-data context remains usable.
+  // local while its surrounding docs/source/computed-data context remains usable.
   const forceChartFailure = new URLSearchParams(location.search).has(
     "forceChartFailure",
   );
@@ -54,10 +54,9 @@ export function App() {
         <div>
           <h1 style={styles.title}>gggplot</h1>
           <p style={styles.lead}>
-            A modular feature tour for the{" "}
-            <strong>{"ggplot -> UseGPU Live"}</strong>{" "}
-            pipeline: data, stats, aesthetics, RenderTree output, and live
-            WebGPU rendering.
+            A modular feature tour of the grammar of graphics as{" "}
+            <strong>Use.GPU Live components</strong>: data, stats, aesthetics,
+            the component JSX, and live WebGPU rendering.
           </p>
         </div>
       </header>

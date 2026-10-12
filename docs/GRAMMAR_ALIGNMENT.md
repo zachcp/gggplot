@@ -7,27 +7,28 @@ This note compares gggplot's grammar boundaries with two peer dialects:
 - [ggsql](https://ggsql.org/), a SQL extension for declarative visualization.
 
 The purpose is not to copy either project wholesale. gggplot's center of gravity
-is different: it is a TypeScript DSL that lowers a serializable `GGSpec` into a
-backend-independent `RenderTree`, then renders live through UseGPU or emits
-UseGPU Live source. Gribouille is document-native; ggsql is query-native;
-gggplot is render-backend-native.
+is different: the grammar is a set of typed Use.GPU Live components
+([ADR 007](ADR_007_COMPONENT_FIRST.md)) that a plot composes and renders on
+WebGPU beside any other Live component. Gribouille is document-native; ggsql is
+query-native; gggplot is component-native.
 
 ## Architectural Comparison
 
-| Concern              | gggplot                                    | Gribouille                                                  | ggsql                                                |
-| -------------------- | ------------------------------------------ | ----------------------------------------------------------- | ---------------------------------------------------- |
-| Host language        | TypeScript/Deno                            | Typst                                                       | SQL extension                                        |
-| Primary user surface | `ggplot(data, aes(...)).add(...)`          | `#plot(data:, mapping:, layers:, scales:, labels:, theme:)` | `SELECT ... VISUALISE ... DRAW ...`                  |
-| Data location        | In-memory columnar `DataFrame`             | Typst data, CSV, tables                                     | Database/query result                                |
-| Backend              | UseGPU Live / emitted TSX                  | Typst + CeTZ drawing                                        | Readers/writers around SQL plus visualization output |
-| Internal center      | `GGSpec -> RenderTree`                     | Document-native plot object/layout                          | Parsed query + visualization AST                     |
-| Best-fit use case    | Interactive GPU render and source emission | Publication-quality Typst documents                         | Data-near analysis without leaving SQL               |
+| Concern              | gggplot                                   | Gribouille                                                  | ggsql                                                |
+| -------------------- | ----------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------- |
+| Host language        | TypeScript/Deno                           | Typst                                                       | SQL extension                                        |
+| Primary user surface | `<GGPlot data mapping>` + part components | `#plot(data:, mapping:, layers:, scales:, labels:, theme:)` | `SELECT ... VISUALISE ... DRAW ...`                  |
+| Data location        | In-memory columnar `DataFrame`            | Typst data, CSV, tables                                     | Database/query result                                |
+| Backend              | UseGPU Live (and `printJsx` for source)   | Typst + CeTZ drawing                                        | Readers/writers around SQL plus visualization output |
+| Internal center      | Component tree → prepare / train / layout | Document-native plot object/layout                          | Parsed query + visualization AST                     |
+| Best-fit use case    | Interactive GPU plots composed in apps    | Publication-quality Typst documents                         | Data-near analysis without leaving SQL               |
 
 ## Alignment Principles
 
-1. Keep the RenderTree-first architecture. gggplot should not become a Typst
-   clone or SQL dialect. The durable design choice is that both runtime
-   rendering and emitted source consume the same backend-independent tree.
+1. Keep the component-first architecture. gggplot should not become a Typst
+   clone or SQL dialect. The durable design choice is that a plot is a Live
+   component tree that composes with other Use.GPU components, not a separate
+   specification interpreted by a backend.
 
 2. Make grammar concepts explicit before adding surface area. Peer dialects
    expose labels, projection, annotations, and literal settings as first-class
@@ -43,9 +44,8 @@ gggplot is render-backend-native.
    share one compiler scale shortcut. Each aesthetic should train, guide, and
    render independently unless an explicit API says otherwise.
 
-5. Do not export grammar promises that compile to nothing. A public DSL helper
-   should either lower to a RenderTree node or be clearly marked unsupported.
-   The current `geomPolygon()` gap violates this.
+5. Do not export grammar promises that render nothing. A public component should
+   either lower to marks or guides or be clearly marked unsupported.
 
 ## Coverage Matrix
 
@@ -57,28 +57,28 @@ Status values:
 - `tracked`: not complete, but an open bead exists.
 - `missing`: no known implementation or bead yet.
 
-| Area                                                       | gggplot status | Peer signal                                                                         | Next action                                                                                                                                                                                                    |
-| ---------------------------------------------------------- | -------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Core data + mapping                                        | yes            | All three dialects have global data/mapping concepts.                               | Keep current `GGSpec.data` + `mapping`.                                                                                                                                                                        |
-| Layer mapping override                                     | yes            | ggsql `DRAW MAPPING` overrides global mappings; Gribouille layers accept mappings.  | Keep current layer `mapping`; clarify inheritance tests/docs.                                                                                                                                                  |
-| Literal settings                                           | partial        | ggsql separates `MAPPING` from `SETTING`; `PLACE` layers are literal-only.          | `gggplot-1be.1` formalizes mapped vs fixed aesthetics.                                                                                                                                                         |
-| Top-level labels                                           | partial        | Gribouille has `labels(...)`; ggsql has `LABEL`.                                    | `gggplot-1be.2` added `GGSpec.labels`, DSL `labels()`, legend titles, facet variable labels, and simple non-faceted title/subtitle/caption text; fuller faceted outer-title layout remains future layout work. |
-| Point, line, path                                          | yes            | Common to peer dialects.                                                            | No alignment change.                                                                                                                                                                                           |
-| Bar/col, area, ribbon, tile                                | yes            | Common to peer dialects.                                                            | No alignment change.                                                                                                                                                                                           |
-| Text/label geoms                                           | partial        | Gribouille has text and labels; ggsql has text.                                     | Keep text; add real label boxes after text measurement work.                                                                                                                                                   |
-| Polygon                                                    | tracked        | Both Gribouille and ggsql expose polygon-like layers.                               | `gggplot-165` implements or removes export.                                                                                                                                                                    |
-| Segment/rule/range annotations                             | yes            | ggsql has segment/rule/range and `PLACE`; Gribouille has reference/error geoms.     | `gggplot-1be.4` added `annotate()` (segment/rect/text/point) plus `geom_hline`/`geom_vline`/`geom_abline`.                                                                                                     |
-| Density/violin/spatial                                     | missing        | ggsql lists density, violin, spatial; Gribouille advertises richer geoms.           | Defer unless product direction needs them.                                                                                                                                                                     |
-| Stats: identity/count/bin/smooth/summary                   | yes            | Peer dialects cover these core stat families.                                       | No alignment change.                                                                                                                                                                                           |
-| Positions: identity/stack/dodge/fill/jitter                | yes            | Peer dialects expose these common adjustments.                                      | No alignment change.                                                                                                                                                                                           |
-| Scales: continuous/discrete/log/sqrt/color/fill/size/shape | partial        | Peers keep more scale kinds and aesthetics independent.                             | `gggplot-gic`; add stroke/linetype/linewidth only when needed.                                                                                                                                                 |
-| Binned/ordinal/identity scale kinds                        | missing        | ggsql explicitly exposes binned, ordinal, and identity scales.                      | Consider after color/fill/stroke cleanup.                                                                                                                                                                      |
-| Facets                                                     | partial        | Gribouille supports shared/free scales; ggsql has `FACET`.                          | Current fixed scales are fine; free scales are future work.                                                                                                                                                    |
-| Faceted legends                                            | tracked        | Guides should be plot-layout-level, not lost under facets.                          | `gggplot-ob3`.                                                                                                                                                                                                 |
-| Coordinate projection                                      | yes            | ggsql `PROJECT` names position aesthetics and coordinate system.                    | `Coord.axes` is the shared output-axis swizzle used by every coord kind.                                                                                                                                       |
-| Polar                                                      | partial        | ggsql treats polar as a coordinate system; gggplot has polar with polygon munching. | `coord_polar(theta: "y")` now reassigns the angle via the same `"yx"` swizzle `coordFlip()` uses; munching still needs to extend to paths/lines.                                                               |
-| Themes                                                     | partial        | Gribouille has named themes and overrides.                                          | Current theme fields are enough; add elements with labels/annotations.                                                                                                                                         |
-| Live/codegen parity                                        | yes            | gggplot-specific.                                                                   | Preserve as a core invariant.                                                                                                                                                                                  |
+| Area                                                       | gggplot status | Peer signal                                                                         | Next action                                                                                                                                                                                               |
+| ---------------------------------------------------------- | -------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core data + mapping                                        | yes            | All three dialects have global data/mapping concepts.                               | Keep `<GGPlot data mapping>` (and `<GGData>`).                                                                                                                                                            |
+| Layer mapping override                                     | yes            | ggsql `DRAW MAPPING` overrides global mappings; Gribouille layers accept mappings.  | Keep current layer `mapping`; clarify inheritance tests/docs.                                                                                                                                             |
+| Literal settings                                           | partial        | ggsql separates `MAPPING` from `SETTING`; `PLACE` layers are literal-only.          | `gggplot-1be.1` formalizes mapped vs fixed aesthetics.                                                                                                                                                    |
+| Top-level labels                                           | partial        | Gribouille has `labels(...)`; ggsql has `LABEL`.                                    | `gggplot-1be.2` added plot labels (now `<Labs>`), legend titles, facet variable labels, and simple non-faceted title/subtitle/caption text; fuller faceted outer-title layout remains future layout work. |
+| Point, line, path                                          | yes            | Common to peer dialects.                                                            | No alignment change.                                                                                                                                                                                      |
+| Bar/col, area, ribbon, tile                                | yes            | Common to peer dialects.                                                            | No alignment change.                                                                                                                                                                                      |
+| Text/label geoms                                           | partial        | Gribouille has text and labels; ggsql has text.                                     | Keep text; add real label boxes after text measurement work.                                                                                                                                              |
+| Polygon                                                    | tracked        | Both Gribouille and ggsql expose polygon-like layers.                               | `gggplot-165` implements or removes export.                                                                                                                                                               |
+| Segment/rule/range annotations                             | yes            | ggsql has segment/rule/range and `PLACE`; Gribouille has reference/error geoms.     | `gggplot-1be.4` added `annotate()` (segment/rect/text/point) plus `geom_hline`/`geom_vline`/`geom_abline`.                                                                                                |
+| Density/violin/spatial                                     | missing        | ggsql lists density, violin, spatial; Gribouille advertises richer geoms.           | Defer unless product direction needs them.                                                                                                                                                                |
+| Stats: identity/count/bin/smooth/summary                   | yes            | Peer dialects cover these core stat families.                                       | No alignment change.                                                                                                                                                                                      |
+| Positions: identity/stack/dodge/fill/jitter                | yes            | Peer dialects expose these common adjustments.                                      | No alignment change.                                                                                                                                                                                      |
+| Scales: continuous/discrete/log/sqrt/color/fill/size/shape | partial        | Peers keep more scale kinds and aesthetics independent.                             | `gggplot-gic`; add stroke/linetype/linewidth only when needed.                                                                                                                                            |
+| Binned/ordinal/identity scale kinds                        | missing        | ggsql explicitly exposes binned, ordinal, and identity scales.                      | Consider after color/fill/stroke cleanup.                                                                                                                                                                 |
+| Facets                                                     | partial        | Gribouille supports shared/free scales; ggsql has `FACET`.                          | Current fixed scales are fine; free scales are future work.                                                                                                                                               |
+| Faceted legends                                            | tracked        | Guides should be plot-layout-level, not lost under facets.                          | `gggplot-ob3`.                                                                                                                                                                                            |
+| Coordinate projection                                      | yes            | ggsql `PROJECT` names position aesthetics and coordinate system.                    | `Coord.axes` is the shared output-axis swizzle used by every coord kind.                                                                                                                                  |
+| Polar                                                      | partial        | ggsql treats polar as a coordinate system; gggplot has polar with polygon munching. | `coord_polar(theta: "y")` now reassigns the angle via the same `"yx"` swizzle `coordFlip()` uses; munching still needs to extend to paths/lines.                                                          |
+| Themes                                                     | partial        | Gribouille has named themes and overrides.                                          | Current theme fields are enough; add elements with labels/annotations.                                                                                                                                    |
+| Live/codegen parity                                        | yes            | gggplot-specific.                                                                   | Preserve as a core invariant.                                                                                                                                                                             |
 
 ## Recommended Implementation Order
 
@@ -123,19 +123,17 @@ hidden at draw time.
 
 ### The channel
 
-gggplot compiles to a serializable `RenderNode` tree rather than running in a
-REPL, so a console warning alone would be unobservable to a test or a tool.
-Removals are therefore reported **twice**, on purpose:
+gggplot is not a REPL, so a console warning alone would be unobservable to a
+test or a tool. Removals are therefore reported **twice**, on purpose:
 
-1. **`diagnostics` on the root node's props** — an array of `RowRemoval`
-   (exported from `@gggplot/core`). Serializable, so it survives
-   `JSON.stringify` and reaches anything downstream of `compile`. This is the
+1. **`<GGPlot onDiagnostics>`** — called with an array of `RowRemoval` (exported
+   from `@gggplot/core`), plain data, whenever the set changes. This is the
    channel to read programmatically.
 2. **`console.warn`** — matching the existing palette-fold precedent in
    `scale/palette.ts`. A user whose plot silently lost rows should hear about it
    the same way a user whose colour levels silently folded does.
 
-A plot that drops nothing sets no prop and prints nothing.
+A plot that drops nothing reports nothing and prints nothing.
 
 ### Granularity, and why a row is never double-counted
 
@@ -144,10 +142,10 @@ reports at: a faceted plot dropping rows in three panels of one layer produces
 one removal, not three.
 
 A row can only ever be attributed to one reason. The two filters run in sequence
-in `compile()` — missing positions first, then scale limits — so a row with no
-position is already gone before the limits filter sees it. There is no double
-counting to reconcile, and that is a property of the ordering rather than a rule
-applied afterwards.
+in each layer's preparation — missing positions first, then scale limits — so a
+row with no position is already gone before the limits filter sees it. There is
+no double counting to reconcile, and that is a property of the ordering rather
+than a rule applied afterwards.
 
 ## Open Design Questions
 

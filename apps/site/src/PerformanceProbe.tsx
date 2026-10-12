@@ -42,8 +42,8 @@ export function PerformanceProbe(): React.ReactElement {
       <h1 style={styles.heading}>Opt-in resident histogram</h1>
       <p style={styles.copy}>
         This route generates no data on normal docs load. After you opt in, the
-        live compiler selects the GPU-resident histogram product; generated rows
-        are neither previewed nor emitted as source.
+        plot selects the GPU-resident histogram product; generated rows are
+        never previewed.
       </p>
       <p style={styles.warning}>
         The roughly five-second number in PERF_BASELINE is not this operation.
