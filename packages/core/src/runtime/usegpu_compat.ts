@@ -1,5 +1,6 @@
-// Single typed compatibility surface for the @use-gpu/live, @use-gpu/workbench,
-// and @use-gpu/plot exports the runtime and render layers depend on.
+// Single typed compatibility surface for the @use-gpu/live, @use-gpu/frame,
+// @use-gpu/workbench and @use-gpu/plot exports the runtime and render layers
+// depend on.
 //
 // Deno currently reads Workbench's (and Live's/Plot's) CommonJS type surface,
 // while Vite resolves their documented ESM exports. Rather than have every
@@ -8,6 +9,7 @@
 // per namespace and each hook/component is re-exported with a narrow type. The
 // production (Vite) build is the authoritative integration check for this shim.
 
+import * as Frame from "@use-gpu/frame";
 import * as Live from "@use-gpu/live";
 import * as Plot from "@use-gpu/plot";
 import * as Workbench from "@use-gpu/workbench";
@@ -203,9 +205,6 @@ const workbench = interop<{
   useNoRawTensorSource: UseNoRawTensorSource;
   useRawSource: UseRawSource;
   useNoRawSource: UseNoRawSource;
-  QueueReconciler: { signal: () => LiveElement };
-  LoopContext: unknown;
-  LayoutContext: LiveContext<Rectangle>;
   DeviceContext: unknown;
   PointLayer: LiveComponent;
   useLambdaSource: (shader: unknown, props: { length: number }) => unknown;
@@ -220,8 +219,16 @@ const plot = interop<{
   Grid: LiveComponent;
   Axis: LiveComponent;
   Face: LiveComponent;
-  RangeContext: LiveContext<[number, number][]>;
 }>(Plot, "Cartesian");
+
+// Use.GPU 0.21 moved these out of workbench and plot with no re-export
+// (gggplot-79z5). Probe on a hook frame owns.
+const frame = interop<{
+  QueueReconciler: { signal: () => LiveElement };
+  LoopContext: unknown;
+  LayoutContext: LiveContext<Rectangle>;
+  RangeContext: LiveContext<[number, number][]>;
+}>(Frame, "useLayoutContext");
 
 // @use-gpu/live
 export const createElement = live.createElement;
@@ -240,26 +247,30 @@ export const capture = live.capture;
 export const useCapture = live.useCapture;
 export const useFiberId = live.useFiberId;
 
-// @use-gpu/workbench
+// @use-gpu/frame
 /**
  * `QueueReconciler.signal()` is an element that, when (re)rendered, tells the
  * frame queue to run again. <RawData> renders one whenever its source version
  * moves; a flat raw-source hook does not, so a component built on hooks must
  * render its own or compute that reads the new data never dispatches.
  */
-export const QueueReconciler = workbench.QueueReconciler;
+export const QueueReconciler = frame.QueueReconciler;
 /**
  * SyncLoop's frame request, `(fiber?) => time`. Called with no fiber it just
  * enqueues one animation frame, and it is safe to call outside render. The
  * default (no SyncLoop above) is a no-op.
  */
-export const LoopContext = workbench.LoopContext;
+export const LoopContext = frame.LoopContext;
 /**
  * The pixel rect [left, top, right, bottom] the enclosing view lays out into.
  * A context, so identity matters: it must be the very object the camera and
  * view components provide, never a second copy of its package.
  */
-export const LayoutContext = workbench.LayoutContext;
+export const LayoutContext = frame.LayoutContext;
+/** The data range each plot shape and guide reads; Cartesian provides it. */
+export const RangeContext = frame.RangeContext;
+
+// @use-gpu/workbench
 /**
  * Gathers compute work from its children and mounts the passes that run it.
  *
@@ -322,5 +333,3 @@ export const Cartesian = plot.Cartesian;
 export const Grid = plot.Grid;
 export const Axis = plot.Axis;
 export const Face = plot.Face;
-/** The data range each plot shape and guide reads; Cartesian provides it. */
-export const RangeContext = plot.RangeContext;

@@ -6,8 +6,16 @@
     "apps/site"
   ],
   "nodeModulesDir": "auto",
+  // TEMPORARY shim for Use.GPU 0.21.0-rc.3 (gggplot-79z5): @use-gpu/math is
+  // published without an "exports" map, so Node/Deno load its CommonJS build
+  // and @use-gpu/glyph's ESM `import { sqr } from '@use-gpu/math'` fails to
+  // link. vendor/use-gpu-math is the rc.3 tarball unchanged except for that
+  // map. Delete this entry and vendor/use-gpu-math once a published release
+  // ships math with an "exports" map (gggplot-i879, vendor/README.md).
+  "links": ["./vendor/use-gpu-math"],
   "fmt": {
     "exclude": [
+      "vendor/",
       ".beads/",
       ".claude/",
       ".agents/",
@@ -20,6 +28,7 @@
   },
   "lint": {
     "exclude": [
+      "vendor/",
       ".beads/",
       ".claude/",
       ".agents/",

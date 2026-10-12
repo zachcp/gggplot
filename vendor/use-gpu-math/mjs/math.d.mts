@@ -1,0 +1,11 @@
+export type XY = [number, number];
+export type XYZ = [number, number, number];
+export type XYZW = [number, number, number, number];
+export declare const π: number;
+export declare const τ: number;
+export declare const clamp: (x: number, a: number, b: number) => number;
+export declare const cub: (x: number) => number;
+export declare const sqr: (x: number) => number;
+export declare const lerp: (a: number, b: number, t: number) => number;
+export declare const clerp: (a: number, b: number, t: number) => number;
+export declare const seq: (n: number, start?: number, step?: number) => number[];
