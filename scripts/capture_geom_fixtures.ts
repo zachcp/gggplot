@@ -1,6 +1,8 @@
-// One-off reproducible fixture harness for gggplot-elv (geom registry refactor).
-// Compiles a spread of representative specs and writes their RenderTree JSON so
-// the pure-refactor guarantee (deep-equal output before/after) is verifiable.
+// Reproducible fixture harness, first for gggplot-elv (geom registry refactor).
+// Assembles a spread of representative specs through the component root and
+// writes each layer's lowered marks (component, tensors, owners) as JSON, so
+// geom output drift is caught (gggplot-jx6) whatever renders the marks
+// (gggplot-dh8a: compile() and the RenderTree are retired).
 //
 // Usage:
 //   deno run -A scripts/capture_geom_fixtures.ts            # write fixtures
@@ -31,8 +33,11 @@ import {
   scaleFill,
   scaleYContinuous,
 } from "../packages/core/src/dsl/mod.ts";
-import { compile } from "../packages/core/src/compile/mod.ts";
-import { residentTreeOf } from "../packages/core/tests/support/resident_root.ts";
+import {
+  assembleTree,
+  layerMarks,
+  residentTreeOf,
+} from "../packages/core/tests/support/assemble.ts";
 import { approximateTextMeasurer } from "../packages/core/src/render/font_resources.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -292,21 +297,27 @@ export function serializeTypedArrays(_key: string, value: unknown): unknown {
 }
 
 function treeFor(build: () => Spec): unknown {
-  // Compile both with and without layout so text/label measured boxes and the
-  // panel-pixel-dependent geoms (rug, label) are exercised deterministically.
-  return {
-    plain: compile(build()),
-    laidOut: compile(build(), { layout }),
-  };
+  // Laid out, so text/label measured boxes and the panel-pixel-dependent
+  // geoms (rug, label) are exercised deterministically.
+  return { marks: layerMarks(assembleTree(build(), { layout })) };
 }
 
 function treeForResident(build: () => Spec): unknown {
-  // Resident layers exist only on the component root (gggplot-vnh.5.1), which
-  // always lays out: its tree, with each product's summary read back.
-  return { laidOut: residentTreeOf(build()) };
+  // Resident layers exist only on the component root (gggplot-vnh.5.1): their
+  // products' marks, with each product's summary read back. A product key
+  // embeds a process-global frame token, so the fixture numbers the products
+  // in order of first use instead.
+  const products = new Map<unknown, string>();
+  const marks = layerMarks(residentTreeOf(build())).map((mark) => {
+    const key = mark.props.productKey;
+    if (key === undefined) return mark;
+    if (!products.has(key)) products.set(key, `product-${products.size}`);
+    return { ...mark, props: { ...mark.props, productKey: products.get(key) } };
+  });
+  return { marks };
 }
 
-/** Compiles every case and serializes it exactly as the saved fixtures are
+/** Assembles every case and serializes it exactly as the saved fixtures are
  * written. Exported so the drift test compares against the same bytes this
  * script would write — a check that re-derived the serialization could pass
  * while the on-disk baseline was stale. */

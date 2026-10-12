@@ -13,10 +13,12 @@
 // these tests pin the 2D path to the same behaviour.
 import { assertEquals } from "@std/assert";
 import { geomLabel, geomText, ggplot } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
 import { isMissingPosition } from "../src/geom/shared.ts";
+import type { GGSpec } from "../src/ir/types.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 const mapping = { x: "x", y: "y", label: "label" };
 const layout = {
@@ -34,8 +36,8 @@ function findNodes(node: RenderNode, component: string): RenderNode[] {
 
 /** The in-panel mark Label node: its positions are a packed vec2 FlatTensor,
  * unlike the axis/title guide Labels, whose positions are plain arrays. */
-function markLabel(spec: Parameters<typeof compile>[0]): RenderNode {
-  const marks = findNodes(compile(spec, { layout }), "Label").filter(
+function markLabel(spec: GGSpec): RenderNode {
+  const marks = findNodes(assembleTree(spec, { layout }), "Label").filter(
     (node) => !Array.isArray(node.props.positions),
   );
   assertEquals(marks.length, 1, "expected exactly one mark Label node");

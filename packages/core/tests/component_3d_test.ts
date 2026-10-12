@@ -23,14 +23,14 @@ import {
   CoordCartesian,
   Labs,
 } from "../src/components/plot_parts.ts";
-import {
-  buildFacetPanels,
-  compile,
-  type RenderNode,
-} from "../src/compile/mod.ts";
+import { buildFacetPanels, type RenderNode } from "../src/compile/mod.ts";
 import type { SpecPart } from "../src/dsl/base.ts";
 import { ingest } from "../src/data/mod.ts";
 import type { Aes } from "../src/ir/types.ts";
+import {
+  assertCompileBaseline,
+  baselineName,
+} from "./support/compile_baseline.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
 import { componentProbe } from "../src/components/probe.ts";
 
@@ -78,9 +78,7 @@ function both(
     caches,
   )!;
   const component = layoutRoot(root, LAYOUT, caches).tree;
-  const spec = { ...base, layers: built };
-  const compiled = compile(spec, { layout: LAYOUT });
-  return { component, compiled };
+  return { component };
 }
 
 const XYZ: Aes = { x: "x", y: "y", z: "z" };
@@ -115,10 +113,13 @@ const CASES: Array<
 ];
 
 for (const [name, layers, mapping, parts] of CASES) {
-  Deno.test(`3D on the component path matches compile(): ${name}`, () => {
-    const { component, compiled } = both(layers, mapping, parts);
+  Deno.test(`3D on the component path matches compile()'s saved tree: ${name}`, () => {
+    const { component } = both(layers, mapping, parts);
     assertEquals(component.component, "Scene3D");
-    assertEquals(plain(component), plain(compiled));
+    assertCompileBaseline(
+      baselineName("3d", name),
+      plain(component),
+    );
   });
 }
 

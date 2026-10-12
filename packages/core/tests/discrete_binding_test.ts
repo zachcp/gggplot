@@ -13,11 +13,7 @@ import { layerFromProps } from "../src/components/geom_layer.ts";
 import { GeomPoint } from "../src/components/geoms.ts";
 import { ScaleFill } from "../src/components/plot_parts.ts";
 import { componentProbe } from "../src/components/probe.ts";
-import {
-  buildFacetPanels,
-  compile,
-  type RenderNode,
-} from "../src/compile/mod.ts";
+import { buildFacetPanels, type RenderNode } from "../src/compile/mod.ts";
 import type { SpecPart } from "../src/dsl/base.ts";
 import { ingest, type InputData } from "../src/data/mod.ts";
 import { NA_COLOR } from "../src/scale/mapping.ts";
@@ -26,6 +22,7 @@ import {
   discreteColorLookup,
   isDiscreteGpuBindable,
 } from "../src/render/scale_bindings.ts";
+import { baselineName, compileBaseline } from "./support/compile_baseline.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
 
 const LAYOUT = {
@@ -90,25 +87,6 @@ function gpuColors(raw: InputData, parts: SpecPart[]): number[][] {
   });
 }
 
-/** compile()'s CPU-packed per-vertex colors for the same plot. */
-function cpuColors(raw: InputData, parts: SpecPart[]): number[][] {
-  const spec = plotSpec(
-    ingest(raw),
-    { x: "x", y: "y", fill: "g" },
-    undefined,
-    undefined,
-    parts,
-  );
-  spec.layers.push(layerFromProps(GeomPoint.layerProps({})));
-  const point = find(compile(spec, { layout: LAYOUT }), "Point")!;
-  const colors = point.props.colors as { array: Float32Array };
-  const out: number[][] = [];
-  for (let i = 0; i < colors.array.length; i += 4) {
-    out.push(Array.from(colors.array.slice(i, i + 4)));
-  }
-  return out;
-}
-
 const quiet = <T>(f: () => T): T => {
   const warn = console.warn;
   console.warn = () => {};
@@ -150,7 +128,14 @@ const CASES: Array<[string, InputData, SpecPart[]]> = [
 
 for (const [name, data, parts] of CASES) {
   Deno.test(`discrete GPU color matches the CPU: ${name}`, () => {
-    quiet(() => assertEquals(gpuColors(data, parts), cpuColors(data, parts)));
+    quiet(() =>
+      assertEquals(
+        gpuColors(data, parts),
+        compileBaseline(
+          baselineName("discrete", name),
+        ),
+      )
+    );
   });
 }
 

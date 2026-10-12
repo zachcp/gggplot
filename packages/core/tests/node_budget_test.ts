@@ -23,7 +23,7 @@
 //     uses for the checked-in fixture set ("the fixture spec set"), asserting
 //     only the closed set of expected mark component names ever appears.
 import { assertEquals } from "@std/assert";
-import { residentTreeOf } from "./support/resident_root.ts";
+import { assembleTree, residentTreeOf } from "./support/assemble.ts";
 import {
   aes,
   annotate,
@@ -46,7 +46,7 @@ import {
   geomViolin,
   ggplot,
 } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import {
   cases,
@@ -100,7 +100,7 @@ function countBy(
 Deno.test("node budget: single geom_point layer (no shape mapping) is exactly 1 Point node", () => {
   const spec = ggplot({ x: [1, 2, 3], y: [3, 1, 2] }, aes({ x: "x", y: "y" }))
     .add(geomPoint()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   assertEquals(findAll(tree, "Point").length, 1);
 });
 
@@ -109,7 +109,7 @@ Deno.test("node budget: single grouped geom_line layer (no linetype mapping) is 
     { x: [1, 2, 1, 2], y: [1, 2, 3, 4], g: ["a", "a", "b", "b"] },
     aes({ x: "x", y: "y", color: "g" }),
   ).add(geomLine()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   // Grouping by color (uniform dash across groups) must NOT split the node —
   // color is a per-vertex tensor attribute, not a renderer-incompatible
   // style trait. Multiple groups pack into ONE ChunkedLine via concatPacked.
@@ -121,7 +121,7 @@ Deno.test("node budget: single geom_bar layer, grouped by fill, is exactly 1 Chu
     { cls: ["a", "a", "b", "b"], drv: ["x", "y", "x", "y"] },
     aes({ x: "cls", fill: "drv" }),
   ).add(geomBar()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   assertEquals(findAll(tree, "ChunkedFace").length, 1);
 });
 
@@ -131,7 +131,7 @@ Deno.test("node budget: single geom_col layer is exactly 1 ChunkedFace node", ()
     aes({ x: "cls", y: "n" }),
   )
     .add(geomCol()).build();
-  assertEquals(findAll(compile(spec), "ChunkedFace").length, 1);
+  assertEquals(findAll(assembleTree(spec), "ChunkedFace").length, 1);
 });
 
 Deno.test("node budget: single geom_area layer (multi-group, position stack) is exactly 1 ChunkedFace node", () => {
@@ -139,7 +139,7 @@ Deno.test("node budget: single geom_area layer (multi-group, position stack) is 
     { x: [1, 2, 1, 2], y: [1, 2, 3, 4], g: ["a", "a", "b", "b"] },
     aes({ x: "x", y: "y", fill: "g" }),
   ).add(geomArea({ position: "stack" })).build();
-  assertEquals(findAll(compile(spec), "ChunkedFace").length, 1);
+  assertEquals(findAll(assembleTree(spec), "ChunkedFace").length, 1);
 });
 
 Deno.test("node budget: single geom_ribbon layer is exactly 1 ChunkedFace node", () => {
@@ -147,7 +147,7 @@ Deno.test("node budget: single geom_ribbon layer is exactly 1 ChunkedFace node",
     { x: [1, 2, 3], lo: [0, 0, 0], hi: [2, 3, 1] },
     aes({ x: "x", ymin: "lo", ymax: "hi" }),
   ).add(geomRibbon()).build();
-  assertEquals(findAll(compile(spec), "ChunkedFace").length, 1);
+  assertEquals(findAll(assembleTree(spec), "ChunkedFace").length, 1);
 });
 
 Deno.test("node budget: single geom_polygon layer (multi-group) is exactly 1 ChunkedFace node", () => {
@@ -159,7 +159,7 @@ Deno.test("node budget: single geom_polygon layer (multi-group) is exactly 1 Chu
     },
     aes({ x: "x", y: "y", group: "g" }),
   ).add(geomPolygon()).build();
-  assertEquals(findAll(compile(spec), "ChunkedFace").length, 1);
+  assertEquals(findAll(assembleTree(spec), "ChunkedFace").length, 1);
 });
 
 Deno.test("node budget: single geom_tile layer is exactly 1 ChunkedFace node", () => {
@@ -167,7 +167,7 @@ Deno.test("node budget: single geom_tile layer is exactly 1 ChunkedFace node", (
     { x: [1, 2, 1, 2], y: [1, 1, 2, 2], z: [0.1, 0.4, 0.7, 1] },
     aes({ x: "x", y: "y", fill: "z" }),
   ).add(geomTile()).build();
-  assertEquals(findAll(compile(spec), "ChunkedFace").length, 1);
+  assertEquals(findAll(assembleTree(spec), "ChunkedFace").length, 1);
 });
 
 Deno.test("node budget: single geom_hex layer is exactly 1 ChunkedFace node", () => {
@@ -175,7 +175,7 @@ Deno.test("node budget: single geom_hex layer is exactly 1 ChunkedFace node", ()
     { x: [1, 2, 1, 2], y: [1, 1, 2, 2] },
     aes({ x: "x", y: "y" }),
   ).add(geomHex()).build();
-  assertEquals(findAll(compile(spec), "ChunkedFace").length, 1);
+  assertEquals(findAll(assembleTree(spec), "ChunkedFace").length, 1);
 });
 
 Deno.test("node budget: single geom_violin layer (multi-group) is exactly 1 ChunkedFace node", () => {
@@ -192,7 +192,7 @@ Deno.test("node budget: single geom_violin layer (multi-group) is exactly 1 Chun
     },
     aes({ x: "grp", y: "v", fill: "grp" }),
   ).add(geomViolin()).build();
-  assertEquals(findAll(compile(spec), "ChunkedFace").length, 1);
+  assertEquals(findAll(assembleTree(spec), "ChunkedFace").length, 1);
 });
 
 Deno.test("node budget: single geom_smooth layer (fitted line + SE ribbon) is exactly 1 ChunkedLine + 1 ChunkedFace — two DIFFERENT style batches, not an over-split", () => {
@@ -200,7 +200,7 @@ Deno.test("node budget: single geom_smooth layer (fitted line + SE ribbon) is ex
     { x: [1, 2, 3, 4, 5], y: [1, 3, 2, 5, 4] },
     aes({ x: "x", y: "y" }),
   ).add(geomSmooth({ method: "loess" })).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   assertEquals(findAll(tree, "ChunkedLine").length, 1);
   assertEquals(findAll(tree, "ChunkedFace").length, 1);
 });
@@ -213,7 +213,7 @@ Deno.test("node budget: single geom_boxplot layer is exactly 1 ChunkedFace (box)
     },
     aes({ x: "grp", y: "v" }),
   ).add(geomBoxplot()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   assertEquals(findAll(tree, "ChunkedFace").length, 1);
   assertEquals(findAll(tree, "Line").length, 1);
 });
@@ -223,14 +223,14 @@ Deno.test("node budget: single geom_errorbar layer (stems only) is exactly 1 Lin
     { x: [1, 2, 3], lo: [0, 1, 0], hi: [2, 3, 2] },
     aes({ x: "x", ymin: "lo", ymax: "hi" }),
   ).add(geomErrorbar()).build();
-  assertEquals(findAll(compile(spec), "Line").length, 1);
+  assertEquals(findAll(assembleTree(spec), "Line").length, 1);
 });
 
 Deno.test("node budget: single annotate('segment') layer (N disjoint rows) is exactly 1 Line node", () => {
   const spec = ggplot({ x: [0, 5], y: [0, 5] }, aes({ x: "x", y: "y" }))
     .add(annotate("segment", { x: 1, y: 1, xend: 4, yend: 4 }))
     .build();
-  assertEquals(findAll(compile(spec), "Line").length, 1);
+  assertEquals(findAll(assembleTree(spec), "Line").length, 1);
 });
 
 Deno.test("node budget: single geom_curve layer (N tessellated rows) is exactly 1 Line node", () => {
@@ -238,7 +238,7 @@ Deno.test("node budget: single geom_curve layer (N tessellated rows) is exactly 
     { x: [0, 1], y: [0, 1], xend: [1, 2], yend: [1, 0] },
     aes({ x: "x", y: "y", xend: "xend", yend: "yend" }),
   ).add(geomCurve()).build();
-  assertEquals(findAll(compile(spec), "Line").length, 1);
+  assertEquals(findAll(assembleTree(spec), "Line").length, 1);
 });
 
 Deno.test("node budget: single geom_spoke layer is exactly 1 Line node", () => {
@@ -246,7 +246,7 @@ Deno.test("node budget: single geom_spoke layer is exactly 1 Line node", () => {
     { x: [0, 1], y: [0, 1], angle: [0.1, 0.5], radius: [1, 2] },
     aes({ x: "x", y: "y", angle: "angle", radius: "radius" }),
   ).add(geomSpoke()).build();
-  assertEquals(findAll(compile(spec), "Line").length, 1);
+  assertEquals(findAll(assembleTree(spec), "Line").length, 1);
 });
 
 Deno.test("node budget: single geom_rug layer is exactly 1 Line node", () => {
@@ -256,7 +256,7 @@ Deno.test("node budget: single geom_rug layer is exactly 1 Line node", () => {
     height: 300,
     measureText: (_t: string, size: number) => ({ width: size, height: size }),
   };
-  assertEquals(findAll(compile(spec, { layout }), "Line").length, 1);
+  assertEquals(findAll(assembleTree(spec, { layout }), "Line").length, 1);
 });
 
 // ---------------------------------------------------------------------------
@@ -272,7 +272,7 @@ Deno.test("node budget SANCTIONED EXCEPTION: geom_point mapped to 3 distinct sha
     },
     aes({ x: "x", y: "y", shape: "s" }),
   ).add(geomPoint()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   assertEquals(findAll(tree, "Point").length, 3);
 });
 
@@ -281,7 +281,7 @@ Deno.test("node budget SANCTIONED EXCEPTION: geom_point mapped to 1 shape value 
     { x: [1, 2, 3], y: [1, 2, 3], s: ["circle", "circle", "circle"] },
     aes({ x: "x", y: "y", shape: "s" }),
   ).add(geomPoint()).build();
-  assertEquals(findAll(compile(spec), "Point").length, 1);
+  assertEquals(findAll(assembleTree(spec), "Point").length, 1);
 });
 
 Deno.test("node budget SANCTIONED EXCEPTION: geom_line mapped to 2 distinct linetypes splits into exactly 2 ChunkedLine nodes", () => {
@@ -293,7 +293,7 @@ Deno.test("node budget SANCTIONED EXCEPTION: geom_line mapped to 2 distinct line
     },
     aes({ x: "x", y: "y", linetype: "lt" }),
   ).add(geomLine()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   assertEquals(findAll(tree, "ChunkedLine").length, 2);
 });
 
@@ -320,7 +320,7 @@ Deno.test("node budget SANCTIONED EXCEPTION: geom_line grouped by BOTH color and
     },
     aes({ x: "x", y: "y", color: "g", linetype: "lt" }),
   ).add(geomLine()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   assertEquals(findAll(tree, "ChunkedLine").length, 2);
 });
 
@@ -338,7 +338,7 @@ Deno.test("node budget: a 3-layer spec (area + line + step, matching line_step_a
     .add(geomLine())
     .add(geomStep({ direction: "hv" }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   assertEquals(findAll(tree, "ChunkedFace").length, 1);
   assertEquals(findAll(tree, "ChunkedLine").length, 2);
 });
@@ -352,7 +352,7 @@ Deno.test("node budget: a 2-layer spec (point + grouped line) totals exactly 1 P
     },
     aes({ x: "x", y: "y", color: "g" }),
   ).add(geomPoint()).add(geomLine()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   assertEquals(findAll(tree, "Point").length, 1);
   assertEquals(findAll(tree, "ChunkedLine").length, 1);
 });
@@ -366,7 +366,7 @@ Deno.test("node budget: a 2-layer spec (point + grouped line) totals exactly 1 P
 
 Deno.test("node budget: every fixture-set spec's mark nodes are drawn from the known component set", () => {
   for (const { name, build } of cases) {
-    const tree = compile(build());
+    const tree = assembleTree(build());
     const unexpected = new Set<string>();
     (function walk(n: RenderNode) {
       if (

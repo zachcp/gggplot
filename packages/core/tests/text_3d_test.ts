@@ -1,7 +1,9 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import { geomLabel, geomText, ggplot } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
+import type { GGSpec } from "../src/ir/types.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 const data = {
   x: [0, 1, 2],
@@ -20,8 +22,8 @@ function findNodes(node: RenderNode, component: string): RenderNode[] {
 }
 
 /** In-scene glyph nodes carry vec4 anchors; flat overlay guides do not. */
-const glyphNodes = (spec: Parameters<typeof compile>[0]) =>
-  findNodes(compile(spec), "Label").filter((node) =>
+const glyphNodes = (spec: GGSpec) =>
+  findNodes(assembleTree(spec), "Label").filter((node) =>
     Array.isArray(node.props.positions) &&
     (node.props.positions as unknown[][])[0]?.length === 4
   );
@@ -95,7 +97,7 @@ Deno.test("geom_label has no 3D mode and says so", () => {
   // Its background box is measured in CSS pixels through the panel's
   // data-per-pixel ratio, which has no meaning under a perspective camera.
   assertThrows(
-    () => compile(ggplot(data, mapping).add(geomLabel()).build()),
+    () => assembleTree(ggplot(data, mapping).add(geomLabel()).build()),
     Error,
     "geom_label has no 3D mode; z is not supported",
   );
@@ -104,7 +106,7 @@ Deno.test("geom_label has no 3D mode and says so", () => {
 Deno.test("3D text rejects non-identity stats and unknown size modes", () => {
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(data, mapping).add(geomText({ position: "jitter" })).build(),
       ),
     Error,
@@ -112,7 +114,7 @@ Deno.test("3D text rejects non-identity stats and unknown size modes", () => {
   );
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(data, mapping).add(geomText({ sizeMode: "wobble" })).build(),
       ),
     Error,

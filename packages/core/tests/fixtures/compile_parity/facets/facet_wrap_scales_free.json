@@ -1,0 +1,1131 @@
+{
+ "component": "Embedded",
+ "props": {
+  "normalize": true
+ },
+ "children": [
+  {
+   "component": "FacetGrid",
+   "props": {
+    "nrow": 2,
+    "ncol": 2,
+    "gap": 24,
+    "stripHeight": 24,
+    "axisPolicy": "free",
+    "bounds": [
+     -0.9027777777777778,
+     -0.9333333333333333,
+     0.9555555555555556,
+     0.825
+    ]
+   },
+   "children": [
+    {
+     "component": "FacetPanel",
+     "props": {},
+     "children": [
+      {
+       "component": "Cartesian",
+       "props": {
+        "range": [
+         [
+          0,
+          9
+         ],
+         [
+          -0.9899924966004454,
+          1
+         ]
+        ],
+        "axes": "xy"
+       },
+       "children": [
+        {
+         "component": "Grid",
+         "props": {
+          "axes": "xy",
+          "range": [
+           [
+            0,
+            5
+           ],
+           [
+            -0.9899924966004454,
+            1
+           ]
+          ],
+          "first": {
+           "nice": false,
+           "divide": 1
+          },
+          "second": null,
+          "width": 1,
+          "zBias": -1
+         },
+         "children": []
+        },
+        {
+         "component": "Grid",
+         "props": {
+          "axes": "xy",
+          "range": [
+           [
+            0,
+            9
+           ],
+           [
+            0,
+            1
+           ]
+          ],
+          "first": null,
+          "second": {
+           "nice": false,
+           "divide": 1
+          },
+          "width": 1,
+          "zBias": -1
+         },
+         "children": []
+        },
+        {
+         "component": "Axis",
+         "props": {
+          "axis": "x",
+          "width": 2,
+          "zBias": 0
+         },
+         "children": []
+        },
+        {
+         "component": "Axis",
+         "props": {
+          "axis": "y",
+          "width": 2,
+          "zBias": 0
+         },
+         "children": []
+        },
+        {
+         "component": "Point",
+         "props": {
+          "positions": {
+           "array": {
+            "$f32": [
+             0,
+             1,
+             3,
+             0.731689,
+             0,
+             0.070737,
+             3,
+             -0.628174,
+             0,
+             -0.989992,
+             6,
+             -0.820559,
+             0,
+             -0.210796,
+             6,
+             0.512085,
+             0,
+             0.96017,
+             9,
+             0.893006,
+             0,
+             0.346635,
+             9,
+             -0.385748
+            ]
+           },
+           "format": "vec2<f32>",
+           "dims": 2,
+           "length": 12,
+           "size": [
+            12
+           ]
+          },
+          "topology": {
+           "kind": "points"
+          },
+          "color": "#3b82f6",
+          "size": 5
+         },
+         "children": []
+        },
+        {
+         "component": "ChunkedLine",
+         "props": {
+          "positions": {
+           "array": {
+            "$f32": [
+             0,
+             1,
+             0,
+             0.070737,
+             0,
+             -0.989992,
+             0,
+             -0.210796,
+             0,
+             0.96017,
+             0,
+             0.346635,
+             3,
+             0.731689,
+             3,
+             -0.628174,
+             6,
+             -0.820559,
+             6,
+             0.512085,
+             9,
+             0.893006,
+             9,
+             -0.385748
+            ]
+           },
+           "format": "vec2<f32>",
+           "dims": 2,
+           "length": 12,
+           "size": [
+            12
+           ]
+          },
+          "topology": {
+           "kind": "polyline",
+           "chunks": {
+            "$u32": [
+             12
+            ]
+           },
+           "loops": false
+          },
+          "colors": {
+           "array": {
+            "$f32": [
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1
+            ]
+           },
+           "format": "vec4<f32>",
+           "dims": 4,
+           "length": 12,
+           "size": [
+            12
+           ]
+          },
+          "widths": {
+           "array": {
+            "$f32": [
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2
+            ]
+           },
+           "format": "f32",
+           "dims": 1,
+           "length": 12,
+           "size": [
+            12
+           ]
+          }
+         },
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "component": "FacetPanel",
+     "props": {},
+     "children": [
+      {
+       "component": "Cartesian",
+       "props": {
+        "range": [
+         [
+          1,
+          12
+         ],
+         [
+          -1.9882593521610925,
+          1.9988988364489988
+         ]
+        ],
+        "axes": "xy"
+       },
+       "children": [
+        {
+         "component": "Grid",
+         "props": {
+          "axes": "xy",
+          "range": [
+           [
+            5,
+            10
+           ],
+           [
+            -1.9882593521610925,
+            1.9988988364489988
+           ]
+          ],
+          "first": {
+           "nice": false,
+           "divide": 1
+          },
+          "second": null,
+          "width": 1,
+          "zBias": -1
+         },
+         "children": []
+        },
+        {
+         "component": "Grid",
+         "props": {
+          "axes": "xy",
+          "range": [
+           [
+            1,
+            12
+           ],
+           [
+            -2,
+            2
+           ]
+          ],
+          "first": null,
+          "second": {
+           "nice": false,
+           "divide": 2
+          },
+          "width": 1,
+          "zBias": -1
+         },
+         "children": []
+        },
+        {
+         "component": "Axis",
+         "props": {
+          "axis": "x",
+          "width": 2,
+          "zBias": 0
+         },
+         "children": []
+        },
+        {
+         "component": "Axis",
+         "props": {
+          "axis": "y",
+          "width": 2,
+          "zBias": 0
+         },
+         "children": []
+        },
+        {
+         "component": "Point",
+         "props": {
+          "positions": {
+           "array": {
+            "$f32": [
+             1,
+             1.937825,
+             4,
+             1.080605,
+             1,
+             -0.356492,
+             4,
+             -1.602287,
+             2,
+             -1.988259,
+             8,
+             -1.307287,
+             2,
+             0.075204,
+             8,
+             1.41734,
+             3,
+             1.998899,
+             12,
+             1.507805,
+             3,
+             0.207589,
+             12,
+             -1.204024
+            ]
+           },
+           "format": "vec2<f32>",
+           "dims": 2,
+           "length": 12,
+           "size": [
+            12
+           ]
+          },
+          "topology": {
+           "kind": "points"
+          },
+          "color": "#3b82f6",
+          "size": 5
+         },
+         "children": []
+        },
+        {
+         "component": "ChunkedLine",
+         "props": {
+          "positions": {
+           "array": {
+            "$f32": [
+             1,
+             1.937825,
+             1,
+             -0.356492,
+             2,
+             -1.988259,
+             2,
+             0.075204,
+             3,
+             1.998899,
+             3,
+             0.207589,
+             4,
+             1.080605,
+             4,
+             -1.602287,
+             8,
+             -1.307287,
+             8,
+             1.41734,
+             12,
+             1.507805,
+             12,
+             -1.204024
+            ]
+           },
+           "format": "vec2<f32>",
+           "dims": 2,
+           "length": 12,
+           "size": [
+            12
+           ]
+          },
+          "topology": {
+           "kind": "polyline",
+           "chunks": {
+            "$u32": [
+             12
+            ]
+           },
+           "loops": false
+          },
+          "colors": {
+           "array": {
+            "$f32": [
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1
+            ]
+           },
+           "format": "vec4<f32>",
+           "dims": 4,
+           "length": 12,
+           "size": [
+            12
+           ]
+          },
+          "widths": {
+           "array": {
+            "$f32": [
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2
+            ]
+           },
+           "format": "f32",
+           "dims": 1,
+           "length": 12,
+           "size": [
+            12
+           ]
+          }
+         },
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "component": "FacetPanel",
+     "props": {},
+     "children": [
+      {
+       "component": "Cartesian",
+       "props": {
+        "range": [
+         [
+          2,
+          15
+         ],
+         [
+          -2.809370061872389,
+          2.9297628771840705
+         ]
+        ],
+        "axes": "xy"
+       },
+       "children": [
+        {
+         "component": "Grid",
+         "props": {
+          "axes": "xy",
+          "range": [
+           [
+            5,
+            15
+           ],
+           [
+            -2.809370061872389,
+            2.9297628771840705
+           ]
+          ],
+          "first": {
+           "nice": false,
+           "divide": 2
+          },
+          "second": null,
+          "width": 1,
+          "zBias": -1
+         },
+         "children": []
+        },
+        {
+         "component": "Grid",
+         "props": {
+          "axes": "xy",
+          "range": [
+           [
+            2,
+            15
+           ],
+           [
+            -2,
+            2
+           ]
+          ],
+          "first": null,
+          "second": {
+           "nice": false,
+           "divide": 2
+          },
+          "width": 1,
+          "zBias": -1
+         },
+         "children": []
+        },
+        {
+         "component": "Axis",
+         "props": {
+          "axis": "x",
+          "width": 2,
+          "zBias": 0
+         },
+         "children": []
+        },
+        {
+         "component": "Axis",
+         "props": {
+          "axis": "y",
+          "width": 2,
+          "zBias": 0
+         },
+         "children": []
+        },
+        {
+         "component": "Point",
+         "props": {
+          "positions": {
+           "array": {
+            "$f32": [
+             2,
+             2.632748,
+             5,
+             0.945967,
+             2,
+             -1.248441,
+             5,
+             -2.772907,
+             4,
+             -2.80937,
+             10,
+             -1.338262,
+             4,
+             0.850987,
+             10,
+             2.583577,
+             6,
+             2.929763,
+             15,
+             1.703773,
+             6,
+             -0.4365,
+             15,
+             -2.342537
+            ]
+           },
+           "format": "vec2<f32>",
+           "dims": 2,
+           "length": 12,
+           "size": [
+            12
+           ]
+          },
+          "topology": {
+           "kind": "points"
+          },
+          "color": "#3b82f6",
+          "size": 5
+         },
+         "children": []
+        },
+        {
+         "component": "ChunkedLine",
+         "props": {
+          "positions": {
+           "array": {
+            "$f32": [
+             2,
+             2.632748,
+             2,
+             -1.248441,
+             4,
+             -2.80937,
+             4,
+             0.850987,
+             5,
+             0.945967,
+             5,
+             -2.772907,
+             6,
+             2.929763,
+             6,
+             -0.4365,
+             10,
+             -1.338262,
+             10,
+             2.583577,
+             15,
+             1.703773,
+             15,
+             -2.342537
+            ]
+           },
+           "format": "vec2<f32>",
+           "dims": 2,
+           "length": 12,
+           "size": [
+            12
+           ]
+          },
+          "topology": {
+           "kind": "polyline",
+           "chunks": {
+            "$u32": [
+             12
+            ]
+           },
+           "loops": false
+          },
+          "colors": {
+           "array": {
+            "$f32": [
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1,
+             0.231373,
+             0.509804,
+             0.964706,
+             1
+            ]
+           },
+           "format": "vec4<f32>",
+           "dims": 4,
+           "length": 12,
+           "size": [
+            12
+           ]
+          },
+          "widths": {
+           "array": {
+            "$f32": [
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2,
+             2
+            ]
+           },
+           "format": "f32",
+           "dims": 1,
+           "length": 12,
+           "size": [
+            12
+           ]
+          }
+         },
+         "children": []
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "component": "Label",
+   "props": {
+    "positions": [
+     [
+      -0.4548611111111111,
+      -0.8833333333333333
+     ]
+    ],
+    "labels": [
+     "col: c1"
+    ],
+    "color": "#0b0b0b",
+    "size": 13,
+    "zBias": 2,
+    "weight": "normal",
+    "style": "normal"
+   },
+   "children": []
+  },
+  {
+   "component": "Label",
+   "props": {
+    "positions": [
+     [
+      0.5076388888888889,
+      -0.8833333333333333
+     ]
+    ],
+    "labels": [
+     "col: c2"
+    ],
+    "color": "#0b0b0b",
+    "size": 13,
+    "zBias": 2,
+    "weight": "normal",
+    "style": "normal"
+   },
+   "children": []
+  },
+  {
+   "component": "Label",
+   "props": {
+    "positions": [
+     [
+      -0.4548611111111111,
+      0.04583333333333339
+     ]
+    ],
+    "labels": [
+     "col: c3"
+    ],
+    "color": "#0b0b0b",
+    "size": 13,
+    "zBias": 2,
+    "weight": "normal",
+    "style": "normal"
+   },
+   "children": []
+  },
+  {
+   "component": "FacetPanel",
+   "props": {},
+   "children": [
+    {
+     "component": "Label",
+     "props": {
+      "positions": [
+       [
+        -0.9027777777777778,
+        -0.07083333333333341
+       ],
+       [
+        -0.40509259259259256,
+        -0.07083333333333341
+       ]
+      ],
+      "labels": [
+       "0",
+       "5"
+      ],
+      "color": "#0b0b0b",
+      "size": 11,
+      "zBias": 2,
+      "weight": "normal",
+      "style": "normal"
+     },
+     "children": []
+    },
+    {
+     "component": "Label",
+     "props": {
+      "positions": [
+       [
+        -0.925,
+        -0.46691654135430805
+       ],
+       [
+        -0.925,
+        -0.8333333333333334
+       ]
+      ],
+      "labels": [
+       "0",
+       "1"
+      ],
+      "color": "#0b0b0b",
+      "size": 11,
+      "zBias": 2,
+      "weight": "normal",
+      "style": "normal"
+     },
+     "children": []
+    }
+   ]
+  },
+  {
+   "component": "FacetPanel",
+   "props": {},
+   "children": [
+    {
+     "component": "Label",
+     "props": {
+      "positions": [
+       [
+        0.3854797979797981,
+        -0.07083333333333341
+       ],
+       [
+        0.7926767676767678,
+        -0.07083333333333341
+       ]
+      ],
+      "labels": [
+       "5",
+       "10"
+      ],
+      "color": "#0b0b0b",
+      "size": 11,
+      "zBias": 2,
+      "weight": "normal",
+      "style": "normal"
+     },
+     "children": []
+    },
+    {
+     "component": "Label",
+     "props": {
+      "positions": [
+       [
+        0.03750000000000012,
+        -0.10201955119137437
+       ],
+       [
+        0.03750000000000012,
+        -0.46777713199147375
+       ],
+       [
+        0.03750000000000012,
+        -0.8335347127915732
+       ]
+      ],
+      "labels": [
+       "-2",
+       "0",
+       "2"
+      ],
+      "color": "#0b0b0b",
+      "size": 11,
+      "zBias": 2,
+      "weight": "normal",
+      "style": "normal"
+     },
+     "children": []
+    }
+   ]
+  },
+  {
+   "component": "FacetPanel",
+   "props": {},
+   "children": [
+    {
+     "component": "Label",
+     "props": {
+      "positions": [
+       [
+        -0.6960470085470085,
+        0.8583333333333333
+       ],
+       [
+        -0.35149572649572647,
+        0.8583333333333333
+       ],
+       [
+        -0.00694444444444442,
+        0.8583333333333333
+       ]
+      ],
+      "labels": [
+       "5",
+       "10",
+       "15"
+      ],
+      "color": "#0b0b0b",
+      "size": 11,
+      "zBias": 2,
+      "weight": "normal",
+      "style": "normal"
+     },
+     "children": []
+    },
+    {
+     "component": "Label",
+     "props": {
+      "positions": [
+       [
+        -0.925,
+        0.7221681478052135
+       ],
+       [
+        -0.925,
+        0.4680647233298972
+       ],
+       [
+        -0.925,
+        0.2139612988545807
+       ]
+      ],
+      "labels": [
+       "-2",
+       "0",
+       "2"
+      ],
+      "color": "#0b0b0b",
+      "size": 11,
+      "zBias": 2,
+      "weight": "normal",
+      "style": "normal"
+     },
+     "children": []
+    }
+   ]
+  },
+  {
+   "component": "FacetPanel",
+   "props": {},
+   "children": [
+    {
+     "component": "Label",
+     "props": {
+      "positions": [
+       [
+        0.026388888888888906,
+        0.8979166666666667
+       ]
+      ],
+      "labels": [
+       "x"
+      ],
+      "color": "#0b0b0b",
+      "size": 13,
+      "zBias": 2,
+      "weight": "normal",
+      "style": "normal"
+     },
+     "children": []
+    },
+    {
+     "component": "Label",
+     "props": {
+      "positions": [
+       [
+        -0.9502777777777778,
+        -0.054166666666666696
+       ]
+      ],
+      "labels": [
+       "y"
+      ],
+      "color": "#0b0b0b",
+      "size": 13,
+      "zBias": 2,
+      "weight": "normal",
+      "style": "normal"
+     },
+     "children": []
+    }
+   ]
+  }
+ ]
+}

@@ -22,9 +22,11 @@ import {
   geomTile,
   ggplot,
 } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import { GEOM_REGISTRY } from "../src/geom/mod.ts";
+import type { GGSpec } from "../src/ir/types.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 const MARKS = new Set([
   "Point",
@@ -35,7 +37,7 @@ const MARKS = new Set([
 ]);
 
 /** Packed coordinates of the first in-panel mark node. */
-function markCoords(spec: Parameters<typeof compile>[0]): number[] {
+function markCoords(spec: GGSpec): number[] {
   let found: number[] | null = null;
   const walk = (node: RenderNode, inPanel: boolean) => {
     const panel = inPanel || node.component === "Cartesian" ||
@@ -48,7 +50,7 @@ function markCoords(spec: Parameters<typeof compile>[0]): number[] {
     }
     for (const child of node.children ?? []) walk(child, panel);
   };
-  walk(compile(spec) as RenderNode, false);
+  walk(assembleTree(spec) as RenderNode, false);
   return found ?? [];
 }
 
@@ -61,21 +63,20 @@ Deno.test("geom_point drops a row with no position instead of drawing it at 0", 
 });
 
 Deno.test("row-independent geoms drop the row; the mark count falls", () => {
-  const cases: Array<[string, (y: number[]) => Parameters<typeof compile>[0]]> =
+  const cases: Array<[string, (y: number[]) => GGSpec]> = [
     [
-      [
-        "tile",
-        (y) =>
-          ggplot({ x: [0, 1, 2], y }, { x: "x", y: "y" }).add(geomTile())
-            .build(),
-      ],
-      [
-        "col",
-        (y) =>
-          ggplot({ x: ["a", "b", "c"], y }, { x: "x", y: "y" }).add(geomCol())
-            .build(),
-      ],
-    ];
+      "tile",
+      (y) =>
+        ggplot({ x: [0, 1, 2], y }, { x: "x", y: "y" }).add(geomTile())
+          .build(),
+    ],
+    [
+      "col",
+      (y) =>
+        ggplot({ x: ["a", "b", "c"], y }, { x: "x", y: "y" }).add(geomCol())
+          .build(),
+    ],
+  ];
   for (const [name, build] of cases) {
     const clean = markCoords(build([0, 1, 2])).length;
     const holed = markCoords(build([0, Number.NaN, 2])).length;
@@ -149,7 +150,7 @@ Deno.test("dropping a row keeps per-row aesthetics aligned", () => {
       for (const child of node.children ?? []) walk(child);
     };
     walk(
-      compile(
+      assembleTree(
         ggplot(frame(y), { x: "x", y: "y", color: "grp" }).add(geomPoint())
           .build(),
       ) as RenderNode,

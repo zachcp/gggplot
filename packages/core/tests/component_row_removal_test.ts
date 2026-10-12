@@ -20,15 +20,11 @@ import {
 } from "../src/components/geoms.ts";
 import { FacetWrap, ScaleXContinuous } from "../src/components/plot_parts.ts";
 import { componentProbe } from "../src/components/probe.ts";
-import {
-  buildFacetPanels,
-  compile,
-  type RenderNode,
-  rowRemovalsOf,
-} from "../src/compile/mod.ts";
+import { buildFacetPanels, type RenderNode } from "../src/compile/mod.ts";
 import type { SpecPart } from "../src/dsl/base.ts";
 import { ingest, type InputData } from "../src/data/mod.ts";
 import type { Aes, GGSpec, Layer } from "../src/ir/types.ts";
+import { baselineName, compileBaseline } from "./support/compile_baseline.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
 
 /** assembleRoot for plots with no pending layer: never null. */
@@ -78,17 +74,6 @@ function assemble(plot: Plot, caches: RootCaches = createRootCaches()) {
   );
 }
 
-/** What compile() reports for the same plot. */
-function compiled(plot: Plot) {
-  const original = console.warn;
-  console.warn = () => {};
-  try {
-    return compile(specOf(plot), { layout: LAYOUT }) as RenderNode;
-  } finally {
-    console.warn = original;
-  }
-}
-
 const PLOTS: Record<string, Plot> = {
   "nothing dropped": {
     data: { x: [0, 1, 2], y: [0, 1, 2] },
@@ -133,11 +118,13 @@ const PLOTS: Record<string, Plot> = {
   },
 };
 
-Deno.test("the component path reports compile()'s diagnostics", () => {
+Deno.test("the component path reports compile()'s saved diagnostics", () => {
   for (const [name, plot] of Object.entries(PLOTS)) {
     assertEquals(
       assemble(plot).diagnostics,
-      rowRemovalsOf(compiled(plot)),
+      compileBaseline(
+        baselineName("row_removal", `diagnostics ${name}`),
+      ),
       name,
     );
   }
@@ -242,7 +229,9 @@ Deno.test("missing positions drop or keep rows per geom, as compile does", () =>
   for (const [name, plot] of cases) {
     assertEquals(
       markCoords(assemble(plot).tree),
-      markCoords(compiled(plot)),
+      compileBaseline(
+        baselineName("row_removal", `coords ${name}`),
+      ),
       name,
     );
   }

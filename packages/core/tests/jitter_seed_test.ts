@@ -1,14 +1,15 @@
 // gggplot-plrj: jitter is seeded, so a jittered layer lowers identically on
 // every render and on both paths; the seed parameter picks another draw.
 import { assert, assertEquals, assertNotEquals } from "@std/assert";
-import { compile, type RenderNode } from "../src/compile/mod.ts";
+import type { RenderNode } from "../src/compile/mod.ts";
 import { geomJitter, geomPoint, ggplot } from "../src/dsl/mod.ts";
 import { seededRandom } from "../src/position/mod.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 const data = { x: [1, 1, 2, 2, 3, 3], y: [1, 2, 3, 4, 5, 6] };
 
 function positions(seed?: number): number[] {
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(data, { x: "x", y: "y" })
       .add(geomJitter(seed === undefined ? {} : { seed }))
       .build(),
@@ -38,7 +39,7 @@ Deno.test("the seed picks another draw, still within the amplitude", () => {
 
 Deno.test("jitterdodge is seeded too", () => {
   const dodged = (seed: number) =>
-    compile(
+    assembleTree(
       ggplot({ ...data, g: ["a", "b", "a", "b", "a", "b"] }, {
         x: "x",
         y: "y",

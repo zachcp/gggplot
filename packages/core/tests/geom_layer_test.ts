@@ -2,11 +2,12 @@
 // spec path builds, so the root's stat/train/lower stages see the same input.
 import { assertEquals, assertThrows } from "@std/assert";
 import { layerFromProps } from "../src/components/geom_layer.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import { asFactor, ingest } from "../src/data/mod.ts";
 import { GEOM_REGISTRY } from "../src/geom/mod.ts";
 import type { GeomKind } from "../src/ir/types.ts";
 import { ggplot } from "../src/dsl/mod.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 Deno.test("every registry geom gets its registry defaults", () => {
   for (const [kind, def] of Object.entries(GEOM_REGISTRY)) {
@@ -100,7 +101,7 @@ Deno.test("every registry geom compiles from a GeomLayer-built layer", () => {
     const { spec } = ggplot(data, MAPPINGS[kind] ?? MAPPINGS.default);
     spec.layers.push(layerFromProps({ geom: kind }));
     try {
-      compile(spec);
+      assembleTree(spec);
     } catch (error) {
       failures.push(`${kind}: ${(error as Error).message}`);
     }

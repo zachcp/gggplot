@@ -1,7 +1,9 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { geomSurface, ggplot } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
+import type { GGSpec } from "../src/ir/types.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 function findNodes(node: RenderNode, component: string): RenderNode[] {
   return [
@@ -11,8 +13,8 @@ function findNodes(node: RenderNode, component: string): RenderNode[] {
 }
 
 const mapping = { x: "x", y: "y", z: "z" };
-const face = (spec: Parameters<typeof compile>[0]) =>
-  findNodes(compile(spec), "ChunkedFace").find((node) =>
+const face = (spec: GGSpec) =>
+  findNodes(assembleTree(spec), "ChunkedFace").find((node) =>
     (node.props.positions as { format?: string })?.format === "vec4<f32>"
   );
 
@@ -54,7 +56,7 @@ Deno.test("scattered points are refused, not silently triangulated", () => {
   // problem this geom does not solve.
   const scattered = { x: [0, 1, 2, 3], y: [0, 2, 1, 3], z: [1, 2, 3, 4] };
   assertThrows(
-    () => compile(ggplot(scattered, mapping).add(geomSurface()).build()),
+    () => assembleTree(ggplot(scattered, mapping).add(geomSurface()).build()),
     TypeError,
     "requires a complete grid",
   );
@@ -67,7 +69,7 @@ Deno.test("a duplicated grid position is refused", () => {
     z: [1, 2, 3, 4],
   };
   assertThrows(
-    () => compile(ggplot(duplicated, mapping).add(geomSurface()).build()),
+    () => assembleTree(ggplot(duplicated, mapping).add(geomSurface()).build()),
     TypeError,
     "duplicate grid position",
   );
@@ -76,7 +78,7 @@ Deno.test("a duplicated grid position is refused", () => {
 Deno.test("a degenerate grid is refused before triangulating", () => {
   const line = { x: [0, 1, 2], y: [0, 0, 0], z: [1, 2, 3] };
   assertThrows(
-    () => compile(ggplot(line, mapping).add(geomSurface()).build()),
+    () => assembleTree(ggplot(line, mapping).add(geomSurface()).build()),
     TypeError,
     "at least two distinct x",
   );

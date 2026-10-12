@@ -235,6 +235,16 @@ export interface RootCaches {
    * munched tensors too.
    */
   polar: WeakMap<RenderNode, { key: string; mark: RenderNode }>;
+  /**
+   * Sees each layer's CPU lowering, its inputs and its marks before any GPU
+   * binding (tests: the owner-index property, gggplot-8e1).
+   */
+  observeLowering?: (args: LowerMarksArgs, nodes: RenderNode[]) => void;
+  /**
+   * Bind eligible point aesthetics on the GPU (BoundPoint). On unless set
+   * false: tests that check the CPU-packed tensors turn it off.
+   */
+  bindScales?: boolean;
 }
 
 export function createRootCaches(): RootCaches {
@@ -522,7 +532,8 @@ export function layoutRoot(
   // provably the same (gggplot-wo0z lifts it): a plot of point layers only,
   // bound in layer order until the first that cannot bind, after which CPU
   // points draw above, as in the aggregate.
-  const pointsOnly = layers.every(({ layer }) => layer.geom === "point");
+  const pointsOnly = caches.bindScales !== false &&
+    layers.every(({ layer }) => layer.geom === "point");
   const unboundFrom = new Map<number, number>();
   const liveLowered = new Set<string>();
   const lowerMarks = (args: LowerMarksArgs): RenderNode[] => {
@@ -549,6 +560,7 @@ export function layoutRoot(
     // Keyed per layer, so a sibling inserted before this layer does not
     // shift its marks to a new position and remount them.
     const lowered = lowerLayer(layer, mapping, data, ctx);
+    caches.observeLowering?.(args, lowered);
     const fresh = (bound ? bindPoints(lowered, bound, data, layer) : lowered)
       .map((node, i) => ({
         ...node,

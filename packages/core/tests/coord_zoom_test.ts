@@ -7,8 +7,10 @@ import {
   scaleXContinuous,
   scaleYContinuous,
 } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
+import type { GGSpec } from "../src/ir/types.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 /**
  * gggplot-b06: coord_cartesian(xlim=, ylim=) zooms without removing rows.
@@ -24,8 +26,7 @@ import type { RenderNode } from "../src/compile/rendertree.ts";
 
 const DATA = { x: [0, 1, 2, 3, 10], y: [0, 1, 2, 3, 10] };
 
-const treeOf = (spec: Parameters<typeof compile>[0]) =>
-  compile(spec) as RenderNode;
+const treeOf = (spec: GGSpec) => assembleTree(spec) as RenderNode;
 
 function find(node: RenderNode, component: string): RenderNode | undefined {
   if (node.component === component) return node;
@@ -87,7 +88,7 @@ Deno.test("zooming does not change stat output; a scale domain does", () => {
     g: Array.from({ length: 12 }, () => "a"),
     v: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 400],
   };
-  const summaryOf = (spec: Parameters<typeof compile>[0]) =>
+  const summaryOf = (spec: GGSpec) =>
     JSON.stringify(positions(treeOf(spec), "Line"));
 
   const plain = summaryOf(

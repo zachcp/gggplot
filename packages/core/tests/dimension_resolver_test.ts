@@ -8,7 +8,7 @@ import {
   ggplot,
   statSummary2d,
 } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import {
   GEOM_REGISTRY,
   resolvePlotDimension,
@@ -16,6 +16,7 @@ import {
 } from "../src/geom/mod.ts";
 import type { GeomDefinition } from "../src/geom/mod.ts";
 import type { Layer } from "../src/ir/types.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 const data = { x: [1, 2], y: [3, 4], z: [5, 6], panel: ["a", "b"] };
 
@@ -237,5 +238,5 @@ Deno.test("an intrinsic 3D-only definition selects its sole mode then validates 
 Deno.test("compile dispatches unified 3D before any 2D fallthrough", () => {
   const spec = ggplot(data, { x: "x", y: "y", z: "z" }).add(geomPoint())
     .build();
-  assertEquals(compile(spec).component, "Scene3D");
+  assertEquals(assembleTree(spec).component, "Scene3D");
 });

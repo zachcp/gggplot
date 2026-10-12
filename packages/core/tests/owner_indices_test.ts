@@ -4,13 +4,11 @@
 // are data points, its x position is that row's scaled x. This is the contract
 // a GPU scale binding relies on (getValue(getOwner(i))).
 import { assert, assertAlmostEquals, assertEquals } from "@std/assert";
-import {
-  compile,
-  type FlatTensor,
-  type LowerMarksArgs,
-  type RenderNode,
+import type {
+  FlatTensor,
+  LowerMarksArgs,
+  RenderNode,
 } from "../src/compile/mod.ts";
-import { lowerLayer } from "../src/geom/mod.ts";
 import {
   geomArea,
   geomBar,
@@ -25,6 +23,7 @@ import {
 import { parseColorRGBA } from "../src/color/mod.ts";
 import { scaleColorValue, scalePosition } from "../src/scale/mapping.ts";
 import type { GGSpec } from "../src/ir/types.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 interface Lowered {
   args: LowerMarksArgs;
@@ -33,12 +32,8 @@ interface Lowered {
 
 function lowered(spec: GGSpec): Lowered[] {
   const out: Lowered[] = [];
-  compile(spec, {
-    lowerMarks: (args) => {
-      const nodes = lowerLayer(args.layer, args.mapping, args.data, args.ctx);
-      out.push({ args, nodes });
-      return nodes;
-    },
+  assembleTree(spec, {
+    observeLowering: (args, nodes) => out.push({ args, nodes }),
   });
   return out;
 }

@@ -25,14 +25,14 @@ import {
   CoordPolar,
   CoordRadial,
 } from "../src/components/plot_parts.ts";
-import {
-  buildFacetPanels,
-  compile,
-  type RenderNode,
-} from "../src/compile/mod.ts";
+import { buildFacetPanels, type RenderNode } from "../src/compile/mod.ts";
 import type { SpecPart } from "../src/dsl/base.ts";
 import { ingest } from "../src/data/mod.ts";
 import type { Aes } from "../src/ir/types.ts";
+import {
+  assertCompileBaseline,
+  baselineName,
+} from "./support/compile_baseline.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
 import { componentProbe } from "../src/components/probe.ts";
 
@@ -79,7 +79,6 @@ function both(
     root,
     caches,
     component: layoutRoot(root, LAYOUT, caches).tree,
-    compiled: compile({ ...base, layers: built }, { layout: LAYOUT }),
   };
 }
 
@@ -113,9 +112,12 @@ const COORDS: Array<
 ];
 
 for (const [name, layers, parts] of COORDS) {
-  Deno.test(`coords on the component path match compile(): ${name}`, () => {
-    const { component, compiled } = both(layers, parts);
-    assertEquals(plain(component), plain(compiled));
+  Deno.test(`coords on the component path match compile()'s saved tree: ${name}`, () => {
+    const { component } = both(layers, parts);
+    assertCompileBaseline(
+      baselineName("coords", name),
+      plain(component),
+    );
   });
 }
 

@@ -1,9 +1,11 @@
-// Import the semantic stages directly: @gggplot/core also exports the browser
-// Live backend, which is intentionally not initialized by a Deno data test.
-import { compile } from "../../../../../packages/core/src/compile/mod.ts";
+// Assembles through the component root's pure half (no Live renderer), as
+// core's own tests do.
 import { geomLine, ggplot } from "../../../../../packages/core/src/dsl/mod.ts";
+import {
+  assembleTree,
+  findNodes,
+} from "../../../../../packages/core/tests/support/assemble.ts";
 import { loadStaticDataset } from "./real.ts";
-import type { RenderNode } from "../../../../../packages/core/src/compile/rendertree.ts";
 
 function assertEquals<T>(actual: T, expected: T): void {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
@@ -13,13 +15,6 @@ function assertEquals<T>(actual: T, expected: T): void {
       }`,
     );
   }
-}
-
-function findNodes(tree: RenderNode, component: string): RenderNode[] {
-  return [
-    ...(tree.component === component ? [tree] : []),
-    ...tree.children.flatMap((child) => findNodes(child, component)),
-  ];
 }
 
 Deno.test("the lazily loaded mtcars asset remains typed and supports numeric linetype grouping", async () => {
@@ -41,7 +36,7 @@ Deno.test("the lazily loaded mtcars asset remains typed and supports numeric lin
     linetype: "am",
     linewidth: "hp",
   }).add(geomLine()).build();
-  const panel = findNodes(compile(spec), "Cartesian")[0];
+  const panel = findNodes(assembleTree(spec), "Cartesian")[0];
   // gggplot-tzc.3: grouped geom_line lowers to ChunkedLine nodes, one per dash
   // batch — the two linetype (am) levels are two distinct dash patterns, so
   // they stay two separate nodes. widths is now a FlatTensor(f32), not an Array.

@@ -1,8 +1,9 @@
 import { assert, assertEquals, assertStrictEquals } from "@std/assert";
 import { reuseUnchanged } from "../src/compile/stable_tensors.ts";
-import { compile, type RenderNode } from "../src/compile/mod.ts";
+import type { RenderNode } from "../src/compile/mod.ts";
 import { geomLine, geomPoint, ggplot } from "../src/dsl/mod.ts";
 import { ingest } from "../src/data/mod.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 Deno.test("reuseUnchanged returns prev for byte-equal typed arrays", () => {
   const prev = Float32Array.of(1, 2, 3);
@@ -34,7 +35,7 @@ Deno.test("reuseUnchanged keeps unchanged parts of a changed structure", () => {
 Deno.test("reuseUnchanged on lowered marks: a fixed-color change keeps positions", () => {
   const data = ingest({ x: [1, 2, 3, 4], y: [4, 1, 3, 2] });
   const lower = (color: string) =>
-    compile(
+    assembleTree(
       ggplot(data, { x: "x", y: "y" })
         .add(geomPoint({ color }))
         .add(geomLine({ color: "#ef4444" }))
