@@ -61,7 +61,7 @@
         "axes": "yx",
         "range": [
          [
-          2,
+          0,
           8
          ],
          [
@@ -71,7 +71,7 @@
         ],
         "first": {
          "nice": false,
-         "divide": 3
+         "divide": 4
         },
         "second": null,
         "width": 1,
