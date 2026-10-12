@@ -5,18 +5,21 @@
 //                             concatPacked+concatFlatTensors, called directly
 //                             (no RenderNode wrapping yet).
 //   (b) coordinate transform/munch — compile/coordinates.ts's
-//                             polarizeNode+munchPolygonNode+munchFlatNode
-//                             (the exact composition compile/pack_cache.ts's
-//                             stageBTransformedMark uses), run against a
-//                             POLAR view (the only view that actually does
-//                             this work — see the Cartesian note below).
-//   (c) RenderTree construction — the full compile(spec) pipeline via the
-//                             public DSL (stat -> scale training -> geom
-//                             lowering incl. its own packing -> guides).
-//                             This is the realistic "build the tree" number;
-//                             it is NOT a clean isolate of packing (it
-//                             necessarily repeats stage (a)'s cost inside
+//                             polarizeMark (polarizeNode then munchFlatNode,
+//                             what the component root runs per mark), against
+//                             a POLAR view (the only view that actually does
+//                             this work: Cartesian marks are never munched).
+//   (c) plot assembly       — the component root's prepare/train/layout
+//                             (components/root_assembly.ts, through
+//                             tests/support/assemble.ts) on a spec built
+//                             with the internal DSL: stat -> scale training
+//                             -> geom lowering incl. its own packing ->
+//                             guides. This is the realistic "build the plot"
+//                             number; it is NOT a clean isolate of packing
+//                             (it necessarily repeats stage (a)'s cost inside
 //                             each geom's lower()) — documented, not hidden.
+//                             Each call uses fresh caches, so it measures a
+//                             first mount, not a cached re-render.
 //   (Stage (d), the frozen emitter's literal inlining, went with the emitter
 //   in gggplot-vnh.11: the JSX printer passes data by reference, so printing
 //   costs nothing per row.)
@@ -39,13 +42,12 @@ import {
   packMarkRows,
 } from "../src/geom/shared.ts";
 import {
-  munchFlatNode,
-  munchPolygonNode,
-  polarizeNode,
+  polarizeMark,
+  type PolarTransform,
 } from "../src/compile/coordinates.ts";
 import { node, type RenderNode } from "../src/compile/rendertree.ts";
-import { compile } from "../src/compile/mod.ts";
 import { aes, geomBar, geomLine, geomPoint, ggplot } from "../src/dsl/mod.ts";
+import { assembleTree } from "../tests/support/assemble.ts";
 
 // ---------------------------------------------------------------------------
 // Synthetic data generators — plain arrays, no Deno RNG dependency (fast,
@@ -139,6 +141,14 @@ function packStackedBar(n: number): void {
 // why Cartesian has no analogous work to measure here).
 // ---------------------------------------------------------------------------
 
+/** x as the angle over a full turn, as coord_polar() maps it. */
+const polar = (thetaDomain: [number, number]): PolarTransform => ({
+  thetaAxis: 0,
+  thetaDomain,
+  thetaStart: -Math.PI,
+  thetaEnd: Math.PI,
+});
+
 function transformPolarPoint(n: number): void {
   const { xs, ys, colors, sizes } = pointRows(n);
   const packed = packMarkRows({ xs, ys, colors, sizes });
@@ -148,9 +158,7 @@ function transformPolarPoint(n: number): void {
     colors: packed.colors,
     sizes: packed.sizes,
   });
-  munchFlatNode(
-    munchPolygonNode(polarizeNode(mark, 0, [0, n], -Math.PI, Math.PI)),
-  );
+  polarizeMark(mark, polar([0, n]));
 }
 
 function transformPolarGroupedLine(n: number): void {
@@ -169,9 +177,7 @@ function transformPolarGroupedLine(n: number): void {
     positions: combined.positions,
     topology: combined.topology,
   });
-  munchFlatNode(
-    munchPolygonNode(polarizeNode(mark, 0, [0, perGroup], -Math.PI, Math.PI)),
-  );
+  polarizeMark(mark, polar([0, perGroup]));
 }
 
 function transformPolarStackedBar(n: number): void {
@@ -182,15 +188,11 @@ function transformPolarStackedBar(n: number): void {
     colors: packed.colors,
     concave: false,
   });
-  munchFlatNode(
-    munchPolygonNode(
-      polarizeNode(mark, 0, [0, BAR_CATEGORY_COUNT], -Math.PI, Math.PI),
-    ),
-  );
+  polarizeMark(mark, polar([0, BAR_CATEGORY_COUNT]));
 }
 
 // ---------------------------------------------------------------------------
-// Stage (c): RenderTree construction (full compile())
+// Stage (c): plot assembly through the component root
 // ---------------------------------------------------------------------------
 
 function pointSpec(n: number) {
@@ -228,7 +230,7 @@ function barSpec(n: number) {
 function constructTree(
   buildSpec: () => ReturnType<typeof pointSpec>,
 ): RenderNode {
-  return compile(buildSpec());
+  return assembleTree(buildSpec());
 }
 
 // ---------------------------------------------------------------------------
@@ -268,17 +270,17 @@ for (const n of SIZES) {
     transformPolarStackedBar(n);
   });
 
-  Deno.bench(`(c) construct RenderTree point — ${n} rows`, {
+  Deno.bench(`(c) assemble plot point — ${n} rows`, {
     group: "construct-point",
   }, () => {
     constructTree(() => pointSpec(n));
   });
-  Deno.bench(`(c) construct RenderTree grouped line — ${n} rows`, {
+  Deno.bench(`(c) assemble plot grouped line — ${n} rows`, {
     group: "construct-line",
   }, () => {
     constructTree(() => lineSpec(n));
   });
-  Deno.bench(`(c) construct RenderTree stacked bar — ${n} rows`, {
+  Deno.bench(`(c) assemble plot stacked bar — ${n} rows`, {
     group: "construct-bar",
   }, () => {
     constructTree(() => barSpec(n));
@@ -352,17 +354,17 @@ boundedOnce(
 );
 
 boundedOnce(
-  "(c) construct RenderTree point — 1,000,000 rows",
+  "(c) assemble plot point — 1,000,000 rows",
   6_000,
   () => constructTree(() => pointSpec(ONE_MILLION)),
 );
 boundedOnce(
-  "(c) construct RenderTree grouped line — 1,000,000 rows",
+  "(c) assemble plot grouped line — 1,000,000 rows",
   8_000,
   () => constructTree(() => lineSpec(ONE_MILLION)),
 );
 boundedOnce(
-  "(c) construct RenderTree stacked bar — 1,000,000 rows",
+  "(c) assemble plot stacked bar — 1,000,000 rows",
   12_000,
   () => constructTree(() => barSpec(ONE_MILLION)),
 );
