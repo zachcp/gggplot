@@ -568,16 +568,20 @@ export function trainPlot(
     numericRange(xScale) ?? [0, 1],
     numericRange(yScale) ?? [0, 1],
   );
+  // The guides' x/y span the view: the widened domain, narrowed by any
+  // coord_cartesian zoom, so the axis labels (and the grid on their breaks)
+  // describe what the panel shows, as ggplot2 breaks the zoomed limits.
+  const limits = coordLimits(spec);
   const xGuideScale = xScale?.kind === "continuous"
-    ? { ...xScale, domain: xDomain }
+    ? { ...xScale, domain: zoomed(xDomain, limits.x) }
     : xScale;
   const yGuideScale = yScale?.kind === "continuous"
-    ? { ...yScale, domain: yDomain }
+    ? { ...yScale, domain: zoomed(yDomain, limits.y) }
     : yScale;
 
   // One trained-scale record keyed by aesthetic, shared by guide layout,
   // legends, and each panel's LayerContext. The non-position scales are
-  // plot-wide; `guideScales` carries the guide (widened-domain) x/y for axis
+  // plot-wide; `guideScales` carries the guide (widened, zoomed) x/y for axis
   // and legend layout, while each panel spreads `aestheticScales` over its own
   // (possibly free-scaled) x/y when building its LayerContext.
   const aestheticScales = {
@@ -597,7 +601,6 @@ export function trainPlot(
   };
 
   const free = spec.facet.scales ?? "fixed";
-  const limits = coordLimits(spec);
   const panelTrains = panelLayers.map((perLayer): PanelTrain => {
     const panelScales = free === "fixed" ? scales : trainScales(spec, perLayer);
     const panelXScale = free === "free" || free === "free_x"
@@ -832,8 +835,21 @@ export function layoutPlot(
       }));
     }
     if (theme.grid !== false) {
-      const xBreaks = axisTickValues(panelXScale, panelTickCount);
-      const yBreaks = axisTickValues(panelYScale, panelTickCount);
+      // Grid lines sit on the breaks the axis labels: the guide scale (the
+      // widened domain, e.g. a stack's total) on a fixed axis, the panel's own
+      // scale on a free one (facet_layout.ts). The bare trained scale stops
+      // short of a stack, labeling a break with no line (gggplot-ovcn).
+      const freeMode = spec.facet.scales ?? "fixed";
+      const freeX = freeMode === "free" || freeMode === "free_x";
+      const freeY = freeMode === "free" || freeMode === "free_y";
+      const xBreaks = axisTickValues(
+        freeX ? panelXScale : xGuideScale,
+        panelTickCount,
+      );
+      const yBreaks = axisTickValues(
+        freeY ? panelYScale : yGuideScale,
+        panelTickCount,
+      );
       const xGrid = gridDivision(xBreaks);
       const yGrid = gridDivision(yBreaks);
       const gridStyle = {

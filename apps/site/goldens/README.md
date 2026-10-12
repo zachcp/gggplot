@@ -48,3 +48,14 @@ deno run -A scripts/example_frames.ts capture-chart goldens <ExampleId>
     Everything is within tolerance except one row: the CPU frame omits the y =
     20 gridline that its axis labels. That is a separate CPU bug (gggplot-ovcn),
     and the resident frame is the correct one.
+- **Nine frames whose grid now sits on the axis labels** (AlignedStackedArea,
+  ContourBands, FlippedBars, HistogramStatBin, RectangularAndHexBins,
+  StackedArea, Streamgraph, SummaryHexCells, ZoomedPanel), at gggplot-ovcn. The
+  grid used to break the trained scale before widening, while the labels broke
+  the widened domain. A stacked total, a bar's zero baseline or a tile's
+  half-cell could add a labeled break with no line, or move every line off the
+  labels (FlippedBars drew 10/20/30/40 under labels 25/50/75/100). Both now
+  break the same scale. Under coord_cartesian zoom both break the zoomed view,
+  so ZoomedPanel labels 0–60 instead of spreading 0–100 over a 0–60 panel.
+  ZoomedPanel still draws no bars, as its old golden didn't (gggplot-arby), and
+  discrete labels still sit at the panel edges (gggplot-vfpf).
