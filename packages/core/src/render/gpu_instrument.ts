@@ -29,8 +29,8 @@
 //     [device, format, source, array, buffer, version, ...size] — array
 //     IDENTITY is a dependency, so an unchanged tensor.array reference across
 //     re-renders skips this useMemo entirely: zero re-upload by construction,
-//     which is exactly what PackCache's reference-identity guarantee (tzc.5)
-//     is for).
+//     which is exactly what the component root's reference-identity
+//     guarantee for unchanged marks (reuseUnchanged) is for).
 //   - node_modules/.deno/@use-gpu+core@0.19.0/node_modules/@use-gpu/core/mjs/
 //     buffer.mjs — makeDataBuffer -> makeTypedBuffer -> device.createBuffer;
 //     uploadBuffer -> device.queue.writeBuffer. These two calls are the

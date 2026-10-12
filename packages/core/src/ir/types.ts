@@ -294,7 +294,10 @@ export interface ExecutionPolicy {
   resident?: boolean;
 }
 
-/** The complete plot specification — input to compile(). */
+/**
+ * The complete plot specification: what the component root assembles from a
+ * <GGPlot>'s parts (internal since gggplot-vnh.18).
+ */
 export interface GGSpec {
   data: DataFrame;
   mapping: Aes;

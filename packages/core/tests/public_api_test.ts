@@ -5,6 +5,8 @@ import { assert, assertEquals } from "@std/assert";
 import * as core from "../src/mod.ts";
 // @ts-expect-error GGSpec is internal: a plot is a component tree.
 import type { GGSpec as _GGSpec } from "../src/mod.ts";
+// @ts-expect-error The root's render tree is internal (gggplot-vnh.14).
+import type { RenderNode as _RenderNode } from "../src/mod.ts";
 
 const REMOVED = [
   "ggplot",
@@ -22,6 +24,8 @@ const REMOVED = [
   "compile",
   "renderTree",
   "emitSource",
+  "node",
+  "createPackCache",
 ];
 
 Deno.test("the barrel exports no spec-era API", () => {

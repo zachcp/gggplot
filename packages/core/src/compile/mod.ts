@@ -36,6 +36,7 @@ import type { ResidentProductProps } from "../geom/types.ts";
 import {
   numericRange,
   polarGridLines,
+  polarizeMark,
   type PolarTransform,
   resolveAxes2d,
   resolveAxes3d,
@@ -52,19 +53,12 @@ import {
 } from "./guides.ts";
 import { guideNodes3d } from "./guides_3d.ts";
 import { resolveCamera3D } from "../ir/camera.ts";
-import { buildFacetPanels } from "./facets.ts";
-import {
-  type PackCache,
-  stageAKey,
-  stageBTransformedMark,
-  UNCACHEABLE_GEOMS,
-} from "./pack_cache.ts";
+import type { buildFacetPanels } from "./facets.ts";
 
 export * from "./rendertree.ts";
 export * from "./guides.ts";
 export { type LayerContext, lowerLayer } from "../geom/mod.ts";
 export { buildFacetPanels } from "./facets.ts";
-export { createPackCache, PackCache } from "./pack_cache.ts";
 
 export interface CompileOptions {
   /** Concrete host geometry and glyph metrics for guide-aware panel layout. */
@@ -74,17 +68,9 @@ export interface CompileOptions {
     measureText: TextMeasurer;
   };
   /**
-   * Staged geometry cache (gggplot-tzc.5): when supplied, re-compiling an
-   * unchanged spec (or a DSL-rebuilt spec reusing the same data columns)
-   * reuses the same renderer-ready FlatTensor/MarkTopology objects instead
-   * of re-packing/re-transforming them. Absent -> uncached, byte-for-byte
-   * identical to pre-tzc.5 behavior. See compile/pack_cache.ts.
-   */
-  packCache?: PackCache;
-  /**
    * Replaces the polar transform of each mark (the component root memoizes
-   * it per mark instead of through packCache's Stage B). Receives a lowered
-   * mark and the panel's polar mapping; polarizeMark is the default.
+   * it per mark). Receives a lowered mark and the panel's polar mapping;
+   * polarizeMark is the default.
    */
   transformMark?: (mark: RenderNode, polar: PolarTransform) => RenderNode;
   /**
@@ -109,14 +95,14 @@ export interface CompileOptions {
    */
   lowerMarks?: (args: LowerMarksArgs) => RenderNode[];
   /**
-   * Component path: receives what assemblePlot trained and laid out, so the
+   * Component path: receives what layoutPlot trained and laid out, so the
    * root can provide it to marks and custom primitives (GGScalesContext,
    * GGPanelContext) without training twice.
    */
   onAssembled?: (info: AssembledPlot) => void;
 }
 
-/** What one assemblePlot call trained and laid out. */
+/** What one layoutPlot call trained and laid out. */
 export interface AssembledPlot {
   /** Every trained scale, by aesthetic. x/y carry the widened guide domains. */
   scales: Partial<Record<AesName, TrainedScale>>;
@@ -286,11 +272,9 @@ function compileThreeDimensionalPlot(
 /**
  * Root props carrying any row removals.
  *
- * The serializable `diagnostics` prop is the channel tests and tools read:
- * gggplot compiles to a tree rather than running in a REPL, so a warning alone
- * would be unobservable. The console warning is warnRowRemovals, issued by
- * whoever owns the plot's lifetime: compile() on every call, the component
- * root only when its diagnostics change.
+ * The `diagnostics` prop is a channel tools can read, since a warning alone
+ * would be unobservable outside a REPL. The console warning is
+ * warnRowRemovals, issued by the component root when its diagnostics change.
  *
  * A plot that drops nothing sets no prop.
  */
@@ -308,11 +292,6 @@ export function sortedRemovals(
   return [...removals.values()].sort((a, b) =>
     a.layer - b.layer || a.reason.localeCompare(b.reason)
   );
-}
-
-/** A tree's row removals, in layer then reason order; empty when none. */
-export function rowRemovalsOf(tree: RenderNode): readonly RowRemoval[] {
-  return (tree.props.diagnostics as RowRemoval[] | undefined) ?? [];
 }
 
 /**
@@ -494,44 +473,6 @@ export function recordRemovals(
 }
 
 /**
- * Partition into facet panels and prepare every layer in each.
- *
- * Panels are partitioned before stats so stat_count/stat_bin/etc. aggregate
- * within each panel independently (ggplot2's default). A layer with its own
- * data override bypasses faceting — it renders unfiltered into every panel.
- */
-export function preparePlot(spec: GGSpec): PreparedPlot {
-  const { panels, nrow, ncol } = buildFacetPanels(
-    spec.facet,
-    spec.data,
-    spec.labels ?? {},
-  );
-  const faceted = spec.facet.kind !== "none";
-  // Row removals, keyed layer:reason and summed across panels: ggplot2
-  // reports one removal per layer, not one per facet cell.
-  const removals = new Map<string, RowRemoval>();
-  const panelLayers = panels.map((panel) =>
-    spec.layers.map((layer, layerIndex) => {
-      const { prepared, removed } = prepareLayer(spec, layer, panel.data, {
-        faceted,
-      });
-      recordRemovals(removals, layerIndex, layer.geom, removed);
-      return prepared;
-    })
-  );
-  return { panels, nrow, ncol, panelLayers, removals };
-}
-
-export function compile(
-  spec: GGSpec,
-  options: CompileOptions = {},
-): RenderNode {
-  const tree = assemblePlot(spec, preparePlot(spec), options);
-  warnRowRemovals(rowRemovalsOf(tree));
-  return tree;
-}
-
-/**
  * What the component root learned off the GPU for its resident layers: the y
  * range (a stacked maximum read back, or a tile strip's row count) and, for a
  * strip, the breaks to draw (none).
@@ -589,7 +530,7 @@ export interface TrainedPlot {
 /**
  * Train scales across prepared layers (ggplot2's default scales="fixed", with
  * free per-panel position scales for facets) and resolve each panel's view
- * domains. Layout-free: the half of assemblePlot a resize never re-runs.
+ * domains. Layout-free: the half of an assembly a resize never re-runs.
  */
 export function trainPlot(
   spec: GGSpec,
@@ -701,21 +642,8 @@ export function trainPlot(
 }
 
 /**
- * Train scales across prepared layers, lay out guides, lower marks, and
- * assemble the RenderTree. `spec.layers` must be the layers `prepared` was
- * built from, in the same order.
- */
-export function assemblePlot(
-  spec: GGSpec,
-  prepared: PreparedPlot,
-  options: CompileOptions = {},
-): RenderNode {
-  return layoutPlot(spec, prepared, trainPlot(spec, prepared), options);
-}
-
-/**
- * The layout half of assemblePlot: guide layout, per-panel grids and marks,
- * and the RenderTree, from an already trained plot.
+ * Lay a trained plot out: guide layout, per-panel grids and marks, and the
+ * tree the component root renders (components/root_assembly.ts layoutRoot).
  */
 export function layoutPlot(
   spec: GGSpec,
@@ -804,17 +732,12 @@ export function layoutPlot(
       },
       measureText: options.layout?.measureText,
     };
-    // Stage A (gggplot-tzc.5): memoize each non-resident layer's lowerLayer
-    // output through options.packCache, keyed on its mapped columns'
-    // revisions + geometry params + panel membership (see pack_cache.ts).
-    // UNCACHEABLE_GEOMS (text/label/rug) read ctx.theme/xDomain/yDomain/
-    // panelPixels directly for packed output, so they're always lowered
-    // fresh rather than grow the key with those dependencies. Absent
-    // packCache -> byte-identical to the pre-tzc.5 uncached path.
+    // The component root lowers through its per-layer memo (lowerMarks);
+    // without one, each layer lowers afresh.
     const marks = perLayer.flatMap(
       ({ layer, data, mapping, resident }, layerIndex) => {
         // A layer whose stat runs on the GPU is drawn by the component root's
-        // ProductMark (gggplot-vnh.5.1); compile() plans none.
+        // ProductMark (gggplot-vnh.5.1).
         if (resident) {
           return options.residentMark?.({ resident, layerIndex, panelIndex }) ??
             [];
@@ -829,23 +752,7 @@ export function layoutPlot(
             panelIndex,
           });
         }
-        if (!options.packCache || UNCACHEABLE_GEOMS.has(layer.geom)) {
-          return lowerLayer(layer, mapping, data, ctx);
-        }
-        const { primary, key } = stageAKey(
-          options.packCache,
-          layer,
-          layerIndex,
-          panelIndex,
-          mapping,
-          data,
-          ctx.scales,
-        );
-        return options.packCache.stageA(
-          primary,
-          key,
-          () => lowerLayer(layer, mapping, data, ctx),
-        );
+        return lowerLayer(layer, mapping, data, ctx);
       },
     );
     const thetaAxis: 0 | 1 = axes[0] === "x" ? 0 : 1;
@@ -874,14 +781,9 @@ export function layoutPlot(
     // triangulation would silently desync indices from the newly-inserted
     // vertices.
     //
-    // Stage B (gggplot-tzc.5): stageBTransformedMark memoizes this transform
-    // per mark through options.packCache, rooted on Stage A's OWN output
-    // positions array (see pack_cache.ts) — a Stage A cache hit upstream
-    // therefore also hits Stage B, so a genuinely unchanged polar/munched
-    // chart reuses its transformed tensors too, not just its packed ones.
-    // Cartesian views never reach this branch at all (`polarMarks = marks`
-    // below), which is exactly what makes "Cartesian reuses Stage A tensors
-    // unchanged" true by construction rather than by a caching decision.
+    // The component root memoizes this transform per mark (transformMark), so
+    // an unchanged polar chart reuses its transformed tensors. Cartesian views
+    // never reach this branch (`polarMarks = marks` below).
     const polar: PolarTransform = {
       thetaAxis,
       thetaDomain,
@@ -890,16 +792,7 @@ export function layoutPlot(
     };
     const polarMarks = view === "Polar"
       ? marks.map((mark) =>
-        options.transformMark
-          ? options.transformMark(mark, polar)
-          : stageBTransformedMark(
-            options.packCache,
-            mark,
-            thetaAxis,
-            thetaDomain,
-            thetaStart,
-            thetaEnd,
-          )
+        (options.transformMark ?? polarizeMark)(mark, polar)
       )
       : marks;
     const viewXDomain: [number, number] = view === "Polar" && thetaAxis === 0

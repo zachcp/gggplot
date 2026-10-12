@@ -2,9 +2,9 @@
 //
 // Split out of gg_plot_root.ts so the component path can be exercised without
 // a Live tree or @use-gpu/workbench: given the plot-level spec the parts
-// describe and the layer parts in tree order, train across them and assemble
-// the plot with the same assemblePlot the compile path uses, reusing every
-// prepared layer and lowered mark whose inputs did not change.
+// describe and the layer parts in tree order, prepare and train across them
+// (trainPlot) and lay the plot out (layoutPlot), reusing every prepared layer
+// and lowered mark whose inputs did not change.
 import {
   type AssembledPlot,
   type buildFacetPanels,
@@ -280,7 +280,7 @@ export interface PreparedLayers {
   spec: GGSpec;
   layers: LayerParts;
   prepared: PreparedPlot;
-  /** Rows each layer dropped before its stat, as compile() reports them. */
+  /** Rows each layer dropped before its stat, per layer and reason. */
   diagnostics: readonly RowRemoval[];
   /** One plan per distinct GPU product the layers ask for (gggplot-280). */
   plans: ProductPlan[];

@@ -7,8 +7,8 @@
 // trains the plot (prepareRoot, compile's trainPlot), layout-free, and
 // provides the scales. It reads no LayoutContext.
 // Phase 3 (PlotLayout): lays the trained plot out at the host's size with the
-// font measurer (layoutRoot, compile's layoutPlot), so guides and layout match
-// the compile path. Only this phase re-renders on a resize (gggplot-d14).
+// font measurer (layoutRoot, compile/mod.ts's layoutPlot). Only this phase
+// re-renders on a resize (gggplot-d14).
 //
 // What makes a change cheap is memoization keyed on what each step reads:
 // - each layer's row filtering and stat (prepareLayer) is memoized per layer

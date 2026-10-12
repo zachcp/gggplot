@@ -21,8 +21,8 @@ import { SitePlot } from "./site_plot.tsx";
  * a browser-level driver (apps/site/scripts/gpu_instrument_check.ts) reads
  * back via `window.__gggplotInstrumentProbe()`:
  *   (i)  N re-renders of an UNCHANGED chart -> expect zero NEW mark-data
- *        buffer creations/writes (the mounted PackCache + useRawSource's
- *        own array/version-keyed memoization should both hit).
+ *        buffer creations/writes (the root's per-layer lowering memo and
+ *        useRawSource's array/version-keyed memoization should both hit).
  *   (ii) a linear-scale x-domain change (gggplot-tzc.7) -> expect the SAME
  *        zeros for mark data while the frame still redraws (the Cartesian
  *        view's `range` prop is the only thing that changes — a genuine

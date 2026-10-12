@@ -71,13 +71,10 @@ export {
   useGGScales,
 } from "./components/gg_scales.ts";
 
-// Render tree (retired as public API with gggplot-vnh.14)
-export {
-  type ComponentName,
-  node,
-  type RenderNode,
-  type RowRemoval,
-} from "./compile/rendertree.ts";
+// A row a layer dropped before its stat, as <GGPlot onDiagnostics> reports
+// it. (The render tree the root lays out internally is not public API since
+// gggplot-vnh.14.)
+export type { RowRemoval } from "./compile/rendertree.ts";
 export {
   groupColumnsOf,
   groupKeyAt,
