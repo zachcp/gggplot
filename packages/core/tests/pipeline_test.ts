@@ -2652,13 +2652,14 @@ Deno.test("grouped histogram retains zero bins, stacks shared centers, and keeps
 
   // stat_bin emits three centers for both cohorts, including each cohort's
   // empty bin. Stacking starts b at a's accumulated top for each center.
+  // Each bar spans its whole bin, so neighbours touch (stat_bin's `width`).
   assertEquals(roundedLoops, [
-    [[0.1, 0], [0.1, 2], [1.9, 2], [1.9, 0]],
-    [[2.1, 0], [2.1, 1], [3.9, 1], [3.9, 0]],
-    [[4.1, 0], [4.1, 0], [5.9, 0], [5.9, 0]],
-    [[0.1, 2], [0.1, 2], [1.9, 2], [1.9, 2]],
-    [[2.1, 1], [2.1, 2], [3.9, 2], [3.9, 1]],
-    [[4.1, 0], [4.1, 2], [5.9, 2], [5.9, 0]],
+    [[0, 0], [0, 2], [2, 2], [2, 0]],
+    [[2, 0], [2, 1], [4, 1], [4, 0]],
+    [[4, 0], [4, 0], [6, 0], [6, 0]],
+    [[0, 2], [0, 2], [2, 2], [2, 2]],
+    [[2, 1], [2, 2], [4, 2], [4, 1]],
+    [[4, 0], [4, 2], [6, 2], [6, 0]],
   ]);
   assertEquals(decodeChunkColors(face), [
     CATEGORICAL_PALETTE[0],

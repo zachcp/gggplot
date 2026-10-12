@@ -36,5 +36,15 @@ deno run -A scripts/example_frames.ts capture-chart goldens <ExampleId>
     - CountStackedBar and ResidentCategoricalCount differ only at edges. The
       re-leveled count grid (gggplot-mos5) put CountStackedBar's suv and pickup
       bars back under their own labels.
-  - GroupedHistogram keeps the resident bar width and x domain (gggplot-py8d).
+  - GroupedHistogram's bar width and x domain were fixed later (below).
   - ResidentTileStrip has no CPU equivalent (examples_stats.tsx).
+- **The three histograms** (GroupedHistogram, HistogramStatBin,
+  WeightedHistogramFallback), at gggplot-py8d. As in ggplot2, `stat_bin` now
+  reports its binwidth as `width`, so CPU bars span their whole bin and touch
+  instead of filling 0.9 of it. The x range is the outer bin edges on both
+  paths: the resident layer no longer pads the raw data by a bar's half-width.
+  - GroupedHistogram's resident frame against its CPU frame (the same chart with
+    `<Execution resident={false} />`) went from ~12k changed pixels to 1771.
+    Everything is within tolerance except one row: the CPU frame omits the y =
+    20 gridline that its axis labels. That is a separate CPU bug (gggplot-ovcn),
+    and the resident frame is the correct one.

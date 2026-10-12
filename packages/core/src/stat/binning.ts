@@ -275,7 +275,8 @@ export const statCount: StatFn = (data, mapping, params) => {
 
 /**
  * Bin continuous x into fixed-width ranges; produces `count` and `density`
- * columns (x replaced by bin centers), mapped to y unless already set.
+ * columns (x replaced by bin centers), mapped to y unless already set, and
+ * ggplot2's `width` column (the binwidth), so bars span their whole bin.
  * `params.binwidth` fixes the bin width directly; otherwise `params.bins`
  * (default 30, ggplot2's default) divides the data's range evenly.
  */
@@ -345,6 +346,7 @@ export const statBin: StatFn = (data, mapping, params) => {
   const centers: number[] = [];
   const countOut: number[] = [];
   const density: number[] = [];
+  const widths: number[] = [];
   const groupOut: Record<string, unknown[]> = Object.fromEntries(
     groups.columns.map((col) => [col, []]),
   );
@@ -352,6 +354,7 @@ export const statBin: StatFn = (data, mapping, params) => {
     for (let bin = 0; bin < reduced.bins; bin++) {
       const offset = group * reduced.bins + bin;
       centers.push(reduced.centers[bin]);
+      widths.push(reduced.binwidth);
       countOut.push(reduced.counts[offset]);
       density.push(
         reduced.binwidth > 0 && reduced.totals[group] > 0
@@ -370,6 +373,7 @@ export const statBin: StatFn = (data, mapping, params) => {
       ...groupOut,
       count: countOut,
       density,
+      width: widths,
     }),
     mapping: { ...mapping, y: mapping.y ?? "count" },
   };
