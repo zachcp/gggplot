@@ -23,13 +23,14 @@
 // longer carries any cct-tracked exemptions: every mark node in the
 // fixture-set walk below must carry FlatTensor positions, full stop.
 import { assertEquals } from "@std/assert";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
 import {
   cases,
   residentCases,
 } from "../../../scripts/capture_geom_fixtures.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 const PANEL_COMPONENTS: ReadonlySet<RenderNode["component"]> = new Set([
   "Cartesian",
@@ -98,7 +99,12 @@ const layout = {
 
 Deno.test("nested-array tripwire: every fixture-set spec's mark nodes carry FlatTensor positions", () => {
   for (const { name, build } of [...cases, ...residentCases]) {
-    for (const compiled of [compile(build()), compile(build(), { layout })]) {
+    for (
+      const compiled of [
+        assembleTree(build()),
+        assembleTree(build(), { layout }),
+      ]
+    ) {
       const marks = findMarkNodes(compiled);
       for (const mark of marks) {
         assertEquals(
@@ -115,7 +121,12 @@ Deno.test("nested-array tripwire: every fixture-set spec's mark nodes carry Flat
 
 Deno.test("nested-array tripwire: no RenderTree node anywhere carries an 'owners' key (compiler-internal, must never be emitted)", () => {
   for (const { build } of [...cases, ...residentCases]) {
-    for (const compiled of [compile(build()), compile(build(), { layout })]) {
+    for (
+      const compiled of [
+        assembleTree(build()),
+        assembleTree(build(), { layout }),
+      ]
+    ) {
       (function walk(n: RenderNode) {
         assertEquals(
           "owners" in n.props,

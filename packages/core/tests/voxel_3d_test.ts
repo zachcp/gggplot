@@ -1,10 +1,11 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { geomVoxel, ggplot } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import { applyStat } from "../src/stat/mod.ts";
 import { columnValues } from "../src/data/mod.ts";
 import type { DataFrame } from "../src/ir/types.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 function findNodes(node: RenderNode, component: string): RenderNode[] {
   return [
@@ -106,7 +107,7 @@ Deno.test("stat_bin_3d rejects weights and incomplete mappings", () => {
 
 Deno.test("voxels render one box per occupied cell", () => {
   const nodes = findNodes(
-    compile(ggplot(corners, mapping).add(geomVoxel({ bins: 2 })).build()),
+    assembleTree(ggplot(corners, mapping).add(geomVoxel({ bins: 2 })).build()),
     "ChunkedFace",
   ).filter((node) =>
     (node.props.positions as { format?: string })?.format === "vec4<f32>"
@@ -123,9 +124,9 @@ Deno.test("padding shrinks cells without moving them", () => {
       geomVoxel({ bins: 2, ...(padding != null ? { padding } : {}) }),
     ).build();
   const extent = (padding?: number) => {
-    const node = findNodes(compile(spec(padding)), "ChunkedFace").find((n) =>
-      (n.props.positions as { format?: string })?.format === "vec4<f32>"
-    )!;
+    const node = findNodes(assembleTree(spec(padding)), "ChunkedFace").find((
+      n,
+    ) => (n.props.positions as { format?: string })?.format === "vec4<f32>")!;
     const array = (node.props.positions as { array: Float32Array }).array;
     const xs: number[] = [];
     for (let i = 0; i < 24; i += 4) xs.push(array[i]);

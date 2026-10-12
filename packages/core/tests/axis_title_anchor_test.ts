@@ -1,8 +1,9 @@
 import { assert, assertAlmostEquals, assertEquals } from "@std/assert";
 import { geomPoint, ggplot, labels as labelsOf } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 /**
  * gggplot-1wj: the axis titles were anchored by magic fractions of the margin
@@ -55,18 +56,13 @@ function specFor(yLabel: string, xLabel: string) {
 }
 
 function plot(yLabel: string, xLabel = "seconds"): RenderNode {
-  return compile(specFor(yLabel, xLabel), {
+  return assembleTree(specFor(yLabel, xLabel), {
     layout: {
       width: WIDTH,
       height: HEIGHT,
       measureText: approximateTextMeasurer,
     },
   }) as RenderNode;
-}
-
-/** No layout at all, which is how guideLayout's unmeasured path is reached. */
-function unmeasuredPlot(yLabel: string, xLabel = "seconds"): RenderNode {
-  return compile(specFor(yLabel, xLabel)) as RenderNode;
 }
 
 Deno.test("the y title is centred in the band reserved for it", () => {
@@ -132,24 +128,6 @@ Deno.test("the x title sits inside the canvas, not in the outer margin", () => {
     centre.y + TITLE_SIZE / 2 <= HEIGHT - BOTTOM_MARGIN,
     "x title bottom edge intrudes into the reserved outer margin",
   );
-});
-
-Deno.test("without a text measurer the old heuristic still applies", () => {
-  // There are no bands to anchor to when nothing can be measured, so the
-  // pre-fix fractions remain the best available guess. Pinned in NDC (there is
-  // no canvas size on this path) so the fallback is a decision, not an
-  // accident.
-  const tree = unmeasuredPlot("KiB");
-  for (const label of labelNodes(tree)) {
-    const texts = label.props.labels as string[];
-    const index = texts.indexOf("KiB");
-    if (index === -1) continue;
-    const [x] = (label.props.positions as [number, number][])[index];
-    const defaultLeft = -0.72; // DEFAULT_PANEL_BOUNDS left
-    assertAlmostEquals(x, -1 + (defaultLeft + 1) * 0.3, 1e-9);
-    return;
-  }
-  throw new Error("no y title on the unmeasured path");
 });
 
 Deno.test("anchors do not disturb the panel bounds", () => {

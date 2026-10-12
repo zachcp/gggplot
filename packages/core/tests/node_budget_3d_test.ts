@@ -29,10 +29,11 @@ import {
   geomVoxel,
   ggplot,
 } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import { GEOM_REGISTRY } from "../src/geom/mod.ts";
 import type { GGSpec } from "../src/dsl/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 /** Every component name the compiler may use for a MARK (not a guide). */
 const MARK_COMPONENTS = new Set<string>([
@@ -210,7 +211,7 @@ Deno.test("every 3D-capable geom is covered by a node-budget case", () => {
 
 for (const { geom, component, spec } of CASES) {
   Deno.test(`node budget: 3D geom_${geom} is exactly 1 ${component} node`, () => {
-    const marks = markNodes(compile(spec()));
+    const marks = markNodes(assembleTree(spec()));
     assertEquals(
       marks.map((m) => m.component),
       [component],
@@ -221,7 +222,7 @@ for (const { geom, component, spec } of CASES) {
 
 Deno.test("every 3D mark carries vec4 positions and a resolved depth policy", () => {
   for (const { geom, spec } of CASES) {
-    const [mark] = markNodes(compile(spec()));
+    const [mark] = markNodes(assembleTree(spec()));
     const positions = mark.props.positions as
       | { dims?: number }
       | readonly unknown[]

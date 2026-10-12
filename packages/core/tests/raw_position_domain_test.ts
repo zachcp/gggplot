@@ -1,6 +1,7 @@
 // Tests for gggplot-tzc.7: raw data-space positions for continuous linear
-// scales (Phase-3 starter). Blocked-by/coordinates-with gggplot-tzc.5's
-// PackCache (compile/pack_cache.ts).
+// scales (Phase-3 starter). First proved through compile()'s PackCache
+// (gggplot-tzc.5); since gggplot-qs9b through the component root's own
+// caches (its per-layer lowering memo and reuseUnchanged), which ship.
 //
 // THE GATE (per the bead's authoritative NOTES amendment #1): reference
 // IDENTITY, not numeric equality. For an eligible axis (trained scale
@@ -37,7 +38,8 @@ import {
   scaleXLog10,
   scaleYContinuous,
 } from "../src/dsl/mod.ts";
-import { compile, createPackCache } from "../src/compile/mod.ts";
+import { createRootCaches } from "../src/components/root_assembly.ts";
+import { assembleTree } from "./support/assemble.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import type { FlatTensor } from "../src/compile/rendertree.ts";
 import { ingest } from "../src/data/mod.ts";
@@ -75,10 +77,10 @@ Deno.test("tzc.7 gate: continuous-linear domain change leaves mark positions ===
     ggplot(typed, aes({ x: "x", y: "y" }))
       .add(geomPoint(), scaleXContinuous({ domain: xDomain }))
       .build();
-  const cache = createPackCache();
+  const cache = createRootCaches();
 
-  const treeA = compile(buildSpec([0, 10]), { packCache: cache });
-  const treeB = compile(buildSpec([0, 1000]), { packCache: cache });
+  const treeA = assembleTree(buildSpec([0, 10]), { caches: cache });
+  const treeB = assembleTree(buildSpec([0, 1000]), { caches: cache });
 
   const pointA = findNode(treeA, "Point");
   const pointB = findNode(treeB, "Point");
@@ -105,10 +107,10 @@ Deno.test("tzc.7 gate: mixed axes — eligible x stays ===, y (also continuous-l
         scaleYContinuous({ domain: yDomain }),
       )
       .build();
-  const cache = createPackCache();
+  const cache = createRootCaches();
 
-  const treeA = compile(buildSpec([0, 10], [0, 10]), { packCache: cache });
-  const treeB = compile(buildSpec([0, 999], [0, 999]), { packCache: cache });
+  const treeA = assembleTree(buildSpec([0, 10], [0, 10]), { caches: cache });
+  const treeB = assembleTree(buildSpec([0, 999], [0, 999]), { caches: cache });
 
   const pointA = findNode(treeA, "Point");
   const pointB = findNode(treeB, "Point");
@@ -120,10 +122,10 @@ Deno.test("tzc.7 gate: a same-spec recompile with an UNCHANGED domain still hits
   const spec = ggplot(typed, aes({ x: "x", y: "y" }))
     .add(geomPoint(), scaleXContinuous({ domain: [0, 5] }))
     .build();
-  const cache = createPackCache();
+  const cache = createRootCaches();
 
-  const tree1 = compile(spec, { packCache: cache });
-  const tree2 = compile(spec, { packCache: cache });
+  const tree1 = assembleTree(spec, { caches: cache });
+  const tree2 = assembleTree(spec, { caches: cache });
   assertStrictEquals(
     positionsOf(findNode(tree1, "Point")).array,
     positionsOf(findNode(tree2, "Point")).array,
@@ -146,10 +148,10 @@ Deno.test("tzc.7: a discrete axis's level-order (domain) change is NOT reference
     ggplot(typed, aes({ x: "x", y: "y" }))
       .add(geomPoint(), scaleXDiscrete({ domain: order }))
       .build();
-  const cache = createPackCache();
+  const cache = createRootCaches();
 
-  const treeA = compile(buildSpec(["a", "b", "c"]), { packCache: cache });
-  const treeB = compile(buildSpec(["c", "b", "a"]), { packCache: cache });
+  const treeA = assembleTree(buildSpec(["a", "b", "c"]), { caches: cache });
+  const treeB = assembleTree(buildSpec(["c", "b", "a"]), { caches: cache });
 
   const pointA = findNode(treeA, "Point");
   const pointB = findNode(treeB, "Point");
@@ -178,7 +180,7 @@ Deno.test("tzc.7: a log-scale axis packs CPU pre-transformed (log10) values, not
   const spec = ggplot(typed, aes({ x: "x", y: "y" }))
     .add(geomPoint(), scaleXLog10())
     .build();
-  const tree = compile(spec, { packCache: createPackCache() });
+  const tree = assembleTree(spec, { caches: createRootCaches() });
   const point = findNode(tree, "Point");
   // log10(1)=0, log10(10)=1, log10(100)=2 — pre-transformed, not [1,10,100].
   const xs = Array.from(positionsOf(point).array).filter((_, i) => i % 2 === 0);

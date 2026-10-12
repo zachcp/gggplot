@@ -8,8 +8,10 @@ import {
   ggplot,
   statSummary2d,
 } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
+import type { GGSpec } from "../src/ir/types.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 function findNodes(node: RenderNode, component: string): RenderNode[] {
   return [
@@ -19,8 +21,8 @@ function findNodes(node: RenderNode, component: string): RenderNode[] {
 }
 
 /** In-scene surfaces carry vec4 rings; flat guide faces do not. */
-const surfaces = (spec: Parameters<typeof compile>[0]) =>
-  findNodes(compile(spec), "ChunkedFace").filter((node) =>
+const surfaces = (spec: GGSpec) =>
+  findNodes(assembleTree(spec), "ChunkedFace").filter((node) =>
     (node.props.positions as { format?: string })?.format === "vec4<f32>"
   );
 
@@ -152,7 +154,7 @@ Deno.test("geom_tile keeps z as a value channel and gains no 3D mode", () => {
   // a second positional meaning would make a mapped z ambiguous.
   assertEquals(
     findNodes(
-      compile(
+      assembleTree(
         ggplot(ring, { x: "x", y: "y", z: "z" }).add(geomTile()).build(),
       ),
       "Scene3D",
@@ -161,7 +163,7 @@ Deno.test("geom_tile keeps z as a value channel and gains no 3D mode", () => {
   );
   assertEquals(
     findNodes(
-      compile(
+      assembleTree(
         ggplot({ x: [0, 1], y: [0, 1], z: [1, 2] }, {
           x: "x",
           y: "y",
@@ -177,7 +179,7 @@ Deno.test("geom_tile keeps z as a value channel and gains no 3D mode", () => {
 Deno.test("3D surfaces reject non-identity stats and positions", () => {
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(ring, { x: "x", y: "y", z: "z" })
           .add(geomArea({ position: "stack" })).build(),
       ),

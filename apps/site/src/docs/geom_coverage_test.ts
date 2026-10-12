@@ -77,9 +77,7 @@ Deno.test("every public geom constructor has a live documentation example", asyn
   // are declared in example_3d.ts rather than in a .tsx source. geomSurface
   // and geomVoxel have no 2D form and are documented only this way.
   //
-  // Read as source, not imported: example_3d.ts calls compile(), which pulls
-  // in @use-gpu/plot, a browser-only module that fails to load under Deno.
-  // The DocExample scan above already works this way.
+  // Read as source, as the DocExample scan above is.
   const showcaseSource = await Deno.readTextFile(
     new URL("./example_3d.tsx", import.meta.url),
   );

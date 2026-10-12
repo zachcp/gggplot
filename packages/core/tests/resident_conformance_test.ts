@@ -19,7 +19,7 @@ import {
   findNodes as nodes,
   residentPlansOf,
   residentTreeOf,
-} from "./support/resident_root.ts";
+} from "./support/assemble.ts";
 
 /** The products the component root would host, as {product, ...props}. */
 function residentNodes(spec: GGSpec) {

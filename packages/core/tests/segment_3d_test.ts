@@ -1,7 +1,9 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { geomContour, geomHline, geomSegment, ggplot } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
+import type { GGSpec } from "../src/ir/types.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 const data = {
   x: [0, 1],
@@ -28,8 +30,8 @@ function findNodes(node: RenderNode, component: string): RenderNode[] {
   ];
 }
 
-const segmentNode = (spec: Parameters<typeof compile>[0]) =>
-  findNodes(compile(spec), "ChunkedLine").find((node) =>
+const segmentNode = (spec: GGSpec) =>
+  findNodes(assembleTree(spec), "ChunkedLine").find((node) =>
     (node.props.positions as { format?: string }).format === "vec4<f32>"
   )!;
 
@@ -59,7 +61,7 @@ Deno.test("zend widens the z domain like xend widens x", () => {
   // zend did not train the z scale this would stop at 1 and the far endpoint
   // would fall outside the cube.
   const cartesian = findNodes(
-    compile(ggplot(data, mapping).add(geomSegment()).build()),
+    assembleTree(ggplot(data, mapping).add(geomSegment()).build()),
     "Cartesian",
   )[0];
   const range = cartesian.props.range as [number, number][];
@@ -72,7 +74,7 @@ Deno.test("zend widens the z domain like xend widens x", () => {
 Deno.test("a partially mapped 3D segment names the missing aesthetics", () => {
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(data, { x: "x", y: "y", z: "z", xend: "xend", yend: "yend" })
           .add(geomSegment()).build(),
       ),
@@ -85,7 +87,7 @@ Deno.test("contour still reads z as a value channel through the same geom", () =
   // geom_contour lowers through lowerSegment and maps z as a height field, so
   // it must not be captured by the 3D mode that shares that lowering.
   const grid = { x: [0, 1, 0, 1], y: [0, 0, 1, 1], z: [0, 1, 1, 2] };
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(grid, { x: "x", y: "y", z: "z" }).add(
       geomContour({ breaks: [0.5] }),
     ).build(),
@@ -101,7 +103,7 @@ Deno.test("reference lines cannot become planes because they do not inherit", ()
   // z at all. What a user actually hits is the mixed-dimension guard.
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(data, mapping).add(geomSegment(), geomHline({ yintercept: 1 }))
           .build(),
       ),
@@ -125,7 +127,7 @@ Deno.test("3D segments carry depth props", () => {
 Deno.test("3D segment rejects non-identity stats and positions", () => {
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(data, mapping).add(geomSegment({ position: "jitter" })).build(),
       ),
     Error,

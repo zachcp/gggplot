@@ -1,7 +1,9 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import { geomBar, geomCol, ggplot } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
+import type { GGSpec } from "../src/ir/types.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 function findNodes(node: RenderNode, component: string): RenderNode[] {
   return [
@@ -10,8 +12,8 @@ function findNodes(node: RenderNode, component: string): RenderNode[] {
   ];
 }
 
-const prisms = (spec: Parameters<typeof compile>[0]) =>
-  findNodes(compile(spec), "ChunkedFace").filter((node) =>
+const prisms = (spec: GGSpec) =>
+  findNodes(assembleTree(spec), "ChunkedFace").filter((node) =>
     (node.props.positions as { format?: string })?.format === "vec4<f32>"
   );
 
@@ -101,7 +103,7 @@ Deno.test("stacking does accumulate when the footprint cell matches", () => {
 Deno.test("geom_bar has no 3D mode because its count has no (x, z) meaning", () => {
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot({ x: [0], y: [1], z: [0] }, mapping).add(geomBar()).build(),
       ),
     Error,
@@ -112,7 +114,7 @@ Deno.test("geom_bar has no 3D mode because its count has no (x, z) meaning", () 
 Deno.test("3D columns reject dodge, which competes with the z footprint", () => {
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot({ x: [0], y: [1], z: [0] }, mapping).add(
           geomCol({ position: "dodge" }),
         ).build(),

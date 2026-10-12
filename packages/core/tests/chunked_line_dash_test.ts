@@ -14,8 +14,9 @@ import {
 } from "../src/render/chunked_line.tsx";
 import type { FlatTensor } from "../src/compile/rendertree.ts";
 import { geomLine, ggplot } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 function findNodes(tree: RenderNode, component: string): RenderNode[] {
   return [
@@ -117,7 +118,7 @@ Deno.test("gggplot-xc9: a dashed geom_line's ChunkedLine node carries a 'dash' p
     },
     { x: "x", y: "y", group: "grp", linetype: "grp" },
   ).add(geomLine()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   const lines = findNodes(tree, "ChunkedLine");
 
   assertEquals(lines.length, 2);

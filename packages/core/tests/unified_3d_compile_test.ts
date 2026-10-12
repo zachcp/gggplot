@@ -8,9 +8,10 @@ import {
   scaleZContinuous,
   theme,
 } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import { cameraNearOrigin3d } from "../src/compile/guides_3d.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 function children(node: RenderNode, component: RenderNode["component"]) {
   return node.children.filter((child) => child.component === component);
@@ -44,7 +45,7 @@ Deno.test("ordinary geomPoint plus z compiles to one two-branch 3D RenderTree", 
     coordCartesian({ axes: "xzy", fixed: true }),
   ).build();
 
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   assertEquals(tree.component, "Scene3D");
   assertEquals(tree.children.map((node) => node.component), [
     "Plot",
@@ -96,7 +97,7 @@ Deno.test("ordinary geomPoint plus z compiles to one two-branch 3D RenderTree", 
 });
 
 Deno.test("3D theme guide switches apply without a parallel guide spec", () => {
-  const tree = compile(
+  const tree = assembleTree(
     ggplot({ x: [1], y: [2], z: [3] }, { x: "x", y: "y", z: "z" })
       .add(geomPoint(), theme({ grid: false, axes: false })).build(),
   );

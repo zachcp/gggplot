@@ -1,0 +1,464 @@
+{
+ "component": "Scene3D",
+ "props": {
+  "camera": {
+   "kind": "orbit",
+   "projection": "perspective",
+   "bearing": 0.6,
+   "pitch": 0.4,
+   "radius": 3.6,
+   "target": [
+    0,
+    0,
+    0
+   ],
+   "fov": 0.7853981633974483,
+   "near": 0.1,
+   "far": 100
+  }
+ },
+ "children": [
+  {
+   "component": "Plot",
+   "props": {},
+   "children": [
+    {
+     "component": "Cartesian",
+     "props": {
+      "range": [
+       [
+        0,
+        3
+       ],
+       [
+        0,
+        3
+       ],
+       [
+        -0.9989549170979283,
+        0.9954079577517649
+       ],
+       [
+        1,
+        1
+       ]
+      ],
+      "axes": "xzyw"
+     },
+     "children": [
+      {
+       "component": "Grid",
+       "props": {
+        "axes": "xy",
+        "range": [
+         [
+          0,
+          3
+         ],
+         [
+          0,
+          3
+         ]
+        ],
+        "first": {
+         "nice": false,
+         "divide": 3
+        },
+        "second": null,
+        "auto": true,
+        "color": "#334155",
+        "width": 1,
+        "zBias": -1
+       },
+       "children": []
+      },
+      {
+       "component": "Grid",
+       "props": {
+        "axes": "xy",
+        "range": [
+         [
+          0,
+          3
+         ],
+         [
+          0,
+          3
+         ]
+        ],
+        "first": null,
+        "second": {
+         "nice": false,
+         "divide": 3
+        },
+        "auto": true,
+        "color": "#334155",
+        "width": 1,
+        "zBias": -1
+       },
+       "children": []
+      },
+      {
+       "component": "Grid",
+       "props": {
+        "axes": "yz",
+        "range": [
+         [
+          0,
+          3
+         ],
+         [
+          -0.9989549170979283,
+          0.9954079577517649
+         ]
+        ],
+        "first": {
+         "nice": false,
+         "divide": 3
+        },
+        "second": null,
+        "auto": true,
+        "color": "#334155",
+        "width": 1,
+        "zBias": -1
+       },
+       "children": []
+      },
+      {
+       "component": "Grid",
+       "props": {
+        "axes": "yz",
+        "range": [
+         [
+          0,
+          3
+         ],
+         [
+          -1,
+          1
+         ]
+        ],
+        "first": null,
+        "second": {
+         "nice": false,
+         "divide": 4
+        },
+        "auto": true,
+        "color": "#334155",
+        "width": 1,
+        "zBias": -1
+       },
+       "children": []
+      },
+      {
+       "component": "Grid",
+       "props": {
+        "axes": "xz",
+        "range": [
+         [
+          0,
+          3
+         ],
+         [
+          -0.9989549170979283,
+          0.9954079577517649
+         ]
+        ],
+        "first": {
+         "nice": false,
+         "divide": 3
+        },
+        "second": null,
+        "auto": true,
+        "color": "#334155",
+        "width": 1,
+        "zBias": -1
+       },
+       "children": []
+      },
+      {
+       "component": "Grid",
+       "props": {
+        "axes": "xz",
+        "range": [
+         [
+          0,
+          3
+         ],
+         [
+          -1,
+          1
+         ]
+        ],
+        "first": null,
+        "second": {
+         "nice": false,
+         "divide": 4
+        },
+        "auto": true,
+        "color": "#334155",
+        "width": 1,
+        "zBias": -1
+       },
+       "children": []
+      },
+      {
+       "component": "CameraAxis3D",
+       "props": {
+        "axis": "x",
+        "domains": [
+         [
+          0,
+          3
+         ],
+         [
+          0,
+          3
+         ],
+         [
+          -0.9989549170979283,
+          0.9954079577517649
+         ]
+        ],
+        "range": [
+         0,
+         3
+        ],
+        "values": [
+         0,
+         1,
+         2,
+         3
+        ],
+        "labels": [
+         "0",
+         "1",
+         "2",
+         "3"
+        ],
+        "title": "east",
+        "axisColor": "#94a3b8",
+        "axisWidth": 2,
+        "textColor": "#cbd5e1",
+        "fontSize": 13,
+        "tickSize": 11,
+        "placement": "bottom"
+       },
+       "children": []
+      },
+      {
+       "component": "CameraAxis3D",
+       "props": {
+        "axis": "y",
+        "domains": [
+         [
+          0,
+          3
+         ],
+         [
+          0,
+          3
+         ],
+         [
+          -0.9989549170979283,
+          0.9954079577517649
+         ]
+        ],
+        "range": [
+         0,
+         3
+        ],
+        "values": [
+         0,
+         1,
+         2,
+         3
+        ],
+        "labels": [
+         "0",
+         "1",
+         "2",
+         "3"
+        ],
+        "title": "y",
+        "axisColor": "#94a3b8",
+        "axisWidth": 2,
+        "textColor": "#cbd5e1",
+        "fontSize": 13,
+        "tickSize": 11,
+        "placement": "left"
+       },
+       "children": []
+      },
+      {
+       "component": "CameraAxis3D",
+       "props": {
+        "axis": "z",
+        "domains": [
+         [
+          0,
+          3
+         ],
+         [
+          0,
+          3
+         ],
+         [
+          -0.9989549170979283,
+          0.9954079577517649
+         ]
+        ],
+        "range": [
+         -0.9989549170979283,
+         0.9954079577517649
+        ],
+        "values": [
+         -1,
+         -0.5,
+         0,
+         0.5,
+         1
+        ],
+        "labels": [
+         "-1",
+         "-0.5",
+         "0",
+         "0.5",
+         "1"
+        ],
+        "title": "up",
+        "axisColor": "#94a3b8",
+        "axisWidth": 2,
+        "textColor": "#cbd5e1",
+        "fontSize": 13,
+        "tickSize": 11,
+        "placement": "bottom"
+       },
+       "children": []
+      },
+      {
+       "component": "Point",
+       "props": {
+        "positions": {
+         "array": {
+          "$f32": [
+           0,
+           0,
+           0,
+           1,
+           1,
+           0,
+           0.327195,
+           1,
+           2,
+           0,
+           0.61837,
+           1,
+           3,
+           0,
+           0.841471,
+           1,
+           0,
+           1,
+           0.971938,
+           1,
+           1,
+           1,
+           0.995408,
+           1,
+           2,
+           1,
+           0.909297,
+           1,
+           3,
+           1,
+           0.723086,
+           1,
+           0,
+           2,
+           0.457273,
+           1,
+           1,
+           2,
+           0.14112,
+           1,
+           2,
+           2,
+           -0.190568,
+           1,
+           3,
+           2,
+           -0.501277,
+           1,
+           0,
+           3,
+           -0.756802,
+           1,
+           1,
+           3,
+           -0.929015,
+           1,
+           2,
+           3,
+           -0.998955,
+           1,
+           3,
+           3,
+           -0.958924,
+           1
+          ]
+         },
+         "format": "vec4<f32>",
+         "dims": 4,
+         "length": 16,
+         "size": [
+          16
+         ]
+        },
+        "topology": {
+         "kind": "points"
+        },
+        "color": "#3b82f6",
+        "size": 6,
+        "opacity": 1,
+        "depth": 0,
+        "depthTest": true,
+        "depthWrite": true
+       },
+       "children": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "component": "Embedded",
+   "props": {
+    "normalize": true
+   },
+   "children": [
+    {
+     "component": "Label",
+     "props": {
+      "positions": [
+       [
+        -0.92,
+        -0.92
+       ]
+      ],
+      "labels": [
+       "Helix"
+      ],
+      "color": "#0b0b0b",
+      "size": 18,
+      "zBias": 2,
+      "placement": "left",
+      "weight": "normal",
+      "style": "normal"
+     },
+     "children": []
+    }
+   ]
+  }
+ ]
+}

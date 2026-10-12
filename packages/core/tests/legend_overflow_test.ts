@@ -16,10 +16,11 @@
 //   canvases still need truncation.
 import { assertEquals } from "@std/assert";
 import { geomLine, geomPoint, ggplot, scaleColor } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import { CATEGORICAL_PALETTE, OTHER_COLOR } from "../src/scale/palette.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 function findNodes(node: RenderNode, component: string): RenderNode[] {
   return [
@@ -31,7 +32,7 @@ function findNodes(node: RenderNode, component: string): RenderNode[] {
 /** The legend's key-label node: rows and their normalized y positions. */
 function legendKeys(levels: number, height: number) {
   const cats = Array.from({ length: levels }, (_, i) => `c${i}`);
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(
       { x: cats.map((_, i) => i), y: cats.map((_, i) => i), g: cats },
       { x: "x", y: "y", color: "g" },
@@ -121,7 +122,7 @@ Deno.test("a custom palette keeps every color it can distinguish", () => {
   const range = levels.map((_, i) =>
     `#${(i + 1).toString(16).padStart(6, "0")}`
   );
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(
       { x: levels.map((_, i) => i), y: levels.map((_, i) => i), g: levels },
       { x: "x", y: "y", color: "g" },
@@ -140,7 +141,7 @@ Deno.test("a custom palette keeps every color it can distinguish", () => {
 Deno.test("a second discrete legend never starts beyond the canvas", () => {
   const levels = Array.from({ length: 9 }, (_, i) => `c${i}`);
   const fills = Array.from({ length: 9 }, (_, i) => `f${i}`);
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(
       {
         x: levels.map((_, i) => i),
@@ -175,7 +176,7 @@ Deno.test("shape and linetype legends truncate before the canvas edge", () => {
     level: levels,
   };
   const trees = [
-    compile(
+    assembleTree(
       ggplot(data, { x: "x", y: "y", shape: "level" }).add(geomPoint())
         .build(),
       {
@@ -186,7 +187,7 @@ Deno.test("shape and linetype legends truncate before the canvas edge", () => {
         },
       },
     ),
-    compile(
+    assembleTree(
       ggplot(data, { x: "x", y: "y", linetype: "level" }).add(geomLine())
         .build(),
       {

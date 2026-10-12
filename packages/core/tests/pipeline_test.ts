@@ -91,7 +91,7 @@ import {
   themeTest,
   themeVoid,
 } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import { facetCellLayouts } from "../src/compile/facet_layout.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
@@ -116,7 +116,11 @@ import {
   stackBars,
 } from "../src/position/mod.ts";
 import type { DataFrame, GGSpec, Layer } from "../src/ir/types.ts";
-import { residentPlansOf, residentTreeOf } from "./support/resident_root.ts";
+import {
+  assembleTree,
+  residentPlansOf,
+  residentTreeOf,
+} from "./support/assemble.ts";
 
 const data = { x: [0, 1, 2], y: [10, 20, 30] };
 const values = (frame: DataFrame, column: string) =>
@@ -276,7 +280,7 @@ function residentOf(spec: GGSpec): { props: Record<string, unknown> }[] {
 
 Deno.test("compile builds an Embedded > Cartesian tree with a Point mark", () => {
   const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   assertEquals(tree.component, "Embedded");
   assertEquals(tree.props.normalize, true);
@@ -297,7 +301,7 @@ Deno.test("ggplot accepts row-store data at the DSL boundary", () => {
     { x: 1, y: 20 },
     { x: 2, y: 30 },
   ], { x: "x", y: "y" }).add(geomPoint()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   const point = plotPanel(tree).children.find((c) => c.component === "Point");
 
   assertEquals(decodePositions(point!.props.positions), [
@@ -316,7 +320,7 @@ Deno.test("layer data overrides accept row-store data at the DSL boundary", () =
       ],
     }),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   const point = plotPanel(tree).children.find((c) => c.component === "Point");
 
   assertEquals(decodePositions(point!.props.positions), [[1, 2], [3, 4]]);
@@ -334,7 +338,7 @@ Deno.test("ggplot asFactor override makes numeric-coded groups discrete", () => 
   }, {
     columns: { cyl: asFactor(["4", "6"]) },
   }).add(geomLine()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   // gggplot-tzc.3: grouped geom_line lowers to ChunkedLine nodes; two color
   // groups share one solid-dash batch, so they concat into ONE node with two
   // topology chunks.
@@ -399,7 +403,7 @@ Deno.test("geom_line sorting preserves typed column metadata", () => {
   }, {
     columns: { x: asNumeric(), cyl: asFactor(["4"]) },
   }).add(geomLine()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   const line = plotPanel(tree).children.find((c) =>
     c.component === "ChunkedLine"
   );
@@ -415,7 +419,7 @@ Deno.test("compile trains a discrete x scale and maps categories to level indice
   const factorData = { grp: ["b", "a", "c", "a"], y: [10, 20, 30, 40] };
   const spec = ggplot(factorData, { x: "grp", y: "y" }).add(geomPoint())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   // levels default-sort alphabetically: a, b, c → domain span [0, 2]
@@ -433,7 +437,7 @@ Deno.test("scaleXDiscrete domain fixes explicit level ordering", () => {
   const spec = ggplot(factorData, { x: "grp", y: "y" })
     .add(geomPoint(), scaleXDiscrete({ domain: ["c", "b", "a"] }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
@@ -512,7 +516,7 @@ Deno.test("geom_bar with fill stacks stat_count output by fill group and emits a
   };
   const spec = ggplot(barData, { x: "cls", fill: "drv" }).add(geomBar())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   // gggplot-tzc.4: geom_bar lowers to a single ChunkedFace node — one loop
   // (topology chunk) per bar.
@@ -566,7 +570,7 @@ Deno.test("silhouette stacking centers bars and area bands around zero", () => {
   }, { x: "x", y: "y", fill: "group" }).add(
     geomArea({ position: "stack", offset: "silhouette" }),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   // gggplot-tzc.4: geom_area silhouette bands pack into a single ChunkedFace
   // node — one loop (topology chunk) per group.
   const face = findNodes(tree, "ChunkedFace")[0];
@@ -614,7 +618,7 @@ Deno.test("geom_text renders a Label with per-point positions and text", () => {
   const spec = ggplot(labelData, { x: "x", y: "y", label: "name" }).add(
     geomText(),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const label = panel.children.find((c) => c.component === "Label");
@@ -623,7 +627,7 @@ Deno.test("geom_text renders a Label with per-point positions and text", () => {
 });
 
 Deno.test("geom_label emits measured backgrounds, borders, and text in z order", () => {
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(
       { x: [0, 1, 2], y: [0, 1, 2], label: ["wide", null, "two\nlines"] },
       { x: "x", y: "y", label: "label" },
@@ -682,7 +686,7 @@ Deno.test("geom_label rotates its boxes and retains mapped styling after missing
     color: ["one", "missing", "three"],
   };
   const make = (angle: number) =>
-    compile(
+    assembleTree(
       ggplot(data, {
         x: "x",
         y: "y",
@@ -730,7 +734,7 @@ Deno.test("geom_label validates box sizes while geom_text remains text-only", ()
   const data = { x: [0], y: [0], label: ["a"] };
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(data, { x: "x", y: "y", label: "label" }).add(
           geomLabel({ labelPadding: -1 }),
         ).build(),
@@ -738,14 +742,14 @@ Deno.test("geom_label validates box sizes while geom_text remains text-only", ()
     TypeError,
     "non-negative CSS-pixel",
   );
-  const textTree = compile(
+  const textTree = assembleTree(
     ggplot(data, { x: "x", y: "y", label: "label" }).add(geomText()).build(),
   );
   assertEquals(findNodes(textTree, "Polygon").length, 0);
 });
 
 Deno.test("geom_text and axis guides preserve GPU-native text rotation", () => {
-  const tree = compile(
+  const tree = assembleTree(
     ggplot({ x: [1], y: [2], label: ["tilted"] }, {
       x: "x",
       y: "y",
@@ -774,7 +778,7 @@ Deno.test("geom_errorbar renders a stem plus top/bottom caps per row", () => {
   const spec = ggplot(errData, { x: "x", ymin: "lo", ymax: "hi" }).add(
     geomErrorbar(),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const line = panel.children.find((c) => c.component === "Line");
@@ -800,7 +804,7 @@ Deno.test("geom_boxplot renders a box plus median/whisker/cap segments", () => {
   })
     .add(geomBoxplot())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   // gggplot-tzc.4: the box loop packs into a ChunkedFace node.
@@ -840,7 +844,9 @@ Deno.test("geom_boxplot computes compact grouped quartiles and whiskers from raw
   assertEquals(values(result.data, "ymax"), [4, 30]);
   assertEquals(
     findNodes(
-      compile(ggplot(raw, { x: "group", y: "y" }).add(geomBoxplot()).build()),
+      assembleTree(
+        ggplot(raw, { x: "group", y: "y" }).add(geomBoxplot()).build(),
+      ),
       "ChunkedFace",
     ).length > 0,
     true,
@@ -848,7 +854,7 @@ Deno.test("geom_boxplot computes compact grouped quartiles and whiskers from raw
 });
 
 Deno.test("density, violin, and dotplot stats emit dense deterministic products", () => {
-  const densityTree = compile(
+  const densityTree = assembleTree(
     ggplot({
       value: [0, 1, 2, 10, 11, 12],
       group: ["a", "a", "a", "b", "b", "b"],
@@ -863,7 +869,7 @@ Deno.test("density, violin, and dotplot stats emit dense deterministic products"
   ).filter((chunk) => chunk.length === 16);
   assertEquals(densityChunks.length, 2);
 
-  const violinTree = compile(
+  const violinTree = assembleTree(
     ggplot({
       group: ["a", "a", "a", "b", "b", "b"],
       value: [0, 1, 2, 10, 11, 12],
@@ -880,7 +886,7 @@ Deno.test("density, violin, and dotplot stats emit dense deterministic products"
   );
 
   const dots = findNodes(
-    compile(
+    assembleTree(
       ggplot({ value: [0.01, 0.02, 0.9] }, { x: "value" }).add(
         geomDotplot({ binwidth: 0.1 }),
       ).build(),
@@ -930,7 +936,7 @@ Deno.test("stat_ydensity groups by a bare discrete x when no color/fill is mappe
   // Compiled end to end, geom_violin must actually render — previously this
   // produced zero ChunkedFace marks because the output data lacked the x
   // column entirely while the mapping still named it.
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(raw, { x: "category", y: "value" }).add(
       geomViolin({ n: 8 }),
     ).build(),
@@ -951,7 +957,7 @@ Deno.test("2D bin and hex products count observed cells and lower distinct topol
   // gggplot-tzc.4: geom_tile/geom_hex cells pack into a single ChunkedFace
   // node — one topology chunk (loop) per cell, not one node per cell.
   const tileFaces = findNodes(
-    compile(
+    assembleTree(
       ggplot(points, { x: "x", y: "y" }).add(geomBin2d({ bins: 2 })).build(),
     ),
     "ChunkedFace",
@@ -966,7 +972,7 @@ Deno.test("2D bin and hex products count observed cells and lower distinct topol
   );
 
   const hexFaces = findNodes(
-    compile(
+    assembleTree(
       ggplot(points, { x: "x", y: "y" }).add(geomHex({ bins: 2 })).build(),
     ),
     "ChunkedFace",
@@ -993,7 +999,7 @@ Deno.test("2D summary stats reduce z in rectangular and hex cells", () => {
   // gggplot-tzc.4: cells pack into a single ChunkedFace node — assert cell
   // count via topology chunks, not node count.
   assertEquals(
-    findNodes(compile(spec), "ChunkedFace").filter((node) =>
+    findNodes(assembleTree(spec), "ChunkedFace").filter((node) =>
       !node.props.guideKind
     ).flatMap((node) => decodeChunks(node)).length,
     2,
@@ -1047,7 +1053,9 @@ Deno.test("2D summary stats support built-ins, grouping, custom reducers, and va
   );
   assertEquals(literalResult.mapping.fill, undefined);
   assertEquals(
-    decodeChunkColors(findNodes(compile(literalFill), "ChunkedFace")[0])[0],
+    decodeChunkColors(
+      findNodes(assembleTree(literalFill), "ChunkedFace")[0],
+    )[0],
     "#ef4444",
   );
 
@@ -1072,7 +1080,7 @@ Deno.test("2D summary stats support built-ins, grouping, custom reducers, and va
   assertEquals(values(hexResult.data, "y"), [0.5, 1]);
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(data, { x: "x", y: "y", z: "z" }).add(
           statSummary2d({ fun: "mode" }),
         ).build(),
@@ -1119,7 +1127,7 @@ Deno.test("2D summary binwidth precedence, boundaries, constants, empties, and r
   );
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(data, { x: "x", y: "y", z: "z" }).add(
           statSummary2d({ weight: 1 }),
         ).build(),
@@ -1131,7 +1139,7 @@ Deno.test("2D summary binwidth precedence, boundaries, constants, empties, and r
 
 Deno.test("QQ, ellipse, and function stats emit deterministic line/point products", () => {
   const qq = findNodes(
-    compile(
+    assembleTree(
       ggplot({ sample: [3, 1, 2] }, { y: "sample" }).add(geomQq()).build(),
     ),
     "Point",
@@ -1146,7 +1154,7 @@ Deno.test("QQ, ellipse, and function stats emit deterministic line/point product
   // ChunkedLine; each single-group case is one node with one chunk.
   const qqLine = decodeChunks(
     findNodes(
-      compile(
+      assembleTree(
         ggplot({ sample: [1, 2, 3, 4] }, { y: "sample" }).add(geomQqLine())
           .build(),
       ),
@@ -1157,7 +1165,7 @@ Deno.test("QQ, ellipse, and function stats emit deterministic line/point product
 
   const ellipse = decodeChunks(
     findNodes(
-      compile(
+      assembleTree(
         ggplot({ x: [0, 1, 2, 3], y: [0, 1, 1, 2] }, { x: "x", y: "y" }).add(
           statEllipse({ n: 12 }),
         ).build(),
@@ -1169,7 +1177,7 @@ Deno.test("QQ, ellipse, and function stats emit deterministic line/point product
 
   const fn = decodeChunks(
     findNodes(
-      compile(
+      assembleTree(
         ggplot({}, {}).add(statFunction((x) => x * x, { xlim: [-1, 1], n: 3 }))
           .build(),
       ),
@@ -1183,7 +1191,7 @@ Deno.test("QQ lines and ellipses preserve effective color groups", () => {
   // gggplot-tzc.3: the two solid color groups concat into ONE ChunkedLine
   // node with two chunks — assert on the chunks, not on node count.
   const groupedQq = findNodes(
-    compile(
+    assembleTree(
       ggplot(
         {
           sample: [1, 2, 3, 10, 20, 30],
@@ -1201,7 +1209,7 @@ Deno.test("QQ lines and ellipses preserve effective color groups", () => {
   );
 
   const groupedEllipse = findNodes(
-    compile(
+    assembleTree(
       ggplot(
         {
           x: [0, 1, 2, 10, 11, 12],
@@ -1225,7 +1233,7 @@ Deno.test("contour stats extract isoline segments and stepped filled grid bands"
   // gggplot-tzc.3: geom_contour lowers via lowerSegment → one 'Line' node
   // whose disjoint 2-point isoline segments are packed as uniform chunks.
   const contour = findNodes(
-    compile(
+    assembleTree(
       ggplot(grid, { x: "x", y: "y", z: "z" }).add(
         geomContour({ breaks: [0.5, 1.5] }),
       ).build(),
@@ -1237,7 +1245,7 @@ Deno.test("contour stats extract isoline segments and stepped filled grid bands"
   // gggplot-tzc.4: geomContourFilled lowers via geom "tile" → lowerTile,
   // whose cells pack into a single ChunkedFace node.
   const filledFace = findNodes(
-    compile(
+    assembleTree(
       ggplot(grid, { x: "x", y: "y", z: "z" }).add(
         geomContourFilled({ breaks: [0.5, 1.5] }),
       ).build(),
@@ -1253,7 +1261,7 @@ Deno.test("geom_tile renders full-resolution cells centered on (x,y), widening t
   const gridData = { x: [0, 2, 0, 2], y: [0, 0, 1, 1], val: [1, 2, 3, 4] };
   const spec = ggplot(gridData, { x: "x", y: "y", fill: "val" }).add(geomTile())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   // x resolution 2, y resolution 1 -> half-cell padding of 1 and 0.5 on each side
@@ -1278,7 +1286,7 @@ Deno.test("geom_tile cells tile edge-to-edge with no gaps by default", () => {
   const spec = ggplot(gridData, { x: "x", y: "y" }).add(
     geomTile({ fill: "#000000" }),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const face = panel.children.find((c) => c.component === "ChunkedFace");
@@ -1292,7 +1300,7 @@ Deno.test("geom_polygon renders row-ordered x/y positions as a Polygon loop", ()
   const spec = ggplot(polyData, { x: "x", y: "y" })
     .add(geomPolygon({ fill: "#123456" }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   // gggplot-tzc.4: geom_polygon lowers to a single ChunkedFace node.
   const face = plotPanel(tree).children.find((c) =>
@@ -1315,7 +1323,7 @@ Deno.test("geom_polygon splits grouped polygons and maps fill per group", () => 
       scaleFill({ domain: ["a", "b"], range: ["#aaaaaa", "#bbbbbb"] }),
     )
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const face = plotPanel(tree).children.find((c) =>
     c.component === "ChunkedFace"
@@ -1335,7 +1343,7 @@ Deno.test("geom_col defaults to stacking bars sharing an x by their fill group",
   };
   const spec = ggplot(barData, { x: "x", y: "y", fill: "grp" }).add(geomCol())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   // full bar widths widen x; stacked totals (8 at x=a, 6 at x=b) widen y
@@ -1366,7 +1374,7 @@ Deno.test("geom_col position=dodge places same-x bars side by side instead of st
   const spec = ggplot(barData, { x: "x", y: "y", fill: "grp" })
     .add(geomCol({ position: "dodge" }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   // dodge doesn't stack, so the y range is just the raw row extent
@@ -1392,7 +1400,7 @@ Deno.test("geom_col position=fill normalizes each x's stack to proportions summi
   const spec = ggplot(barData, { x: "x", y: "y", fill: "grp" })
     .add(geomCol({ position: "fill" }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   assertEquals(panel.props.range, [[-0.45, 0.45], [0, 1]]);
@@ -1409,7 +1417,7 @@ Deno.test("geom_point position=jitter nudges positions within the configured amo
   const spec = ggplot(data3, { x: "x", y: "y" })
     .add(geomPoint({ position: "jitter", width: 0.3, height: 0.2 }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
@@ -1438,7 +1446,7 @@ Deno.test("new position products support variable-width dodge2 and fixed nudge",
   );
   assertEquals(nudge([[1, 2], [3, 4]], 0.5, -1), [[1.5, 1], [3.5, 3]]);
   const point = findNodes(
-    compile(
+    assembleTree(
       ggplot(data, { x: "x", y: "y" }).add(
         geomPoint({ position: "nudge", x: 2, y: -3 }),
       ).build(),
@@ -1449,7 +1457,7 @@ Deno.test("new position products support variable-width dodge2 and fixed nudge",
 
   // gggplot-tzc.4: dodge2'd bars pack into a single ChunkedFace node.
   const dodge2Face = findNodes(
-    compile(
+    assembleTree(
       ggplot(
         { x: ["a", "a"], y: [2, 3], group: ["one", "two"] },
         { x: "x", y: "y", fill: "group" },
@@ -1462,7 +1470,7 @@ Deno.test("new position products support variable-width dodge2 and fixed nudge",
   assertEquals(dodge2[0].length, 4);
 
   const jitterDodged = findNodes(
-    compile(
+    assembleTree(
       ggplot(
         { x: [0, 0], y: [1, 1], group: ["one", "two"] },
         { x: "x", y: "y", color: "group" },
@@ -1484,7 +1492,7 @@ Deno.test("coord_flip swizzles rendered axes to yx without touching mark positio
   const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint(), coordFlip())
     .build();
   assertEquals(spec.coord, { kind: "cartesian", axes: "yx" });
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   assertEquals(panel.component, "Cartesian");
@@ -1501,17 +1509,17 @@ Deno.test("coord_flip swizzles rendered axes to yx without touching mark positio
 Deno.test("2D coords accept canonical/full swizzles and reject non-x/y axes", () => {
   const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint()).build();
   spec.coord.axes = "yxzw";
-  assertEquals(plotPanel(compile(spec)).props.axes, "yx");
+  assertEquals(plotPanel(assembleTree(spec)).props.axes, "yx");
 
   spec.coord.axes = "xz";
-  assertThrows(() => compile(spec), Error, 'must be "xy", "yx"');
+  assertThrows(() => assembleTree(spec), Error, 'must be "xy", "yx"');
 });
 
 Deno.test("coord_polar selects the Polar view and passes through bend/on params", () => {
   const spec = ggplot(data, { x: "x", y: "y" })
     .add(geomPoint(), coordPolar({ bend: 0.5, on: "y" }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const radial = tree.children[0];
   assertEquals(radial.component, "RadialViewport");
@@ -1529,7 +1537,7 @@ Deno.test("coord_polar selects the Polar view and passes through bend/on params"
 });
 
 Deno.test("coord_radial and coord_fixed preserve their declarative view transforms", () => {
-  const radial = compile(
+  const radial = assembleTree(
     ggplot(data, { x: "x", y: "y" }).add(
       geomPoint(),
       coordRadial({ end: Math.PI, donut: 0.3, rotateAngle: true }),
@@ -1540,7 +1548,7 @@ Deno.test("coord_radial and coord_fixed preserve their declarative view transfor
   assertEquals(radial.props.donut, 0.3);
   assertEquals(radial.props.rotateAngle, true);
 
-  const fixedTree = compile(
+  const fixedTree = assembleTree(
     ggplot(data, { x: "x", y: "y" }).add(
       geomPoint(),
       coordFixed(2),
@@ -1548,7 +1556,13 @@ Deno.test("coord_radial and coord_fixed preserve their declarative view transfor
   );
   const fixed = plotPanel(fixedTree);
   assertEquals(fixedTree.children[0].component, "PanelViewport");
-  assertEquals(fixedTree.children[0].props.bounds, [-0.72, -0.66, 0.92, 0.68]);
+  // The panel the root reserves inside its laid-out guides (640x400).
+  assertEquals(fixedTree.children[0].props.bounds, [
+    -0.890625,
+    -0.92,
+    0.95,
+    0.79,
+  ]);
   assertEquals(fixed.component, "Cartesian");
   assertEquals(fixed.props.ratio, 2);
   assertEquals(fixed.props.fixed, true);
@@ -1558,7 +1572,7 @@ Deno.test("coord_polar theta:'y' reassigns the angle to y, same projection swap 
   const spec = ggplot(data, { x: "x", y: "y" })
     .add(geomPoint(), coordPolar({ theta: "y", bend: 0.5 }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = tree.children[0].children[0];
   assertEquals(panel.component, "Polar");
@@ -1577,7 +1591,7 @@ Deno.test("coord_polar munches Polygon edges for curved bar wedges", () => {
   const spec = ggplot({ x: ["a", "b"], y: [2, 3] }, { x: "x", y: "y" })
     .add(geomCol(), coordPolar())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   const panel = tree.children[0].children[0];
   // gggplot-tzc.4: geom_col's bar loops pack into a single ChunkedFace node;
   // munching (compile/coordinates.ts's munchFlatNode) subdivides each loop's
@@ -1598,7 +1612,7 @@ Deno.test("coord_polar draws its rings/spokes as one GPU-subdivided Grid", () =>
   const spec = ggplot({ x: ["a", "b"], y: [2, 3] }, { x: "x", y: "y" })
     .add(geomCol(), coordPolar())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   const panel = tree.children[0].children[0];
 
   // gggplot-vnh.17: no CPU ring/spoke geometry; <Polar> bends what <Grid
@@ -1620,14 +1634,14 @@ Deno.test("geom_line sorts by x before connecting, unlike geom_path", () => {
   const unsorted = { x: [2, 0, 1], y: [30, 10, 20] };
 
   const lineSpec = ggplot(unsorted, { x: "x", y: "y" }).add(geomLine()).build();
-  const lineTree = compile(lineSpec);
+  const lineTree = assembleTree(lineSpec);
   const line = plotPanel(lineTree).children.find((c) =>
     c.component === "ChunkedLine"
   );
   assertEquals(decodeChunks(line!), [[[0, 10], [1, 20], [2, 30]]]);
 
   const pathSpec = ggplot(unsorted, { x: "x", y: "y" }).add(geomPath()).build();
-  const pathTree = compile(pathSpec);
+  const pathTree = assembleTree(pathSpec);
   const path = plotPanel(pathTree).children.find((c) =>
     c.component === "ChunkedLine"
   );
@@ -1642,7 +1656,7 @@ Deno.test("group aesthetic packs geom_line groups into one ChunkedLine per dash 
   };
   const spec = ggplot(grouped, { x: "x", y: "y", group: "grp" }).add(geomLine())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   // gggplot-tzc.3: two solid-dash groups concat into ONE ChunkedLine node
@@ -1670,7 +1684,7 @@ Deno.test("gggplot-tzc.3 mandatory: a grouped geom_line lowers to ChunkedLine wh
   const spec = ggplot(grouped, { x: "x", y: "y", group: "grp" })
     .add(geomLine(), geomHline({ yintercept: 18 }))
     .build();
-  const panel = plotPanel(compile(spec));
+  const panel = plotPanel(assembleTree(spec));
 
   const chunked = panel.children.filter((c) => c.component === "ChunkedLine");
   const plainLines = panel.children.filter((c) => c.component === "Line");
@@ -1701,7 +1715,7 @@ Deno.test("gggplot-tzc.3 acceptance: a 3-group solid-dash geom_line layer lowers
   const spec = ggplot(threeGroups, { x: "x", y: "y", color: "grp" })
     .add(geomLine())
     .build();
-  const panel = plotPanel(compile(spec));
+  const panel = plotPanel(assembleTree(spec));
   const chunked = panel.children.filter((c) => c.component === "ChunkedLine");
   assertEquals(chunked.length, 1);
   assertEquals(
@@ -1729,7 +1743,7 @@ Deno.test("gggplot-tzc.3 mandatory: geom_point with mapped color+size drops a mi
   const spec = ggplot(aligned, { x: "x", y: "y", color: "grp", size: "mag" })
     .add(geomPoint(), scaleXLog10())
     .build();
-  const point = plotPanel(compile(spec)).children.find((c) =>
+  const point = plotPanel(assembleTree(spec)).children.find((c) =>
     c.component === "Point"
   )!;
 
@@ -1764,7 +1778,7 @@ Deno.test("linetype splits connected lines and lowers a compact dash binding per
     linetype: "style",
     linewidth: "thickness",
   }).add(geomLine()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   // gggplot-tzc.3: distinct dash patterns are the sanctioned per-batch split,
   // so the two linetype levels stay TWO separate ChunkedLine nodes.
   const lines = plotPanel(tree).children.filter((c) =>
@@ -1789,7 +1803,7 @@ Deno.test("literal linetype and linewidth lower on ordinary and reference Line m
       geomHline({ yintercept: 20, linetype: "dotted", linewidth: 4 }),
     )
     .build();
-  const panel = plotPanel(compile(spec));
+  const panel = plotPanel(assembleTree(spec));
   // gggplot-tzc.3: geom_line is a ChunkedLine (widths FlatTensor); the hline
   // reference line stays a plain 'Line' with a literal width.
   const chunked = panel.children.find((c) => c.component === "ChunkedLine")!;
@@ -1836,7 +1850,7 @@ Deno.test("color aesthetic alone packs geom_line groups into one ChunkedLine wit
   };
   const spec = ggplot(grouped, { x: "x", y: "y", color: "g" }).add(geomLine())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   // gggplot-tzc.3: the two solid color groups concat into ONE ChunkedLine
   // node — two topology chunks, colors repeated per vertex within each.
@@ -1863,7 +1877,7 @@ Deno.test("inheritAes: false ignores the plot's top-level mapping", () => {
   const spec = ggplot(both, { x: "x", y: "y" })
     .add(geomPoint({ inheritAes: false, mapping: { x: "x2", y: "y2" } }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
@@ -1877,7 +1891,7 @@ Deno.test("annotate('segment', ...) renders a literal Line ignoring the plot's m
       annotate("segment", { x: 0, y: 10, xend: 2, yend: 30, color: "#ff0000" }),
     )
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const line = panel.children.find((c) => c.component === "Line");
@@ -1898,7 +1912,7 @@ Deno.test("annotate('rect', ...) renders a literal rectangle Polygon", () => {
       }),
     )
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   // gggplot-tzc.4: annotate("rect", ...)/geom_rect lowers to a ChunkedFace node.
@@ -1911,7 +1925,7 @@ Deno.test("annotate('text', ...) places a literal Label independent of the plot'
   const spec = ggplot(data, { x: "x", y: "y", color: "x" })
     .add(geomPoint(), annotate("text", { x: 1, y: 25, label: "peak" }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const label = panel.children.find((c) => c.component === "Label");
@@ -1923,7 +1937,7 @@ Deno.test("geom_hline draws a full-width reference line at each yintercept", () 
   const spec = ggplot(data, { x: "x", y: "y" })
     .add(geomPoint(), geomHline({ yintercept: [15, 25], color: "#000000" }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const [xDomain] = panel.props.range as [[number, number], [number, number]];
@@ -1939,7 +1953,7 @@ Deno.test("geom_vline draws a full-height reference line at xintercept", () => {
     geomPoint(),
     geomVline({ xintercept: 1 }),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const [, yDomain] = panel.props.range as [[number, number], [number, number]];
@@ -1952,7 +1966,7 @@ Deno.test("geom_abline draws y = slope*x + intercept spanning the panel's x doma
     geomPoint(),
     geomAbline({ slope: 2, intercept: 1 }),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const [xDomain] = panel.props.range as [[number, number], [number, number]];
@@ -1972,7 +1986,7 @@ Deno.test("annotate() and reference-line layers render in every facet panel", ()
   const spec = ggplot(facetData, { x: "x", y: "y" })
     .add(geomPoint(), geomHline({ yintercept: 25 }), facetWrap(["g"]))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const grid = facetGridNode(tree);
   const panels = grid.children;
@@ -1987,7 +2001,7 @@ Deno.test("annotate() and reference-line layers render in every facet panel", ()
 Deno.test("geom_area fills a closed band from a 0 baseline to y", () => {
   const areaData = { x: [0, 1, 2], y: [10, 20, 15] };
   const spec = ggplot(areaData, { x: "x", y: "y" }).add(geomArea()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   // gggplot-tzc.4: geom_area's band loop packs into a ChunkedFace node.
@@ -2012,7 +2026,7 @@ Deno.test("stacked geom_area cumulatively positions bands and widens y domain", 
   ).build();
   // gggplot-tzc.4: stacked geom_area's group bands pack into a single
   // ChunkedFace node — one loop (topology chunk) per group.
-  const panel = plotPanel(compile(spec));
+  const panel = plotPanel(assembleTree(spec));
   const face = panel.children.find((c) => c.component === "ChunkedFace");
   const bands = decodeChunks(face!);
   assertEquals(bands.length, 2);
@@ -2042,7 +2056,7 @@ Deno.test("stacked geom_area separates negative and positive baselines", () => {
     group: ["a", "a", "b", "b"],
   }, { x: "x", y: "y", fill: "group" }).add(geomArea({ position: "stack" }))
     .build();
-  const panel = plotPanel(compile(spec));
+  const panel = plotPanel(assembleTree(spec));
   const face = panel.children.find((c) => c.component === "ChunkedFace");
   const bands = decodeChunks(face!);
   assertEquals(bands[1], [
@@ -2074,7 +2088,7 @@ Deno.test("stat_align resamples mismatched groups onto a deterministic union gri
     "b",
   ]);
 
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   // gggplot-tzc.4: geom_area's group bands pack into a single ChunkedFace
   // node — one loop (topology chunk) per group.
   const bands = findNodes(tree, "ChunkedFace").flatMap((node) =>
@@ -2121,7 +2135,7 @@ Deno.test("stat_align isolates facet grids before interpolation", () => {
     panel: ["p", "p", "p", "q", "q", "q"],
   }, { x: "x", y: "y", fill: "group" }).add(statAlign(), facetWrap(["panel"]))
     .build();
-  const panels = facetGridNode(compile(spec)).children;
+  const panels = facetGridNode(assembleTree(spec)).children;
   const xs = panels.map((panel) =>
     findNodes(panel, "Polygon").flatMap((node) =>
       ((node.props.positions as [number, number][]) ?? []).map(([x]) => x)
@@ -2136,7 +2150,7 @@ Deno.test("geom_ribbon fills a closed band between ymin and ymax", () => {
   const spec = ggplot(ribbonData, { x: "x", ymin: "lo", ymax: "hi" })
     .add(geomRibbon())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   // gggplot-tzc.4: geom_ribbon's band loop packs into a ChunkedFace node.
@@ -2156,7 +2170,7 @@ Deno.test("geom_ribbon's ymin/ymax widen the trained y domain beyond a plain y m
   const spec = ggplot(ribbonData, { x: "x", ymin: "lo", ymax: "hi" })
     .add(geomRibbon())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   assertEquals(panel.props.range, [[0, 2], [5, 20]]);
@@ -2168,7 +2182,7 @@ Deno.test("scaleXLog10 transforms both the trained domain and mark positions", (
     geomPoint(),
     scaleXLog10(),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   assertEquals(panel.props.range, [[0, 2], [1, 3]]);
@@ -2183,7 +2197,7 @@ Deno.test("scaleXSqrt transforms both the trained domain and mark positions", ()
     geomPoint(),
     scaleXSqrt(),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   assertEquals(panel.props.range, [[0, 3], [1, 3]]);
@@ -2197,7 +2211,7 @@ Deno.test("explicit scale domain overrides the auto-trained data extent (user li
   const spec = ggplot(limitData, { x: "x", y: "y" })
     .add(geomPoint(), scaleXContinuous({ domain: [0, 100] }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   assertEquals(panel.props.range, [[0, 100], [10, 30]]);
@@ -2211,7 +2225,7 @@ Deno.test("scale expand pads the trained domain by a multiplicative + additive a
   const spec = ggplot(expandData, { x: "x", y: "y" })
     .add(geomPoint(), scaleXContinuous({ expand: [0.1, 1] }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   // span 10 * 0.1 = 1, + additive 1 = 2 padding on each side
@@ -2223,7 +2237,7 @@ Deno.test("continuous size scale maps mark radius via a mapped size column", () 
   const spec = ggplot(sized, { x: "x", y: "y", size: "weight" }).add(
     geomPoint(),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
@@ -2291,7 +2305,7 @@ Deno.test("linetype and linewidth mappings emit Line legend swatches", () => {
     },
     { x: "x", y: "y", linetype: "type", linewidth: "weight" },
   ).add(geomLine()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   const legendLines = tree.children.filter((node) =>
     node.component === "Line" && node.props.color === "#3b82f6"
   );
@@ -2308,7 +2322,7 @@ Deno.test("continuous size mapping emits a legend guide with scaled swatches", (
   const sized = { x: [0, 1, 2], y: [1, 2, 3], mag: [0, 5, 10] };
   const spec = ggplot(sized, { x: "x", y: "y", size: "mag" }).add(geomPoint())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const legendSwatch = tree.children.find((c) =>
     c.component === "Point" && Array.isArray(c.props.sizes) &&
@@ -2342,7 +2356,7 @@ Deno.test("shape mapping splits point marks and emits a shape legend", () => {
   };
   const spec = ggplot(shaped, { x: "x", y: "y", shape: "grp" }).add(geomPoint())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const markPoints = panel.children.filter((c) => c.component === "Point");
@@ -2361,7 +2375,7 @@ Deno.test("shape mapping splits point marks and emits a shape legend", () => {
 Deno.test("geomPoint alpha param passes through as a flat opacity", () => {
   const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint({ alpha: 0.4 }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
@@ -2370,7 +2384,7 @@ Deno.test("geomPoint alpha param passes through as a flat opacity", () => {
 
 Deno.test("literal and mapped point stroke use an explicit compositional CPU fallback", () => {
   const literal = findNodes(
-    compile(
+    assembleTree(
       ggplot({ x: [1], y: [2] }, { x: "x", y: "y" }).add(
         geomPoint({
           size: 5,
@@ -2396,7 +2410,7 @@ Deno.test("literal and mapped point stroke use an explicit compositional CPU fal
   );
 
   const mapped = findNodes(
-    compile(
+    assembleTree(
       ggplot(
         { x: [1, 2], y: [2, 3], border: [0, 10] },
         { x: "x", y: "y", stroke: "border" },
@@ -2409,7 +2423,7 @@ Deno.test("literal and mapped point stroke use an explicit compositional CPU fal
 });
 
 Deno.test("axis labels default from mappings and honor labels() overrides", () => {
-  const defaultTree = compile(
+  const defaultTree = assembleTree(
     ggplot(data, { x: "x", y: "y" }).add(geomPoint()).build(),
   );
   const defaultOverlay = defaultTree.children.find((child) =>
@@ -2427,7 +2441,7 @@ Deno.test("axis labels default from mappings and honor labels() overrides", () =
     true,
   );
 
-  const namedTree = compile(
+  const namedTree = assembleTree(
     ggplot(data, { x: "x", y: "y" }).add(geomPoint())
       .add(labels({ x: "Weight", y: "Mileage", tag: "A" })).build(),
   );
@@ -2450,7 +2464,7 @@ Deno.test("axis labels default from mappings and honor labels() overrides", () =
 });
 
 Deno.test("measured guide layout reserves glyph-sized margins and adapts ticks", () => {
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(data, { x: "x", y: "y" }).add(geomPoint()).build(),
     {
       layout: {
@@ -2480,7 +2494,7 @@ Deno.test("measured guide layout reserves glyph-sized margins and adapts ticks",
 
 Deno.test("mapped alpha lowers per-point RGBA colors and emits an alpha guide", () => {
   const alphaData = { x: [0, 1, 2], y: [1, 2, 3], strength: [0, 5, 10] };
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(alphaData, { x: "x", y: "y", alpha: "strength" })
       .add(geomPoint())
       .add(scaleAlpha({ name: "Strength" }))
@@ -2609,7 +2623,7 @@ Deno.test("geomHistogram lowers to geomBar with stat_bin", () => {
   assertEquals(histogram.layers[0].stat, "bin");
   assertEquals(histogram.layers[0].params.binwidth, 2);
   assertEquals(histogram.layers[0].position, "dodge");
-  assertEquals(compile(histogram), compile(explicit));
+  assertEquals(assembleTree(histogram), assembleTree(explicit));
 });
 
 Deno.test("geomHistogram forces stat_bin even if stat is supplied", () => {
@@ -2626,7 +2640,7 @@ Deno.test("grouped histogram retains zero bins, stacks shared centers, and keeps
     { x: [0, 1, 2, 3, 4, 5], cohort: ["a", "a", "a", "b", "b", "b"] },
     { x: "x", fill: "cohort" },
   ).add(geomHistogram({ binwidth: 2 })).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   // gggplot-tzc.4: geom_histogram lowers via geom "bar" → lowerBar, whose
   // bar loops pack into a single ChunkedFace node.
   const face = plotPanel(tree).children.find((node) =>
@@ -2764,7 +2778,7 @@ Deno.test("discrete color scale assigns fixed categorical palette slots by level
   const spec = ggplot(grouped, { x: "x", y: "y", color: "grp" }).add(
     geomPoint(),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
@@ -2786,7 +2800,7 @@ Deno.test("discrete color mapping emits a legend guide with swatches and labels"
   const spec = ggplot(grouped, { x: "x", y: "y", color: "grp" }).add(
     geomPoint(),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const legendSwatch = tree.children.find((c) =>
     c.component === "Point" && c.props.size === 7
@@ -2809,7 +2823,7 @@ Deno.test("legend key boxes reserve pixel-stable space before labels", () => {
     grp: ["cyl 4", "cyl 6", "cyl 8"],
   };
   const width = 471;
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(grouped, { x: "x", y: "y", color: "grp" }).add(geomPoint())
       .build(),
     {
@@ -2842,7 +2856,7 @@ Deno.test("legend key rows keep a legible pixel height on short canvases", () =>
     grp: ["cyl 4", "cyl 6", "cyl 8"],
   };
   const keyRowPx = (height: number) => {
-    const tree = compile(
+    const tree = assembleTree(
       ggplot(grouped, { x: "x", y: "y", color: "grp" }).add(geomPoint())
         .build(),
       {
@@ -2889,7 +2903,7 @@ Deno.test("continuous color scale interpolates the sequential ramp across the do
 Deno.test("continuous colorbar, coloursteps, and bins guides lower serializable swatches", () => {
   const guidesOf = (guide: ReturnType<typeof guideColourbar>) =>
     findNodes(
-      compile(
+      assembleTree(
         ggplot({ x: [0, 1], y: [0, 1], value: [0, 10] }, {
           x: "x",
           y: "y",
@@ -2912,7 +2926,7 @@ Deno.test("viridis and gradient2 builders preserve serializable ramps through co
   const viridis = ggplot(paletteData, { x: "x", y: "y", color: "value" })
     .add(geomPoint(), scaleColorViridis())
     .build();
-  const viridisPoint = plotPanel(compile(viridis)).children.find((node) =>
+  const viridisPoint = plotPanel(assembleTree(viridis)).children.find((node) =>
     node.component === "Point"
   );
   assertEquals(decodeColors(viridisPoint!.props.colors), [
@@ -2924,9 +2938,9 @@ Deno.test("viridis and gradient2 builders preserve serializable ramps through co
   const diverging = ggplot(paletteData, { x: "x", y: "y", color: "value" })
     .add(geomPoint(), scaleColorGradient2())
     .build();
-  const divergingPoint = plotPanel(compile(diverging)).children.find((node) =>
-    node.component === "Point"
-  );
+  const divergingPoint = plotPanel(assembleTree(diverging)).children.find((
+    node,
+  ) => node.component === "Point");
   assertEquals(decodeColors(divergingPoint!.props.colors), [
     "#b2182b",
     "#f7f7f7",
@@ -2942,7 +2956,7 @@ Deno.test("scaleColor domain fixes explicit categorical color assignment", () =>
       scaleColor({ domain: ["a", "b"], range: ["#111111", "#222222"] }),
     )
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
@@ -2954,7 +2968,7 @@ Deno.test("mapped aesthetics train scales instead of treating strings as visual 
   const spec = ggplot(literalWords, { x: "x", y: "y", color: "shade" })
     .add(geomPoint())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const point = plotPanel(tree).children.find((c) => c.component === "Point");
   // The words "blue"/"red" are data values. They train a discrete scale and
@@ -2984,7 +2998,7 @@ Deno.test("fixed layer params pass through as literal visual settings without gu
   const spec = ggplot(hasColorColumn, { x: "x", y: "y" })
     .add(geomPoint({ color: "red", size: 9 }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const point = plotPanel(tree).children.find((c) => c.component === "Point");
   assertEquals(point?.props.color, "red");
@@ -3009,7 +3023,7 @@ Deno.test("color and fill mappings keep independent scales in the same plot", ()
       scaleFill({ domain: ["high", "low"], range: ["#aaaaaa", "#bbbbbb"] }),
     )
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const point = panel.children.find((c) => c.component === "Point");
@@ -3038,7 +3052,7 @@ Deno.test("labels() overrides legend titles and emits plot title text", () => {
     )
     .add(geomPoint())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const labelTexts = tree.children.filter((c) => c.component === "Label").map((
     c,
@@ -3053,7 +3067,7 @@ Deno.test("labels() renames facet strip variables", () => {
   const spec = ggplot(facetData, { x: "x", y: "y" })
     .add(geomPoint(), facetWrap(["cyl"]), labels({ cyl: "Cylinders" }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const stripLabels = tree.children.filter((node) => node.component === "Label")
     .map((node) => node.props.labels);
@@ -3200,7 +3214,7 @@ Deno.test("geom_smooth renders a Line plus a CI Ribbon ChunkedFace", () => {
   const smoothData = { x: [0, 1, 2, 3, 4], y: [1, 3, 5, 7, 9] };
   const spec = ggplot(smoothData, { x: "x", y: "y" }).add(geomSmooth({ n: 5 }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   // gggplot-tzc.3: the fitted trend line is a ChunkedLine; the SE ribbon
@@ -3229,7 +3243,7 @@ Deno.test("geom_smooth se:false skips the Ribbon Polygon entirely", () => {
   const spec = ggplot(smoothData, { x: "x", y: "y" }).add(
     geomSmooth({ n: 5, se: false }),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   assertEquals(
@@ -3249,7 +3263,7 @@ Deno.test("geom_smooth fits and renders one line per effective color group", () 
   const spec = ggplot(smoothData, { x: "x", y: "y", color: "g" })
     .add(geomSmooth({ n: 3, se: false }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   // gggplot-tzc.3: the two solid color groups concat into ONE ChunkedLine
   // node with per-group chunks; group color repeats per vertex.
@@ -3381,7 +3395,7 @@ Deno.test("stat_summary supports a custom aggregator function", () => {
 
 Deno.test("default theme renders no background Polygon, unstyled Grid/Axis", () => {
   const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   assertEquals(
@@ -3404,7 +3418,7 @@ Deno.test("default theme renders no background Polygon, unstyled Grid/Axis", () 
 });
 
 Deno.test("grid rules and labels share pretty or explicit scale breaks", () => {
-  const pretty = compile(
+  const pretty = assembleTree(
     ggplot(
       { x: [-0.9992, 0, 1], y: [0, 1, 2] },
       { x: "x", y: "y" },
@@ -3420,7 +3434,7 @@ Deno.test("grid rules and labels share pretty or explicit scale breaks", () => {
   assertEquals(prettyXGrid?.props.range, [[-1, 1], [0, 2]]);
   assertEquals(prettyXGrid?.props.first, { nice: false, divide: 4 });
 
-  const explicit = compile(
+  const explicit = assembleTree(
     ggplot({ x: [0, 3, 10], y: [0, 1, 2] }, { x: "x", y: "y" })
       .add(geomPoint(), scaleXContinuous({ breaks: [0, 3, 10] }))
       .build(),
@@ -3436,7 +3450,7 @@ Deno.test("grid rules and labels share pretty or explicit scale breaks", () => {
 });
 
 Deno.test("facet grid rules and labels share the reduced per-panel break count", () => {
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(
       {
         x: [0, 5, 10, 0, 5, 10],
@@ -3464,7 +3478,7 @@ Deno.test("facet grid rules and labels share the reduced per-panel break count",
 Deno.test("themeGrey adds a full-panel background Polygon and a white grid color", () => {
   const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint(), themeGrey())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   const bg = panel.children.find((c) => c.component === "Polygon");
@@ -3484,7 +3498,7 @@ Deno.test("themeGrey adds a full-panel background Polygon and a white grid color
 Deno.test("themeClassic omits the Grid node entirely", () => {
   const spec = ggplot(data, { x: "x", y: "y" }).add(geomPoint(), themeClassic())
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   assertEquals(panel.children.find((c) => c.component === "Grid"), undefined);
@@ -3505,7 +3519,7 @@ Deno.test("remaining named theme presets are distinct and themeVoid removes guid
       .size,
     6,
   );
-  const voidPanel = compile(
+  const voidPanel = assembleTree(
     ggplot(data, { x: "x", y: "y" }).add(
       geomPoint(),
       themeVoid(),
@@ -3529,7 +3543,7 @@ Deno.test("theme() merges over a prior theme_*() instead of replacing it", () =>
   const spec = ggplot(data, { x: "x", y: "y" })
     .add(geomPoint(), themeGrey(), theme({ axisColor: "#ff0000" }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const panel = plotPanel(tree);
   // themeGrey's background survives even though theme() was applied after
@@ -3549,7 +3563,7 @@ Deno.test("theme fontFamily/fontSize/textColor style geom_text's Label unless th
       theme({ fontFamily: "Georgia", fontSize: 20, textColor: "#112233" }),
     )
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const label = plotPanel(tree).children.find((c) => c.component === "Label");
   assertEquals(label?.props.family, "Georgia");
@@ -3562,9 +3576,9 @@ Deno.test("theme fontFamily/fontSize/textColor style geom_text's Label unless th
       theme({ fontSize: 20, textColor: "#112233" }),
     )
     .build();
-  const overriddenLabel = plotPanel(compile(overridden)).children.find((c) =>
-    c.component === "Label"
-  );
+  const overriddenLabel = plotPanel(assembleTree(overridden)).children.find((
+    c,
+  ) => c.component === "Label");
   assertEquals(overriddenLabel?.props.size, 8);
   assertEquals(overriddenLabel?.props.color, "#000000");
 });
@@ -3582,7 +3596,7 @@ Deno.test("text face semantics normalize theme and layer fontface fields", () =>
       }),
     )
     .build();
-  const themedLabel = plotPanel(compile(themed)).children.find((node) =>
+  const themedLabel = plotPanel(assembleTree(themed)).children.find((node) =>
     node.component === "Label"
   );
   assertEquals(themedLabel?.props.family, "Basic");
@@ -3593,9 +3607,9 @@ Deno.test("text face semantics normalize theme and layer fontface fields", () =>
   const overridden = ggplot(labelData, { x: "x", y: "y", label: "name" })
     .add(geomText({ fontface: "bold.italic", lineheight: 22 }))
     .build();
-  const overriddenLabel = plotPanel(compile(overridden)).children.find((node) =>
-    node.component === "Label"
-  );
+  const overriddenLabel = plotPanel(assembleTree(overridden)).children.find((
+    node,
+  ) => node.component === "Label");
   assertEquals(overriddenLabel?.props.weight, "bold");
   assertEquals(overriddenLabel?.props.style, "italic");
   assertEquals(overriddenLabel?.props.lineHeight, 22);
@@ -3609,7 +3623,7 @@ Deno.test("mapped family and fontface split text into semantic face batches", ()
     face: ["plain", "bold", "bold"],
     typeface: ["Basic", "Basic", "Second"],
   };
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(labelData, {
       x: "x",
       y: "y",
@@ -3646,7 +3660,7 @@ Deno.test("facet_wrap partitions data into panels laid out in an auto-sized grid
   const spec = ggplot(facetData, { x: "x", y: "y" })
     .add(geomPoint(), facetWrap(["cyl"]))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   assertEquals(tree.component, "Embedded");
   const facet = facetGridNode(tree);
@@ -3685,7 +3699,7 @@ Deno.test("facet_wrap honors an explicit ncol", () => {
   const spec = ggplot(facetData, { x: "x", y: "y" })
     .add(geomPoint(), facetWrap(["grp"], 4))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   const facet = facetGridNode(tree);
 
   assertEquals(facet.props.ncol, 4);
@@ -3707,7 +3721,7 @@ Deno.test("facets occupy guide panel bounds and center strips in reserved CSS-pi
   };
   const width = 640;
   const height = 400;
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(facetData, { x: "x", y: "y" }).add(
       geomPoint(),
       facetWrap(["grp"], 2),
@@ -3762,7 +3776,7 @@ Deno.test("facet_wrap free scale modes train independent panel domains", () => {
     y: [0, 10, 1000, 2000],
   };
   const ranges = (scales: "free" | "free_x" | "free_y") => {
-    const tree = compile(
+    const tree = assembleTree(
       ggplot(facetData, { x: "x", y: "y" }).add(
         geomPoint(),
         facetWrap(["grp"], undefined, scales),
@@ -3793,7 +3807,7 @@ Deno.test("faceted plots keep plot-level color legends outside FacetGrid", () =>
   const spec = ggplot(facetData, { x: "x", y: "y", color: "cls" })
     .add(geomPoint(), facetWrap(["grp"]), labels({ color: "Class" }))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   const facet = facetGridNode(tree);
 
   assertEquals(tree.component, "Embedded");
@@ -3826,7 +3840,7 @@ Deno.test("facet_grid crosses row and column variables into a full panel grid, i
   const spec = ggplot(facetData, { x: "x", y: "y" })
     .add(geomPoint(), facetGrid(["r"], ["c"]))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   assertEquals(tree.component, "Embedded");
   const facet = facetGridNode(tree);
@@ -3860,7 +3874,7 @@ Deno.test("empty facet_grid bar combinations retain a panel but emit no empty Ch
     c: ["L", "R"],
     x: ["a", "b"],
   };
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(facetData, { x: "x" }).add(
       geomBar({ fill: "#3b82f6" }),
       facetGrid(["r"], ["c"]),
@@ -3885,7 +3899,7 @@ Deno.test("facet partitions before stats, so stat_count aggregates within each p
   const spec = ggplot(facetData, { x: "cat" })
     .add(geomCol({ stat: "count" }), facetWrap(["grp"]))
     .build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   const facet = facetGridNode(tree);
 
   // gggplot-tzc.4: each panel's bars pack into a single ChunkedFace node —
@@ -3905,7 +3919,7 @@ Deno.test("gggplot-tzc.6 mark emission: a grouped-line + stacked-bar spec emits 
     { cat: ["a", "a", "b", "b"], y: [3, 5, 2, 4], grp: ["p", "q", "p", "q"] },
     { x: "cat", y: "y", fill: "grp", color: "grp", group: "grp" },
   ).add(geomCol(), geomLine()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   assertEquals(findNodes(tree, "ChunkedLine").length, 1);
   assertEquals(findNodes(tree, "ChunkedFace").length, 1);
@@ -3953,7 +3967,7 @@ Deno.test("geomBlank trains scales but emits no marks or legend keys", () => {
       inheritAes: false,
     }),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   assertEquals(plotPanel(tree).props.range, [[0, 10], [0, 20]]);
   assertEquals(findNodes(tree, "Point").length, 1);
   assertEquals(findNodes(tree, "Line").length, 0);
@@ -3965,7 +3979,7 @@ Deno.test("geomStep expands sorted groups for hv, vh, and mid directions", () =>
   // gggplot-tzc.3: geom_step lowers via lowerLine → one ChunkedLine node,
   // one chunk (single group).
   const positions = (direction: "hv" | "vh" | "mid") => {
-    const tree = compile(
+    const tree = assembleTree(
       ggplot(stepData, { x: "x", y: "y" }).add(geomStep({ direction }))
         .build(),
     );
@@ -3985,7 +3999,7 @@ Deno.test("geomStep expands sorted groups for hv, vh, and mid directions", () =>
   ]);
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(stepData, { x: "x", y: "y" }).add(
           geomStep({ direction: "diagonal" }),
         ).build(),
@@ -4033,7 +4047,7 @@ Deno.test("statConnect emits deterministic grouped sigmoid vertices", () => {
     "b",
     "b",
   ]);
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   // gggplot-tzc.3: the two solid teams concat into ONE ChunkedLine node with
   // two chunks (one per team).
   assertEquals(
@@ -4055,7 +4069,7 @@ Deno.test("statConnect emits deterministic grouped sigmoid vertices", () => {
   }
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(data, { x: "round", y: "rank" }).add(
           statConnect({ connection: "arc" }),
         ).build(),
@@ -4066,7 +4080,7 @@ Deno.test("statConnect emits deterministic grouped sigmoid vertices", () => {
 });
 
 Deno.test("geomCurve and geomSpoke lower deterministic endpoint topology", () => {
-  const curveTree = compile(
+  const curveTree = assembleTree(
     ggplot(
       { x: [0], y: [0], xend: [2], yend: [0] },
       { x: "x", y: "y", xend: "xend", yend: "yend" },
@@ -4081,7 +4095,7 @@ Deno.test("geomCurve and geomSpoke lower deterministic endpoint topology", () =>
   assertEquals(curve[0][32], [2, 0]);
   assertEquals(round([curve[0][16]]), round([[1, 0.5]]));
 
-  const spokeTree = compile(
+  const spokeTree = assembleTree(
     ggplot(
       { x: [1], y: [2], angle: [Math.PI / 2], radius: [3] },
       { x: "x", y: "y", angle: "angle", radius: "radius" },
@@ -4094,7 +4108,7 @@ Deno.test("geomCurve and geomSpoke lower deterministic endpoint topology", () =>
 });
 
 Deno.test("geomRug places CSS-pixel ticks on requested panel sides", () => {
-  const tree = compile(
+  const tree = assembleTree(
     ggplot({ x: [0, 10], y: [0, 20] }, { x: "x", y: "y" }).add(
       geomRug({ sides: "tr", length: 10 }),
     ).build(),
@@ -4116,7 +4130,7 @@ Deno.test("geomRug places CSS-pixel ticks on requested panel sides", () => {
   assertEquals(rug[2][1][1], 0);
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(data, { x: "x", y: "y" }).add(geomRug({ sides: "bb" }))
           .build(),
       ),
@@ -4126,7 +4140,7 @@ Deno.test("geomRug places CSS-pixel ticks on requested panel sides", () => {
 });
 
 Deno.test("freqpoly, function, and jitter aliases compile and emit source", () => {
-  const freq = compile(
+  const freq = assembleTree(
     ggplot({ x: [0, 0, 1, 2, 2, 2], g: ["a", "a", "a", "b", "b", "b"] }, {
       x: "x",
       color: "g",
@@ -4138,13 +4152,13 @@ Deno.test("freqpoly, function, and jitter aliases compile and emit source", () =
     findNodes(freq, "ChunkedLine").flatMap((node) => decodeChunks(node)).length,
     2,
   );
-  const fnTree = compile(
+  const fnTree = assembleTree(
     ggplot({ x: [-1, 1] }, { x: "x" }).add(geomFunction((x) => x * x, { n: 5 }))
       .build(),
   );
   assertEquals(decodeChunks(findNodes(fnTree, "ChunkedLine")[0])[0].length, 5);
   const jitterSpec = ggplot(data, { x: "x", y: "y" }).add(geomJitter()).build();
-  assertEquals(findNodes(compile(jitterSpec), "Point").length, 1);
+  assertEquals(findNodes(assembleTree(jitterSpec), "Point").length, 1);
 });
 
 Deno.test("stat_sum aggregates complete tuples with weighted group-local proportions", () => {
@@ -4175,15 +4189,15 @@ Deno.test("geomCount uses area-scaled counts, supports literal size, facets, and
     panel: ["a", "a", "a", "b"],
   };
   const spec = ggplot(countData, { x: "x", y: "y" }).add(geomCount()).build();
-  const point = findNodes(compile(spec), "Point")[0];
+  const point = findNodes(assembleTree(spec), "Point")[0];
   assertScalars(point.props.sizes, [6, 1]);
 
-  const literal = compile(
+  const literal = assembleTree(
     ggplot(countData, { x: "x", y: "y" }).add(geomCount({ size: 9 })).build(),
   );
   assertEquals(findNodes(literal, "Point")[0].props.size, 9);
 
-  const faceted = compile(
+  const faceted = assembleTree(
     ggplot(countData, { x: "x", y: "y" }).add(
       geomCount(),
       facetWrap(["panel"]),
@@ -4242,13 +4256,13 @@ Deno.test("density2d KDE normalizes, preserves groups, and exposes computed colu
 
 Deno.test("density2d line/filled constructors contour and reject invalid controls", () => {
   const cloud = { x: [-1, 0, 0.5, 1], y: [0, 1, -0.5, 0.2] };
-  const lineTree = compile(
+  const lineTree = assembleTree(
     ggplot(cloud, { x: "x", y: "y" }).add(
       geomDensity2d({ n: 16, bins: 5, contourVar: "count" }),
     ).build(),
   );
   assertEquals(findNodes(lineTree, "Line").length > 0, true);
-  const filledTree = compile(
+  const filledTree = assembleTree(
     ggplot(cloud, { x: "x", y: "y" }).add(
       geomDensity2dFilled({ n: 12, bins: 5 }),
     ).build(),
@@ -4261,7 +4275,7 @@ Deno.test("density2d line/filled constructors contour and reject invalid control
   ) {
     assertThrows(
       () =>
-        compile(
+        assembleTree(
           ggplot(cloud, { x: "x", y: "y" }).add(geomDensity2d(opts)).build(),
         ),
       TypeError,
@@ -4273,7 +4287,7 @@ Deno.test("density2d line/filled constructors contour and reject invalid control
 Deno.test("interval family shares orientation-aware stem, cap, box, and point topology", () => {
   const verticalData = { x: [1], y: [3], lo: [1], hi: [5] };
   const vertical = (geom: ReturnType<typeof geomLinerange>) =>
-    compile(
+    assembleTree(
       ggplot(verticalData, { x: "x", y: "y", ymin: "lo", ymax: "hi" }).add(geom)
         .build(),
     );
@@ -4296,7 +4310,7 @@ Deno.test("interval family shares orientation-aware stem, cap, box, and point to
   ]]);
 
   const horizontalData = { y: [2], x: [4], lo: [1], hi: [7] };
-  const horizontal = compile(
+  const horizontal = assembleTree(
     ggplot(horizontalData, { y: "y", x: "x", xmin: "lo", xmax: "hi" }).add(
       geomErrorbarh({ width: 1 }),
     ).build(),
@@ -4318,7 +4332,7 @@ Deno.test("interval family shares orientation-aware stem, cap, box, and point to
 Deno.test("interval family rejects incomplete and ambiguous orientation mappings", () => {
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot({ x: [1], lo: [0] }, { x: "x", ymin: "lo" }).add(geomLinerange())
           .build(),
       ),
@@ -4327,7 +4341,7 @@ Deno.test("interval family rejects incomplete and ambiguous orientation mappings
   );
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(
           { x: [1], y: [2], xmin: [0], xmax: [2], ymin: [1], ymax: [3] },
           {
@@ -4364,7 +4378,7 @@ Deno.test("interval family preserves mapped styling, dodge, missing rows, domain
     linetype: "group",
     linewidth: "width",
   } as const;
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(intervalData, mapping).add(
       geomPointrange({ position: "dodge", dodgeWidth: 0.8, size: 6 }),
     ).build(),
@@ -4381,7 +4395,7 @@ Deno.test("interval family preserves mapped styling, dodge, missing rows, domain
   assertEquals(new Set(intervalLines.map((node) => node.props.width)).size, 2);
   assertEquals((plotPanel(tree).props.range as number[][])[1], [-5, 10]);
 
-  const facetedFlipped = compile(
+  const facetedFlipped = assembleTree(
     ggplot(intervalData, mapping).add(
       geomLinerange(),
       facetWrap(["panel"]),
@@ -4449,7 +4463,7 @@ Deno.test("stat quantile fits deterministic grouped pinball-optimal endpoints", 
 
 Deno.test("geomQuantile handles degenerate x, emits source, and validates V1 contract", () => {
   const degenerate = { x: [1, 1, 1, 1], y: [0, 1, 2, 10] };
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(degenerate, { x: "x", y: "y" }).add(
       geomQuantile({ quantiles: [0.5] }),
     ).build(),
@@ -4464,7 +4478,7 @@ Deno.test("geomQuantile handles degenerate x, emits source, and validates V1 con
   ) {
     assertThrows(
       () =>
-        compile(
+        assembleTree(
           ggplot(degenerate, { x: "x", y: "y" }).add(geomQuantile(opts))
             .build(),
         ),
@@ -4473,7 +4487,7 @@ Deno.test("geomQuantile handles degenerate x, emits source, and validates V1 con
   }
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot({ x: [1], y: [2] }, { x: "x", y: "y" }).add(geomQuantile())
           .build(),
       ),
@@ -4524,7 +4538,7 @@ Deno.test("stat_smooth glm fits bounded logistic probabilities and validates cap
   const spec = ggplot(binary, { x: "x", y: "y" }).add(
     geomSmooth({ method: "glm", family: "binomial", link: "logit", n: 5 }),
   ).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   // gggplot-tzc.3: the fitted glm trend line is a ChunkedLine.
   const smoothLine = findNodes(tree, "ChunkedLine")[0];
   assertEquals(
@@ -4544,7 +4558,7 @@ Deno.test("stat_smooth glm fits bounded logistic probabilities and validates cap
   for (const opts of invalid) {
     assertThrows(
       () =>
-        compile(
+        assembleTree(
           ggplot(binary, { x: "x", y: "y" }).add(geomSmooth(opts)).build(),
         ),
       TypeError,
@@ -4552,7 +4566,7 @@ Deno.test("stat_smooth glm fits bounded logistic probabilities and validates cap
   }
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot({ x: [0, 1, 2], y: [0, 0.5, 1] }, { x: "x", y: "y" }).add(
           geomSmooth({ method: "glm" }),
         ).build(),
@@ -4579,7 +4593,7 @@ Deno.test("geomLabel measures padded multiline boxes and preserves box-border-te
     { x: "x", y: "y", label: "label", family: "family", fontface: "face" },
   ).add(geomLabel({ size: 20, labelPadding: 4, labelR: 3, borderWidth: 2 }))
     .build();
-  const tree = compile(spec, {
+  const tree = assembleTree(spec, {
     layout: { width: 400, height: 400, measureText: measure },
   });
   const panel = plotPanel(tree);
@@ -4619,7 +4633,7 @@ Deno.test("geomLabel rotates boxes, aligns mapped fills after missing rows, and 
     fill: ["a", "b", "c"],
   };
   const compileAngle = (angle: number) =>
-    compile(
+    assembleTree(
       ggplot(labelData, { x: "x", y: "y", label: "label", fill: "fill" }).add(
         geomLabel({ angle, alpha: 0.6, borderColor: "#111111" }),
       ).build(),
@@ -4657,7 +4671,7 @@ Deno.test("geomLabel rotates boxes, aligns mapped fills after missing rows, and 
     "three",
   ]);
 
-  const textTree = compile(
+  const textTree = assembleTree(
     ggplot({ x: [0], y: [0], label: ["plain"] }, {
       x: "x",
       y: "y",
@@ -4730,7 +4744,7 @@ Deno.test("statEcdf collapses ties, filters non-finite values, groups, and pads 
 
 Deno.test("geomEcdf clips padded endpoints to finite panel domains and emits monotone steps", () => {
   const spec = ggplot({ x: [1, 1, 2, 4] }, { x: "x" }).add(geomEcdf()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   assertEquals(plotPanel(tree).props.range, [[1, 4], [0, 1]]);
   // gggplot-tzc.3: geom_ecdf lowers via lowerLine (step) → ChunkedLine.
   const line = findNodes(tree, "ChunkedLine")[0];
@@ -4760,7 +4774,7 @@ Deno.test("statUnique retains stable first exact rows and runs independently in 
   assertEquals(values(result.data, "x"), [1, 1, 2]);
   assertEquals(values(result.data, "y"), [3, 4, null]);
   assertEquals(result.mapping, { x: "x", y: "y" });
-  const faceted = compile(
+  const faceted = assembleTree(
     ggplot({ x: [1, 1, 1, 1], y: [2, 2, 2, 2], facet: ["a", "a", "b", "b"] }, {
       x: "x",
       y: "y",
@@ -4820,7 +4834,7 @@ Deno.test("geomWaffle expands weighted groups into core tiles with ordinary fill
   assertEquals(result.mapping.x, "waffleX");
   assertEquals(result.mapping.y, "waffleY");
 
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
   // gggplot-tzc.4: geomWaffle lowers via geom "tile" → lowerTile, whose
   // cells pack into a single ChunkedFace node.
   const waffleFace =
@@ -4840,7 +4854,7 @@ Deno.test("statWaffle supports unit rows, panel isolation, and bounded validatio
   assertEquals(values(unit.data, "waffleX"), [0, 0, 1]);
   assertEquals(values(unit.data, "waffleY"), [0, 1, 0]);
 
-  const faceted = compile(
+  const faceted = assembleTree(
     ggplot({ facet: ["a", "b"], count: [2, 1] }, {})
       .add(
         geomWaffle({ weight: "count", rows: 10 }),
@@ -4899,7 +4913,7 @@ Deno.test("stacked 3-group geom_col lowers to exactly one ChunkedFace node per l
     y: [1, 2, 3, 4, 5, 6],
     grp: ["p", "q", "r", "p", "q", "r"],
   }, { x: "x", y: "y", fill: "grp" }).add(geomCol()).build();
-  const tree = compile(spec);
+  const tree = assembleTree(spec);
 
   const faces = findNodes(tree, "ChunkedFace").filter((n) =>
     !n.props.guideKind
@@ -4981,7 +4995,7 @@ Deno.test("no RenderTree node ever carries a compiler-internal owners field, acr
   ];
 
   for (const spec of specs) {
-    const tree = compile(spec);
+    const tree = assembleTree(spec);
     for (const node of allNodes(tree)) {
       assertEquals(
         "owners" in node.props,
@@ -4996,21 +5010,21 @@ Deno.test("converted face families emit no nested-Polygon mark nodes", () => {
   const specs: [string, RenderNode][] = [
     [
       "bar/col",
-      compile(
+      assembleTree(
         ggplot({ x: ["a", "b"], y: [1, 2] }, { x: "x", y: "y" }).add(geomCol())
           .build(),
       ),
     ],
     [
       "tile",
-      compile(
+      assembleTree(
         ggplot({ x: [0, 1], y: [0, 1] }, { x: "x", y: "y" }).add(geomTile())
           .build(),
       ),
     ],
     [
       "area",
-      compile(
+      assembleTree(
         ggplot({ x: [0, 1, 2], y: [1, 2, 3] }, { x: "x", y: "y" }).add(
           geomArea(),
         )
@@ -5019,7 +5033,7 @@ Deno.test("converted face families emit no nested-Polygon mark nodes", () => {
     ],
     [
       "polygon",
-      compile(
+      assembleTree(
         ggplot({ x: [0, 1, 0], y: [0, 0, 1] }, { x: "x", y: "y" }).add(
           geomPolygon(),
         ).build(),
@@ -5027,7 +5041,7 @@ Deno.test("converted face families emit no nested-Polygon mark nodes", () => {
     ],
     [
       "boxplot",
-      compile(
+      assembleTree(
         ggplot({
           x: [0],
           lo: [2],
@@ -5047,14 +5061,14 @@ Deno.test("converted face families emit no nested-Polygon mark nodes", () => {
     ],
     [
       "hex",
-      compile(
+      assembleTree(
         ggplot({ x: [0, 0.1, 0.9, 1], y: [0, 0.1, 0.9, 1] }, { x: "x", y: "y" })
           .add(geomHex({ bins: 2 })).build(),
       ),
     ],
     [
       "label",
-      compile(
+      assembleTree(
         ggplot({ x: [0], y: [0], label: ["hi"] }, {
           x: "x",
           y: "y",

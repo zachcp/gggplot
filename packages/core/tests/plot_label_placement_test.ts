@@ -11,8 +11,9 @@
 // column was 0 before this fix and 38 after, against a 36.5px anchor.
 import { assertEquals } from "@std/assert";
 import { geomPoint, ggplot, labels as plotLabels } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 function findNodes(node: RenderNode, component: string): RenderNode[] {
   return [
@@ -32,7 +33,7 @@ function labelFor(tree: RenderNode, text: string): RenderNode {
 }
 
 const treeWith = (parts: Parameters<typeof plotLabels>[0]) =>
-  compile(
+  assembleTree(
     ggplot({ x: [0, 1, 2], y: [0, 1, 2] }, { x: "x", y: "y" })
       .add(geomPoint(), plotLabels(parts)).build(),
   ) as RenderNode;

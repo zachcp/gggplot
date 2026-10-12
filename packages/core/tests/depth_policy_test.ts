@@ -1,9 +1,10 @@
 import { assertEquals } from "@std/assert";
 import { geomLine, geomPoint, ggplot } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import { depthProps } from "../src/geom/shared.ts";
 import { GEOM_REGISTRY } from "../src/geom/mod.ts";
 import type { RenderNode } from "../src/compile/rendertree.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 const data = { x: [0, 1], y: [1, 2], z: [3, 4] };
 
@@ -70,7 +71,7 @@ Deno.test("point and line depth behaviour is unchanged by the refactor", () => {
     ] as const
   ) {
     const point = findNodes(
-      compile(
+      assembleTree(
         ggplot(data, { x: "x", y: "y", z: "z" }).add(geomPoint({ alpha }))
           .build(),
       ),
@@ -81,7 +82,7 @@ Deno.test("point and line depth behaviour is unchanged by the refactor", () => {
     assertEquals(point.props.mode, expected.mode);
 
     const line = findNodes(
-      compile(
+      assembleTree(
         ggplot(data, { x: "x", y: "y", z: "z" }).add(geomLine({ alpha }))
           .build(),
       ),
@@ -95,7 +96,7 @@ Deno.test("point and line depth behaviour is unchanged by the refactor", () => {
 
 Deno.test("an explicit depthTest param still overrides the policy", () => {
   const point = findNodes(
-    compile(
+    assembleTree(
       ggplot(data, { x: "x", y: "y", z: "z" }).add(
         geomPoint({ depthTest: false }),
       ).build(),

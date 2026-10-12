@@ -18,10 +18,11 @@ import {
   scaleYContinuous,
   scaleZContinuous,
 } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { RenderNode } from "../src/compile/rendertree.ts";
 import { censorToScaleLimits } from "../src/scale/censor.ts";
 import { ingest } from "../src/data/mod.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 function findNodes(node: RenderNode, component: string): RenderNode[] {
   return [
@@ -44,7 +45,7 @@ const rowsOf = (tree: RenderNode, component: string): number =>
 
 Deno.test("a continuous domain removes rows outside it", () => {
   // The bead's own repro: x = 10 is neither dropped nor clamped before the fix.
-  const tree = compile(
+  const tree = assembleTree(
     ggplot({ x: [0, 1, 10], y: [0, 1, 2] }, { x: "x", y: "y" })
       .add(geomPoint(), scaleXContinuous({ domain: [0, 1] })).build(),
   ) as RenderNode;
@@ -53,7 +54,7 @@ Deno.test("a continuous domain removes rows outside it", () => {
 });
 
 Deno.test("a domain wider than the data removes nothing", () => {
-  const tree = compile(
+  const tree = assembleTree(
     ggplot({ x: [0, 1, 10], y: [0, 1, 2] }, { x: "x", y: "y" })
       .add(geomPoint(), scaleXContinuous({ domain: [0, 20] })).build(),
   ) as RenderNode;
@@ -66,7 +67,7 @@ Deno.test("censoring runs before the stat, so limits change what it bins", () =>
   // hide the outlier while stat_bin still counted it.
   const build = (domain?: [number, number]) => {
     const base = ggplot({ x: [0, 1, 2, 3, 50] }, { x: "x" });
-    return compile(
+    return assembleTree(
       (domain
         ? base.add(geomHistogram({ binwidth: 1 }), scaleXContinuous({ domain }))
         : base.add(geomHistogram({ binwidth: 1 }))).build(),
@@ -81,7 +82,7 @@ Deno.test("censoring runs before the stat, so limits change what it bins", () =>
 });
 
 Deno.test("a discrete domain removes rows whose level it omits", () => {
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(
       { g: ["a", "b", "c"], y: [1, 2, 3] },
       { x: "g", y: "y" },
@@ -107,16 +108,18 @@ Deno.test("limits censor every column on their axis, not just the primary one", 
   assertEquals(censored.removed, 1);
 
   // And it reaches the rendered mark: one stem instead of two.
-  const stems = coords(compile(spec) as RenderNode, "Line");
+  const stems = coords(assembleTree(spec) as RenderNode, "Line");
   const uncensored = coords(
-    compile(ggplot(frame, mapping).add(geomErrorbar()).build()) as RenderNode,
+    assembleTree(
+      ggplot(frame, mapping).add(geomErrorbar()).build(),
+    ) as RenderNode,
     "Line",
   );
   assertEquals(stems.length < uncensored.length, true);
 });
 
 Deno.test("a z domain censors in 3D", () => {
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(
       { x: [0, 1, 2], y: [0, 1, 2], z: [0, 1, 50] },
       { x: "x", y: "y", z: "z" },
@@ -126,7 +129,7 @@ Deno.test("a z domain censors in 3D", () => {
 });
 
 Deno.test("a z domain does not censor geom_tile's z value channel", () => {
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(
       { x: [0, 1, 2], y: [0, 1, 2], z: [0, 1, 50] },
       { x: "x", y: "y", z: "z" },

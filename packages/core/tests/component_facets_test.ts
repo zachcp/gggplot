@@ -18,13 +18,13 @@ import {
   type NamedGeom,
 } from "../src/components/geoms.ts";
 import { FacetGrid, FacetWrap } from "../src/components/plot_parts.ts";
-import {
-  buildFacetPanels,
-  compile,
-  type RenderNode,
-} from "../src/compile/mod.ts";
+import { buildFacetPanels, type RenderNode } from "../src/compile/mod.ts";
 import type { SpecPart } from "../src/dsl/base.ts";
 import { ingest } from "../src/data/mod.ts";
+import {
+  assertCompileBaseline,
+  baselineName,
+} from "./support/compile_baseline.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
 import { componentProbe } from "../src/components/probe.ts";
 
@@ -71,7 +71,6 @@ function both(layers: Array<[Geom, Record<string, unknown>]>, facet: SpecPart) {
     root,
     caches,
     component: layoutRoot(root, LAYOUT, caches).tree,
-    compiled: compile({ ...base, layers: built }, { layout: LAYOUT }),
   };
 }
 
@@ -97,21 +96,27 @@ const FACETS: Array<[string, SpecPart]> = [
 ];
 
 for (const [name, facet] of FACETS) {
-  Deno.test(`facets on the component path match compile(): ${name}`, () => {
-    const { component, compiled } = both(LAYERS, facet);
-    assertEquals(plain(component), plain(compiled));
+  Deno.test(`facets on the component path match compile()'s saved tree: ${name}`, () => {
+    const { component } = both(LAYERS, facet);
+    assertCompileBaseline(
+      baselineName("facets", name),
+      plain(component),
+    );
   });
 }
 
-Deno.test("a per-panel stat runs once per panel and matches compile()", () => {
+Deno.test("a per-panel stat runs once per panel and matches compile()'s saved tree", () => {
   componentProbe.reset();
-  const { component, compiled } = both(
+  const { component } = both(
     [[GeomHistogram, { bins: 4 }]],
     FacetWrap.part({ vars: ["col"] }),
   );
   // One CPU partition per panel, each binned on its own rows.
   assertEquals(componentProbe.statCalls, 3);
-  assertEquals(plain(component), plain(compiled));
+  assertCompileBaseline(
+    "facets/per_panel_stat",
+    plain(component),
+  );
 });
 
 Deno.test("free scales train per panel", () => {

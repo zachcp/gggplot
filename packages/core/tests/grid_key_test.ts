@@ -2,16 +2,17 @@
 // Grid memoizes its LineLayer on the shader binding alone, so a mounted Grid
 // keeps drawing its old line count (found by the vnh.3 component-root spike).
 import { assert, assertEquals } from "@std/assert";
-import { compile, type RenderNode } from "../src/compile/mod.ts";
+import type { RenderNode } from "../src/compile/mod.ts";
 import { approximateTextMeasurer } from "../src/render/font_resources.ts";
 import { geomPoint, ggplot } from "../src/dsl/mod.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 const spec = ggplot({ x: [1.9, 4.1], y: [15, 27] }, { x: "x", y: "y" })
   .add(geomPoint())
   .build();
 
 function gridKeys(width: number): string[] {
-  const tree = compile(spec, {
+  const tree = assembleTree(spec, {
     layout: { width, height: 360, measureText: approximateTextMeasurer },
   });
   const keys: string[] = [];

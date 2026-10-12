@@ -1,7 +1,8 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import { geomLine, geomPath, ggplot } from "../src/dsl/mod.ts";
-import { compile } from "../src/compile/mod.ts";
+
 import type { FlatTensor, RenderNode } from "../src/compile/rendertree.ts";
+import { assembleTree } from "./support/assemble.ts";
 
 const data = {
   x: [2, 0, 1, 2, 0, 1],
@@ -11,7 +12,7 @@ const data = {
 };
 
 function lineNode(geom: ReturnType<typeof geomLine>): RenderNode {
-  const tree = compile(
+  const tree = assembleTree(
     ggplot(data, { x: "x", y: "y", z: "z", group: "group" }).add(geom)
       .build(),
   );
@@ -61,7 +62,7 @@ Deno.test("geomPath z mode preserves input order and validates mode limits", () 
   ]);
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(data, { x: "x", y: "y", z: "z" }).add(
           geomLine({ stat: "smooth" }),
         ).build(),
@@ -71,7 +72,7 @@ Deno.test("geomPath z mode preserves input order and validates mode limits", () 
   );
   assertThrows(
     () =>
-      compile(
+      assembleTree(
         ggplot(data, { x: "x", y: "y", z: "z" }).add(
           geomPath({ position: "jitter" }),
         ).build(),
