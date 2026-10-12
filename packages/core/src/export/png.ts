@@ -4,10 +4,8 @@ import * as UseGpuReact from "@use-gpu/react";
 import * as UseGpuLive from "@use-gpu/live";
 import * as UseGpuWebgpu from "@use-gpu/webgpu";
 import * as UseGpuWorkbench from "@use-gpu/workbench";
-import type { GGSpec } from "../ir/types.ts";
 import { GGPlot } from "../render/GGPlot.tsx";
 import type { FontResources } from "../render/font_resources.ts";
-import { resolvePlotDimension } from "../geom/mod.ts";
 import {
   type ExportUnit,
   pngDimensions,
@@ -36,6 +34,11 @@ export interface GgSaveOptions {
   backgroundColor?: GPUColor;
   fontResources?: FontResources;
   signal?: AbortSignal;
+  /**
+   * Whether the plot is 3D (it then owns its camera and passes). Inferred
+   * from the tree when omitted: any `mapping` with a z aesthetic.
+   */
+  dimensions?: 2 | 3;
 }
 
 interface BoundaryProps extends React.PropsWithChildren {
@@ -265,16 +268,48 @@ export async function saveLivePng(
   }
 }
 
-/** Render an explicit gggplot spec on a dedicated WebGPU target. */
-export function ggsave(spec: GGSpec, options: GgSaveOptions): Promise<Blob> {
-  return saveLivePng(
-    () =>
-      Live.createElement(GGPlot, {
-        spec,
-        interactive: false,
-        fontResources: options.fontResources,
-      }),
-    options,
-    { ownsPasses: resolvePlotDimension(spec).dimensions === 3 },
-  );
+type Element = { f: unknown; args?: unknown[] };
+
+const propsOf = (element: unknown): Record<string, unknown> | undefined => {
+  const node = element as Element | null;
+  return node && typeof node === "object" && "f" in node
+    ? (node.args?.[0] ?? {}) as Record<string, unknown>
+    : undefined;
+};
+
+/** Whether any element in the tree maps a z aesthetic. */
+function mapsZ(element: unknown): boolean {
+  if (Array.isArray(element)) return element.some(mapsZ);
+  const props = propsOf(element);
+  if (!props) return false;
+  const mapping = props.mapping as Record<string, unknown> | undefined;
+  if (mapping && ("z" in mapping || "zend" in mapping)) return true;
+  return mapsZ(props.children);
+}
+
+/**
+ * Render a component tree (a <GGPlot>, or a component that renders one) on a
+ * dedicated WebGPU target and return a PNG (gggplot-vnh.18: no GGSpec). A
+ * root <GGPlot> is rendered non-interactive with the export's fonts unless it
+ * sets either itself.
+ */
+export function ggsave(
+  plot: UseGpuLive.LiveElement,
+  options: GgSaveOptions,
+): Promise<Blob> {
+  const root = plot as unknown as Element;
+  const props = propsOf(plot);
+  const element = props && root.f === GGPlot
+    ? Live.createElement(GGPlot, {
+      interactive: false,
+      ...(options.fontResources
+        ? { fontResources: options.fontResources }
+        : {}),
+      ...props,
+    })
+    : plot;
+  const dimensions = options.dimensions ?? (mapsZ(plot) ? 3 : 2);
+  return saveLivePng(() => element, options, {
+    ownsPasses: dimensions === 3,
+  });
 }

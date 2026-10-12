@@ -4,15 +4,15 @@ import { LiveCanvas } from "@use-gpu/react";
 // scene returns a LiveElement, which React's JSX namespace rejects.
 import { createElement as liveElement } from "@gggplot/core/jsx";
 import {
-  aes,
-  geomLine,
-  geomPoint,
-  ggplot,
+  GeomLine,
+  GeomPoint,
   ingest,
-  scaleXContinuous,
-  theme,
+  ScaleXContinuous,
+  ThemeOverrides,
 } from "@gggplot/core";
-import { Scene } from "./scene.tsx";
+import type { LiveElement } from "@use-gpu/live";
+import { ChartScene } from "./chart_scene.tsx";
+import { SitePlot } from "./site_plot.tsx";
 
 /**
  * gggplot-tzc.8's dedicated instrumented route (?instrument): drives the
@@ -20,7 +20,7 @@ import { Scene } from "./scene.tsx";
  * (behind the SAME ?instrument flag) through the two acceptance scenarios
  * a browser-level driver (apps/site/scripts/gpu_instrument_check.ts) reads
  * back via `window.__gggplotInstrumentProbe()`:
- *   (i)  N re-renders of an UNCHANGED spec -> expect zero NEW mark-data
+ *   (i)  N re-renders of an UNCHANGED chart -> expect zero NEW mark-data
  *        buffer creations/writes (the mounted PackCache + useRawSource's
  *        own array/version-keyed memoization should both hit).
  *   (ii) a linear-scale x-domain change (gggplot-tzc.7) -> expect the SAME
@@ -29,14 +29,10 @@ import { Scene } from "./scene.tsx";
  *        GPU uniform/view write, which this counts separately and does NOT
  *        attribute to mark data).
  */
-// Pre-ingested ONCE at module scope (not per-build): compile/pack_cache.ts's
-// PackCache roots Stage A cache entries on the MAPPED COLUMN OBJECT's own
-// identity (a WeakMap<Column, ...>), not on data VALUES — calling ggplot()
-// on a raw (un-ingested) object re-ingests fresh Column wrappers on every
-// .build() call, which would make Stage A miss on every spec rebuild
-// regardless of whether the domain actually changed anything eligible. This
-// is the exact same "reuse the same underlying data columns across builds"
-// discipline pack_cache_test.ts/raw_position_domain_test.ts already use.
+// Pre-ingested ONCE at module scope (not per render): the root's caches key
+// on the column objects' identity, not their values, so a raw object
+// re-ingested on every render would miss them whether or not anything
+// changed. Reusing the same columns is what scenario (i) measures.
 const DATA = ingest({
   x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
   y: [1, 3, 2, 5, 4, 6, 3, 7, 5, 8],
@@ -79,23 +75,28 @@ export function InstrumentProbe(): React.ReactElement {
   const [, setRerenderTick] = useState(0);
   const [xDomainMax, setXDomainMax] = useState(9);
 
-  // The rerender tick is READ nowhere in the spec — bumping it forces this
-  // component (and GGPlot beneath it) to re-render with an UNCHANGED spec
-  // object, exercising scenario (i). xDomainMax IS read (via
-  // scaleXContinuous's domain), so bumping it forces a genuinely different
-  // spec/RenderTree recompile — exercising scenario (ii), gggplot-tzc.7's
+  // The rerender tick is READ nowhere in the chart — bumping it forces this
+  // component (and GGPlot beneath it) to re-render with an UNCHANGED chart,
+  // exercising scenario (i). xDomainMax IS read (via <ScaleXContinuous>'s
+  // domain), so bumping it retrains the plot — scenario (ii), gggplot-tzc.7's
   // domain-only-change path.
-  const spec = useMemo(
-    () =>
-      ggplot(DATA, aes({ x: "x", y: "y" }))
-        .add(geomPoint({ size: 4 }))
-        .add(geomLine())
-        .add(scaleXContinuous({ domain: [0, xDomainMax] }))
+  const chart = useMemo(
+    () => (): LiveElement =>
+      liveElement(
+        SitePlot,
+        { data: DATA, mapping: { x: "x", y: "y" } },
+        liveElement(GeomPoint, { size: 4 }),
+        liveElement(GeomLine, {}),
+        liveElement(ScaleXContinuous, { domain: [0, xDomainMax] }),
         // This probe measures mark-data uploads, so exclude guide/font vertex
         // buffers from the surface rather than mixing unrelated allocations
         // into the browser gate.
-        .add(theme({ axes: false, axisTitles: false, grid: false }))
-        .build(),
+        liveElement(ThemeOverrides, {
+          axes: false,
+          axisTitles: false,
+          grid: false,
+        }),
+      ),
     [xDomainMax],
   );
 
@@ -143,7 +144,8 @@ export function InstrumentProbe(): React.ReactElement {
       style={{ width: 480, height: 360 }}
     >
       <LiveCanvas>
-        {(canvas: HTMLCanvasElement) => liveElement(Scene, { canvas, spec })}
+        {(canvas: HTMLCanvasElement) =>
+          liveElement(ChartScene, { canvas, chart })}
       </LiveCanvas>
     </div>
   );

@@ -3,25 +3,18 @@ import { LiveCanvas } from "@use-gpu/react";
 // Live elements are built with the typed factory, not React JSX: a Live
 // scene returns a LiveElement, which React's JSX namespace rejects.
 import { createElement as liveElement } from "@gggplot/core/jsx";
-import type { GGSpec } from "@gggplot/core";
 import type { LiveElement } from "@use-gpu/live";
-import { Scene } from "./scene.tsx";
 import { ChartScene } from "./chart_scene.tsx";
 
 /** React host for the WebGPU Live plot scene. */
 export function ChartCanvas(
   {
-    spec,
     chart,
     label,
     forceFailure = false,
   }: {
-    /**
-     * A component-form `chart`, or a programmatically built spec (rendered
-     * through the component root by Scene; no compile()).
-     */
-    spec?: GGSpec;
-    chart?: () => LiveElement;
+    /** The chart: a Live component rendering a <GGPlot> tree. */
+    chart: () => LiveElement;
     label: string;
     forceFailure?: boolean;
   },
@@ -37,9 +30,7 @@ export function ChartCanvas(
         {forceFailure ? <ForcedChartFailure /> : null}
         <LiveCanvas>
           {(canvas: HTMLCanvasElement) =>
-            chart
-              ? liveElement(ChartScene, { canvas, chart })
-              : liveElement(Scene, { canvas, spec: spec! })}
+            liveElement(ChartScene, { canvas, chart })}
         </LiveCanvas>
       </div>
     </ChartErrorBoundary>

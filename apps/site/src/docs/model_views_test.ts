@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import { compile } from "@gggplot/core/compile";
+import { printJsx } from "@gggplot/core";
 import {
   buildTensorContentProduct,
   ByteArrayTensorSource,
@@ -8,19 +8,24 @@ import {
 import {
   hasMatrixCells,
   tensorInventory,
-  tensorInventorySpec,
-  tensorMatrixSpec,
+  tensorInventoryChart,
+  tensorMatrixChart,
   trailingMatrixRequest,
-} from "../model_tensor_views.ts";
+} from "../model_tensor_views.tsx";
 
-const layout = {
-  width: 640,
-  height: 360,
-  measureText: (text: string, size: number) => ({
-    width: text.length * size * 0.6,
-    height: size,
-  }),
-};
+import { SitePlot } from "../site_plot.tsx";
+
+/** A chart printed as JSX, its data rows passed by reference as `rows`. */
+function printed(chart: Parameters<typeof printJsx>[0]) {
+  const props = (chart as unknown as { args: [{ data: unknown[] }] }).args[0];
+  return {
+    source: printJsx(chart, {
+      refs: new Map([[props.data, "rows"]]),
+      names: new Map([[SitePlot, "GGPlot"]]),
+    }).source,
+    rows: props.data,
+  };
+}
 
 const modelBytes = async () =>
   new Uint8Array(
@@ -57,12 +62,20 @@ Deno.test("parameter inventory ranks tensors by stored bytes", async () => {
   assertEquals(entries.length, Math.min(entries.length, 12));
 });
 
-Deno.test("inventory spec compiles to a bar per tensor", async () => {
+Deno.test("inventory chart draws a bar per tensor", async () => {
   const { inspection } = await inspected();
-  const spec = tensorInventorySpec(inspection.document, 5)!;
-  assert(spec, "inventory spec should exist for a model with parameters");
-  const tree = compile(spec, { layout });
-  assert(tree.children.length > 0, "inventory should render a render tree");
+  const chart = tensorInventoryChart(inspection.document, 5);
+  assert(chart, "inventory chart should exist for a model with parameters");
+  const { source, rows } = printed(chart);
+  assertEquals(
+    source,
+    `<GGPlot data={rows} mapping={{ x: "tensor", y: "kilobytes" }}>
+  <GeomCol fill="#60a5fa" />
+  <Labs title="Parameter bytes by tensor" x="tensor" y="KiB" />
+  <ThemeMinimal />
+</GGPlot>`,
+  );
+  assertEquals(rows.length, tensorInventory(inspection.document, 5).length);
 });
 
 Deno.test("matrix view lowers a bounded tensor product to a heatmap", async () => {
@@ -79,12 +92,14 @@ Deno.test("matrix view lowers a bounded tensor product to a heatmap", async () =
   // vacuously the way an early return would.
   assertEquals(product.representation, "downsample");
   assertEquals(hasMatrixCells(product), true);
-  const spec = tensorMatrixSpec(product)!;
-  assert(spec, "a product with cells must produce a spec");
-  const tree = compile(spec, { layout });
-  assert(tree.children.length > 0, "matrix should render a render tree");
+  const chart = tensorMatrixChart(product);
+  assert(chart, "a product with cells must produce a chart");
+  const { source, rows: cells } = printed(chart);
+  assert(source.includes("<GeomRaster />"), source);
+  assert(source.includes('mapping={{ x: "column", y: "row", fill: "value" }}'));
   const [rows, columns] = product.gridShape!;
   assertEquals(product.values!.length, rows * columns);
+  assertEquals(cells.length, rows * columns);
 });
 
 Deno.test("trailing axes are derived from rank, not assumed", () => {
@@ -105,9 +120,9 @@ Deno.test("trailing axes are derived from rank, not assumed", () => {
   });
 });
 
-Deno.test("a summary-only product yields no matrix spec", () => {
+Deno.test("a summary-only product yields no matrix chart", () => {
   assertEquals(
-    tensorMatrixSpec({
+    tensorMatrixChart({
       kind: "matrix_content",
       target: { kind: "tensor", tensorId: "t0" },
       representation: "summary",

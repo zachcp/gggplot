@@ -1,14 +1,16 @@
 import React, { useState } from "react";
-import { geomHistogram, ggplot, ingest } from "@gggplot/core";
-import type { GGSpec } from "@gggplot/core";
+import { createElement as liveElement } from "@gggplot/core/jsx";
+import { GeomHistogram, ingest } from "@gggplot/core";
+import type { LiveElement } from "@use-gpu/live";
 import { ChartCanvas } from "./ChartCanvas.tsx";
+import { SitePlot } from "./site_plot.tsx";
 
 const ROW_OPTIONS = [100_000, 1_000_000] as const;
 
 /** Lazy, explicit generated-data route; no rows exist until the button is used. */
 export function PerformanceProbe(): React.ReactElement {
   const [rows, setRows] = useState<number>(ROW_OPTIONS[0]);
-  const [spec, setSpec] = useState<GGSpec>();
+  const [chart, setChart] = useState<() => LiveElement>();
   const [generated, setGenerated] = useState<{ rows: number; ms: number }>();
   const [running, setRunning] = useState(false);
 
@@ -23,11 +25,13 @@ export function PerformanceProbe(): React.ReactElement {
         x[i] = Math.sin(i * 0.017) * 1.8 + Math.sin(i * 0.003) * 0.7;
       }
       const data = ingest({ x });
-      setSpec(
-        ggplot(data, { x: "x" })
-          .add(geomHistogram({ bins: 64, fill: "#2563eb" }))
-          .build(),
+      const element = liveElement(
+        SitePlot,
+        { data, mapping: { x: "x" } },
+        liveElement(GeomHistogram, { bins: 64, fill: "#2563eb" }),
       );
+      // A function value goes into state through an updater.
+      setChart(() => () => element);
       setGenerated({ rows, ms: performance.now() - started });
       setRunning(false);
     });
@@ -81,10 +85,10 @@ export function PerformanceProbe(): React.ReactElement {
             Idle: zero generated rows.
           </p>
         )}
-      {spec
+      {chart
         ? (
           <ChartCanvas
-            spec={spec}
+            chart={chart}
             label={`Resident histogram over ${generated?.rows.toLocaleString()} generated observations`}
           />
         )

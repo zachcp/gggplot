@@ -2,8 +2,36 @@
 
 gggplot is moving from "compile a spec, then render the tree" to Use.GPU Live
 components you compose yourself (epic `gggplot-vnh`). This guide collects what
-changes for hosts and users, one section per change as it lands. The `GGSpec` +
-DSL path keeps working throughout: `<GGPlot spec>` stays a supported facade.
+changes for hosts and users, one section per change as it lands.
+
+## Removed: GGSpec, the DSL, `compile`, `renderTree`, `emitSource`
+
+ADR-007 removes the spec path outright, with no deprecation window
+(gggplot-vnh.18). `@gggplot/core` no longer exports:
+
+- the `GGSpec` type;
+- the fluent DSL (`ggplot`, `aes`, `geom*`, `scale*`, `coord*`, `facet*`,
+  `theme*`, `labels`, `execution`, `camera3d*`);
+- `compile` and `renderTree`;
+- the `./dsl` and `./compile` entry points.
+
+`<GGPlot spec>` is gone. The sections below show the component form of each
+piece, with the old DSL beside the new JSX.
+
+| Before                                | After                                        |
+| ------------------------------------- | -------------------------------------------- |
+| `ggplot(data, aes({ x: "wt" }))`      | `<GGPlot data={data} mapping={{ x: "wt" }}>` |
+| `.add(geomPoint({ size: 3 }))`        | `<GeomPoint size={3} />`                     |
+| `.add(scaleXLog10(), themeMinimal())` | `<ScaleXLog10 />`, `<ThemeMinimal />`        |
+| `.add(labels({ title: "T" }))`        | `<Labs title="T" />`                         |
+| `<GGPlot spec={spec} />`              | the `<GGPlot>` tree itself                   |
+| `ggsave(spec, options)`               | `ggsave(<GGPlot ...>...</GGPlot>, options)`  |
+| `emitSource(compile(spec))`           | `printJsx(tree, { refs })`                   |
+| `gggplot compile spec.ts`             | `gggplot print chart.tsx`                    |
+
+`ggsave` infers 3D from a `z` mapping anywhere in the tree, or takes
+`dimensions: 3`. On a root `<GGPlot>` it sets `interactive={false}` and the
+export's fonts, unless the tree already sets them.
 
 ## Typed Live JSX (`@gggplot/core/jsx`)
 

@@ -1,54 +1,40 @@
 /** @jsxRuntime classic */
 /** @jsx Jsx.createElement */
-// The component-form GGPlot root realizes Scene3D's orbit and flat-overlay
-// passes; callers still provide a GGSpec, mapped to components here. Extras
-// (prism instances, the scene picker) draw in the scene's data space through
-// <GGPanel> (gggplot-icxo).
+// Hosts a component-form 3D chart (a <GGPlot> tree mapping z) on the WebGPU
+// canvas. Extras (prism instances, the scene picker) draw in the scene's data
+// space through <GGPanel> (gggplot-icxo); the chart places that panel inside
+// its own plot.
 import * as Jsx from "@gggplot/core/jsx";
 import type { LiveElement } from "@use-gpu/live";
 import { AutoCanvas, WebGPU } from "@use-gpu/webgpu";
 import {
   GGPanel,
-  GGPlot,
-  type GGSpec,
   type PrismInstance3D,
   PrismInstances3D,
   ScenePicker,
   type ScenePickPublish,
 } from "@gggplot/core";
-import { withSiteChartTheme3d } from "./chart_theme.ts";
-import { specChildren } from "./spec_components.tsx";
+
+/**
+ * A 3D chart. `panel`, when given, is a <GGPanel> of host extras to render
+ * inside the chart's <GGPlot>; charts without extras ignore it.
+ */
+export type Chart3D = (panel?: LiveElement) => LiveElement;
 
 interface Props {
   canvas: HTMLCanvasElement;
-  /** A spec to map to components, or a component-form `chart` to render. */
-  spec?: GGSpec;
-  chart?: () => LiveElement;
+  chart: Chart3D;
   prismInstances?: readonly PrismInstance3D[];
   /** When present, receives the scene's pointer-to-ray function. */
   publishPick?: ScenePickPublish;
 }
 
-export { fontResources3d as fontResources } from "./site_fonts.ts";
-import { fontResources3d as fontResources } from "./site_fonts.ts";
-
 export const Scene3D = (
-  { canvas, spec, chart, prismInstances, publishPick }: Props,
+  { canvas, chart, prismInstances, publishPick }: Props,
 ) => {
-  if (chart) {
-    // A component-form showcase (gggplot-vnh.10.1) is its own <GGPlot> tree.
-    return (
-      <WebGPU fallback={null}>
-        <AutoCanvas canvas={canvas} backgroundColor={[0.05, 0.05, 0.07, 1]}>
-          {Jsx.createElement(chart, {})}
-        </AutoCanvas>
-      </WebGPU>
-    );
-  }
   // Both extras sit inside the scene's Cartesian, where <GGPanel> content
   // draws: the prisms to share its transform, the picker to read the 3D
   // camera's ViewContext rather than the flat overlay's.
-  const themed = withSiteChartTheme3d(spec!);
   const extras = [
     ...(prismInstances?.length
       ? [Jsx.createElement(PrismInstances3D, { instances: prismInstances })]
@@ -60,16 +46,7 @@ export const Scene3D = (
   return (
     <WebGPU fallback={null}>
       <AutoCanvas canvas={canvas} backgroundColor={[0.05, 0.05, 0.07, 1]}>
-        <GGPlot
-          data={themed.data}
-          mapping={themed.mapping}
-          theme={themed.theme}
-          labels={themed.labels}
-          fontResources={fontResources}
-        >
-          {specChildren(themed)}
-          {extras.length ? <GGPanel>{extras}</GGPanel> : null}
-        </GGPlot>
+        {chart(extras.length ? <GGPanel>{extras}</GGPanel> : undefined)}
       </AutoCanvas>
     </WebGPU>
   );

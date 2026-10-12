@@ -12,11 +12,12 @@ import {
 } from "./model_fixtures.ts";
 import {
   modelScene3d,
+  modelScene3dChart,
   modelScene3dPrisms,
-  modelScene3dSpec,
-} from "./model_scene_3d.ts";
+} from "./model_scene_3d.tsx";
 import { pickSceneEntity } from "@gggplot/model-inspect";
 import type { SceneRay } from "@gggplot/core";
+import type { LiveElement } from "@use-gpu/live";
 import type { ScenePickPhase } from "./ChartCanvas3D.tsx";
 import { ModelTensorInspector } from "./ModelTensorInspector.tsx";
 import { Panel } from "./ExampleSection.tsx";
@@ -233,7 +234,10 @@ function ModelScene(
   // re-renders only the readout below.
   const [hoveredEntityId, setHoveredEntityId] = React.useState<string>();
   const scene = React.useMemo(() => modelScene3d(document), [document]);
-  const spec = React.useMemo(() => modelScene3dSpec(scene), [scene]);
+  const chart = React.useCallback(
+    (panel?: LiveElement) => modelScene3dChart(scene, panel),
+    [scene],
+  );
   const prisms = React.useMemo(() => modelScene3dPrisms(scene), [scene]);
 
   const handlePick = React.useCallback(
@@ -259,7 +263,7 @@ function ModelScene(
   return (
     <>
       <MemoizedCanvas3D
-        spec={spec}
+        chart={chart}
         prismInstances={prisms}
         label={"3D ONNX tensor and connector scene for " + document.name}
         onPick={handlePick}

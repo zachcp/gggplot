@@ -8,16 +8,19 @@ import {
   MODEL_TENSOR_INVENTORY_EXTENSION,
   MODEL_TENSOR_MATRIX_EXTENSION,
 } from "@gggplot/model-inspect";
-import { modelGraphSpec } from "./model_graph.ts";
-import { modelScene3dSpec } from "./model_scene_3d.ts";
-import { tensorInventorySpec, tensorMatrixSpec } from "./model_tensor_views.ts";
+import { modelGraphChart } from "./model_graph.tsx";
+import { modelScene3dChart } from "./model_scene_3d.tsx";
+import {
+  tensorInventoryChart,
+  tensorMatrixChart,
+} from "./model_tensor_views.tsx";
 
 /**
  * Where the portable definitions meet a renderer.
  *
  * @gggplot/model-inspect declares `cpu` only — it computes products and does
- * not draw them. The spec builders that turn those products into a gggplot
- * chart live here, in the host, so neither core nor the inspection package
+ * not draw them. The chart builders that turn those products into gggplot
+ * component trees live here, in the host, so neither core nor the inspection package
  * carries framework-specific rendering. Registering them as `live`/`emit`
  * adapters is what makes that boundary explicit rather than conventional.
  *
@@ -25,10 +28,10 @@ import { tensorInventorySpec, tensorMatrixSpec } from "./model_tensor_views.ts";
  * source can resolve the same builder without this module being present.
  */
 const LIVE_BUILDERS: Record<string, unknown | undefined> = {
-  [MODEL_GRAPH_EXTENSION.id]: modelGraphSpec,
-  [MODEL_SCENE_3D_EXTENSION.id]: modelScene3dSpec,
-  [MODEL_TENSOR_INVENTORY_EXTENSION.id]: tensorInventorySpec,
-  [MODEL_TENSOR_MATRIX_EXTENSION.id]: tensorMatrixSpec,
+  [MODEL_GRAPH_EXTENSION.id]: modelGraphChart,
+  [MODEL_SCENE_3D_EXTENSION.id]: modelScene3dChart,
+  [MODEL_TENSOR_INVENTORY_EXTENSION.id]: tensorInventoryChart,
+  [MODEL_TENSOR_MATRIX_EXTENSION.id]: tensorMatrixChart,
 };
 
 const EMIT_EXPORTS: Record<
@@ -36,20 +39,20 @@ const EMIT_EXPORTS: Record<
   { importFrom: string; exportName: string } | undefined
 > = {
   [MODEL_GRAPH_EXTENSION.id]: {
-    importFrom: "./model_graph.ts",
-    exportName: "modelGraphSpec",
+    importFrom: "./model_graph.tsx",
+    exportName: "modelGraphChart",
   },
   [MODEL_SCENE_3D_EXTENSION.id]: {
-    importFrom: "./model_scene_3d.ts",
-    exportName: "modelScene3dSpec",
+    importFrom: "./model_scene_3d.tsx",
+    exportName: "modelScene3dChart",
   },
   [MODEL_TENSOR_INVENTORY_EXTENSION.id]: {
-    importFrom: "./model_tensor_views.ts",
-    exportName: "tensorInventorySpec",
+    importFrom: "./model_tensor_views.tsx",
+    exportName: "tensorInventoryChart",
   },
   [MODEL_TENSOR_MATRIX_EXTENSION.id]: {
-    importFrom: "./model_tensor_views.ts",
-    exportName: "tensorMatrixSpec",
+    importFrom: "./model_tensor_views.tsx",
+    exportName: "tensorMatrixChart",
   },
 };
 

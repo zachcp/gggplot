@@ -1,30 +1,37 @@
 import { lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
+import { createElement as liveElement } from "@gggplot/core/jsx";
 import {
-  geomLine,
-  geomPath,
-  geomPoint,
-  ggplot,
+  GeomLine,
+  GeomPath,
+  GeomPoint,
+  GGPlot,
   ggsave,
   type GgSaveOptions,
-  labels,
+  Labs,
   pngDimensions,
 } from "@gggplot/core";
 import { scatterData } from "./docs/data/demo.ts";
 import { helixData } from "./docs/example_3d.tsx";
 import { InstrumentProbe } from "./InstrumentProbe.tsx";
 
-// The export probe's charts (the ScatterLine and Helix3D examples). ggsave
-// still takes a spec; it moves onto component trees with gggplot-vnh.18.
-const SCATTER_SPEC = ggplot(scatterData, { x: "wt", y: "mpg" })
-  .add(geomPoint({ size: 6, color: "#3b82f6" }), geomLine({ color: "#ef4444" }))
-  .build();
-const HELIX_SPEC = ggplot(helixData, { x: "x", y: "y", z: "z", color: "band" })
-  .add(
-    geomPath({ linewidth: 3, alpha: 0.7 }),
-    geomPoint({ size: 24 }),
-    labels({
+// The export probe's charts (the ScatterLine and Helix3D examples), as the
+// component trees ggsave takes.
+const scatterPlot = () =>
+  liveElement(
+    GGPlot,
+    { data: scatterData, mapping: { x: "wt", y: "mpg" } },
+    liveElement(GeomPoint, { size: 6, color: "#3b82f6" }),
+    liveElement(GeomLine, { color: "#ef4444" }),
+  );
+const helixPlot = () =>
+  liveElement(
+    GGPlot,
+    { data: helixData, mapping: { x: "x", y: "y", z: "z", color: "band" } },
+    liveElement(GeomPath, { linewidth: 3, alpha: 0.7 }),
+    liveElement(GeomPoint, { size: 24 }),
+    liveElement(Labs, {
       title: "Helix",
       subtitle: "x/z trace a circle while y climbs",
       x: "cos(t)",
@@ -32,8 +39,7 @@ const HELIX_SPEC = ggplot(helixData, { x: "x", y: "y", z: "z", color: "band" })
       z: "sin(t)",
       color: "band",
     }),
-  )
-  .build();
+  );
 
 const PerformanceProbe = lazy(() =>
   import("./PerformanceProbe.tsx").then((module) => ({
@@ -88,8 +94,8 @@ if (exportProbeMode) {
       backgroundColor: [1, 1, 1, 1],
     };
     const blob = exportProbeMode === "3d"
-      ? await ggsave(HELIX_SPEC, options)
-      : await ggsave(SCATTER_SPEC, options);
+      ? await ggsave(helixPlot(), options)
+      : await ggsave(scatterPlot(), options);
     const bytes = new Uint8Array(await blob.arrayBuffer());
     return {
       type: blob.type,

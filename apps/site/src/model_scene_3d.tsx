@@ -1,14 +1,14 @@
+/** @jsxRuntime classic */
+/** @jsx Jsx.createElement */
+import * as Jsx from "@gggplot/core/jsx";
 import {
-  aes,
-  camera3dFit,
-  geomPath,
-  ggplot,
-  type GGSpec,
-  theme,
-} from "@gggplot/core/dsl";
-// Type-only, so the renderer is erased at runtime and this module stays
-// headless while still describing the prisms the host will draw.
-import type { PrismInstance3D } from "@gggplot/core";
+  Camera3dFit,
+  GeomPath,
+  type PrismInstance3D,
+  ThemeOverrides,
+} from "@gggplot/core";
+import type { LiveElement } from "@use-gpu/live";
+import { SitePlot3D } from "./site_plot.tsx";
 import {
   buildModelScene3D,
   type ModelDocument,
@@ -124,7 +124,11 @@ export function modelScene3dPrisms(
 }
 
 /** Lower bounded 3D scene instances into the existing orbit-enabled WebGPU host. */
-export function modelScene3dSpec(source: ModelDocument | ModelScene3D): GGSpec {
+export function modelScene3dChart(
+  source: ModelDocument | ModelScene3D,
+  /** Host extras (a <GGPanel>: prisms, the picker) drawn in the scene. */
+  panel?: LiveElement,
+): LiveElement {
   const scene = sceneOf(source);
   const slabFrames = scene.slabs.flatMap((slab, index) =>
     prismEdges(slab.center, slab.size, index * 12)
@@ -135,40 +139,48 @@ export function modelScene3dSpec(source: ModelDocument | ModelScene3D): GGSpec {
   const connectors: SceneRow[] = scene.connectors.flatMap((connector, group) =>
     connector.points.map(([x, y, z]) => ({ x, y, z, kind: "connector", group }))
   );
-  return ggplot(slabFrames, aes({ x: "x", y: "y", z: "z" })).add(
-    geomPath({
-      data: slabFrames,
-      mapping: aes({ x: "x", y: "y", z: "z", group: "group" }),
-      inheritAes: false,
-      color: "#93c5fd",
-      linewidth: 1,
-      alpha: 0.44,
-    }),
-    geomPath({
-      data: moduleFrames,
-      mapping: aes({ x: "x", y: "y", z: "z", group: "group" }),
-      inheritAes: false,
-      // Keep module frames quiet: category color belongs to the filled tensor
-      // cells, while the frame only establishes the module boundary.
-      color: "#64748b",
-      linewidth: 1.25,
-      alpha: 0.62,
-    }),
-    geomPath({
-      data: connectors,
-      mapping: aes({ x: "x", y: "y", z: "z", group: "group" }),
-      inheritAes: false,
-      color: "#2dd4bf",
-      linewidth: 3,
-      alpha: 0.9,
-    }),
-    theme({ grid: false }),
-    // The default camera targets the origin at radius 3.6, which frames the
-    // normalized plot cube. This scene is laid out in real units, spans tens of
-    // them, and is nowhere near the origin, so without a fit it renders
-    // off-centre and cropped (gggplot-o2x). Aspect is left at the default: the
-    // canvas is fluid-width with a fixed height, so it is not known here, and
-    // the conservative fit is never tighter than the viewport allows.
-    camera3dFit(scene.bounds),
-  ).build();
+  return (
+    <SitePlot3D data={slabFrames} mapping={{ x: "x", y: "y", z: "z" }}>
+      <GeomPath
+        data={slabFrames}
+        mapping={{ x: "x", y: "y", z: "z", group: "group" }}
+        inheritAes={false}
+        color="#93c5fd"
+        linewidth={1}
+        alpha={0.44}
+      />
+      {
+        /* Keep module frames quiet: category color belongs to the filled
+          tensor cells, while the frame only establishes the module boundary. */
+      }
+      <GeomPath
+        data={moduleFrames}
+        mapping={{ x: "x", y: "y", z: "z", group: "group" }}
+        inheritAes={false}
+        color="#64748b"
+        linewidth={1.25}
+        alpha={0.62}
+      />
+      <GeomPath
+        data={connectors}
+        mapping={{ x: "x", y: "y", z: "z", group: "group" }}
+        inheritAes={false}
+        color="#2dd4bf"
+        linewidth={3}
+        alpha={0.9}
+      />
+      <ThemeOverrides grid={false} />
+      {
+        /* The default camera targets the origin at radius 3.6, which frames
+          the normalized plot cube. This scene is laid out in real units, spans
+          tens of them, and is nowhere near the origin, so without a fit it
+          renders off-centre and cropped (gggplot-o2x). Aspect is left at the
+          default: the canvas is fluid-width with a fixed height, so it is not
+          known here, and the conservative fit is never tighter than the
+          viewport allows. */
+      }
+      <Camera3dFit bounds={scene.bounds} />
+      {panel ?? null}
+    </SitePlot3D>
+  );
 }

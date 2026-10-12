@@ -1,21 +1,16 @@
-// The grammar only — a spec builder has no business importing the renderer,
-// and the narrower entry keeps these views testable headlessly.
-import {
-  aes,
-  geomCol,
-  geomRaster,
-  ggplot,
-  labels,
-  themeMinimal,
-} from "@gggplot/core/dsl";
-import type { GGSpec } from "@gggplot/core/dsl";
+/** @jsxRuntime classic */
+/** @jsx Jsx.createElement */
+import * as Jsx from "@gggplot/core/jsx";
+import { GeomCol, GeomRaster, Labs, ThemeMinimal } from "@gggplot/core";
+import type { LiveElement } from "@use-gpu/live";
+import { SitePlot } from "./site_plot.tsx";
 import type {
   ModelDocument,
   TensorContentProduct,
 } from "@gggplot/model-inspect";
 
 /**
- * View builders that lower inspection products into gggplot specs.
+ * View builders that lower inspection products into gggplot component trees.
  *
  * These live beside the docs site rather than inside @gggplot/model-inspect:
  * the package is renderer-neutral and has no dependency on @gggplot/core, and
@@ -38,9 +33,9 @@ export function hasMatrixCells(product: TensorContentProduct): boolean {
  * too large to show cell-by-cell, that decision stays made, and the caller
  * renders the summary instead.
  */
-export function tensorMatrixSpec(
+export function tensorMatrixChart(
   product: TensorContentProduct,
-): GGSpec | undefined {
+): LiveElement | undefined {
   if (!hasMatrixCells(product)) return undefined;
   const values = product.values!;
   const [rows, columns] = product.gridShape!;
@@ -56,16 +51,18 @@ export function tensorMatrixSpec(
   }
   if (cells.length === 0) return undefined;
   const name = product.descriptor.name ?? product.descriptor.id;
-  return ggplot(cells, aes({ x: "column", y: "row", fill: "value" }))
-    .add(geomRaster())
-    .add(labels({
-      title: `${name} · ${product.representation}`,
-      x: "column",
-      y: "row",
-      fill: "value",
-    }))
-    .add(themeMinimal())
-    .build();
+  return (
+    <SitePlot data={cells} mapping={{ x: "column", y: "row", fill: "value" }}>
+      <GeomRaster />
+      <Labs
+        title={`${name} · ${product.representation}`}
+        x="column"
+        y="row"
+        fill="value"
+      />
+      <ThemeMinimal />
+    </SitePlot>
+  );
 }
 
 /**
@@ -126,23 +123,21 @@ export function tensorInventory(
     .slice(0, limit);
 }
 
-export function tensorInventorySpec(
+export function tensorInventoryChart(
   document: ModelDocument,
   limit = 12,
-): GGSpec | undefined {
+): LiveElement | undefined {
   const entries = tensorInventory(document, limit);
   if (entries.length === 0) return undefined;
   const rows = entries.map((entry) => ({
     tensor: entry.label,
     kilobytes: entry.byteLength / 1024,
   }));
-  return ggplot(rows, aes({ x: "tensor", y: "kilobytes" }))
-    .add(geomCol({ fill: "#60a5fa" }))
-    .add(labels({
-      title: "Parameter bytes by tensor",
-      x: "tensor",
-      y: "KiB",
-    }))
-    .add(themeMinimal())
-    .build();
+  return (
+    <SitePlot data={rows} mapping={{ x: "tensor", y: "kilobytes" }}>
+      <GeomCol fill="#60a5fa" />
+      <Labs title="Parameter bytes by tensor" x="tensor" y="KiB" />
+      <ThemeMinimal />
+    </SitePlot>
+  );
 }

@@ -17,31 +17,29 @@ import {
   ScaleXLog10,
   ThemeMinimal,
 } from "@gggplot/core";
-import type { GGSpec } from "@gggplot/core";
 import * as Jsx from "@gggplot/core/jsx";
 
-export function UserPlot({ spec }: { spec: GGSpec }): LiveElement {
-  return <GGPlot spec={spec} />;
+export function UserPlot(
+  { data }: { data: Record<string, number[]> },
+): LiveElement {
+  return <GGPlot data={data} mapping={{ x: "x" }} />;
 }
 
 // @ts-expect-error GGPlot has no `wrongProp` prop; this must not type-check.
-export const wrongProp = <GGPlot spec={{} as GGSpec} wrongProp={1} />;
+export const wrongProp = <GGPlot mapping={{ x: "x" }} wrongProp={1} />;
 
 // Without JSX: the same check, for plain .ts callers.
 export const viaFactory: LiveElement = Jsx.createElement(GGPlot, {
-  spec: {} as GGSpec,
+  mapping: { x: "wt" },
 });
 // @ts-expect-error GGPlot has no `wrongProp` prop.
 export const wrongViaFactory = Jsx.createElement(GGPlot, {
-  spec: {} as GGSpec,
+  mapping: { x: "wt" },
   wrongProp: 1,
 });
-// The component form takes plot parts, not a spec: the two do not mix.
-// @ts-expect-error `spec` and `mapping` belong to different forms of GGPlot.
-export const mixedForms = Jsx.createElement(GGPlot, {
-  spec: {} as GGSpec,
-  mapping: { x: "wt" },
-});
+// There is no spec form (gggplot-vnh.18): a GGSpec is not a GGPlot prop.
+// @ts-expect-error GGPlot takes components, not a `spec`.
+export const specForm = Jsx.createElement(GGPlot, { spec: {} });
 
 // Named geoms (gggplot-8hz): props are typed per geom family.
 export function ComponentPlot(): LiveElement {
