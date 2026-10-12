@@ -1,6 +1,8 @@
 # ADR 007: Components are the only authoring form
 
-Status: accepted (signed off by the user, 2026-10-10)\
+Status: accepted (signed off by the user, 2026-10-10); implemented 2026-10-11 on
+`feature/component-first-vnh` (GGSpec, the DSL, `compile`, `renderTree` and
+`emitSource` removed from the public API; `printJsx` replaces the emitter)\
 Decision bead: `gggplot-vnh.1`\
 Epic: `gggplot-vnh` (component-first architecture)\
 Supersedes: the RenderTree-first positioning recorded by `gggplot-1be.6`

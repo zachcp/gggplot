@@ -85,7 +85,7 @@ export const docPages: DocPage[] = [
     section: "representations",
     title: "Representations",
     summary:
-      "How high-level geoms lower to points, lines, polygons, tiles, and labels in the RenderTree.",
+      "How high-level geoms lower to points, lines, polygons, tiles, and labels on the GPU.",
     examples: [
       scatterLine,
       pathOrder,
@@ -241,7 +241,7 @@ export const docPages: DocPage[] = [
     section: "annotations",
     title: "Annotations",
     summary:
-      "Literal non-inherited layers and reference lines are compiled alongside data-driven marks.",
+      "Literal non-inherited layers and reference lines are drawn alongside data-driven marks.",
     narrative: [
       {
         heading: 'annotate("segment")',
@@ -279,7 +279,7 @@ export const docPages: DocPage[] = [
     section: "internals",
     title: "Internals",
     summary:
-      "Trace examples through raw data, stat rows, RenderTree nodes, and emitted UseGPU Live source.",
+      "Trace examples through raw data, stat rows, the component JSX, and live GPU execution.",
     narrative: [
       {
         heading: "Resident execution boundary",
@@ -378,7 +378,7 @@ export const docPages: DocPage[] = [
       {
         heading: "Where is the architecture reference?",
         body:
-          "The repository's docs/ARCHITECTURE.md remains the normative contributor reference for the IR, compiler, RenderTree, and backend boundary. This Internals page is the reader-facing complement and states the same residency rules in the context of live examples.",
+          "The repository's docs/ARCHITECTURE.md remains the normative contributor reference for the component tiers, the root's prepare/train/layout phases, and the CPU/GPU boundary. This Internals page is the reader-facing complement and states the same residency rules in the context of live examples.",
       },
     ],
     examples: [mtcarsLineStyles, histogramStatBin],

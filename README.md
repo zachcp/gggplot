@@ -1,25 +1,44 @@
 # gggplot
 
-A **ggplot → [UseGPU](https://usegpu.live) Live** transpiler, built as a Deno
-workspace. Write a grammar-of-graphics spec; get a GPU-rendered chart — either
-live in the browser or emitted as standalone `@use-gpu/plot` source.
+The grammar of graphics as composable **[Use.GPU](https://usegpu.live) Live
+components**, built as a Deno workspace. A plot is a component tree: data,
+layers, scales, coords, facets and themes are elements you compose, and the tree
+renders on WebGPU next to any other Live component.
 
-"GPU-rendered" describes the shared rendering backend, not a claim that every
-stat and transform is already GPU-resident. Eligible bin/count products use a
-resident aggregate-to-mark path; other plots use a CPU pack-once path whose
-stable GPU sources avoid re-upload while their data identity and pack keys stay
-unchanged. See the
+```tsx
+/** @jsxRuntime classic */
+/** @jsx Jsx.createElement */
+import * as Jsx from "@gggplot/core/jsx";
+import { GeomPoint, GeomSmooth, GGPlot, Labs, ScaleColor } from "@gggplot/core";
+
+export const chart = (
+  <GGPlot data={mtcars} mapping={{ x: "wt", y: "mpg", color: "cyl" }}>
+    <GeomPoint size={3} />
+    <GeomSmooth method="lm" />
+    <ScaleColor />
+    <Labs title="Weight against fuel economy" />
+  </GGPlot>
+);
+```
+
+"GPU-rendered" describes the rendering backend, not a claim that every stat runs
+on the GPU. Eligible bin/count stats are GPU-resident products the plot hosts
+and reads its y range back from; other stats run on the CPU and pack once into
+stable GPU sources. See the
 [architecture](docs/ARCHITECTURE.md#4-gpu-native-execution-model) and the
-detailed [CPU/GPU residency matrix](docs/RESIDENCY_MATRIX.md).
+[CPU/GPU residency matrix](docs/RESIDENCY_MATRIX.md).
 
 ## What's here
 
-| Path                   | Description                                                                             |
-| ---------------------- | --------------------------------------------------------------------------------------- |
-| `packages/core/`       | `@gggplot/core` — the library: DSL, IR, compiler, and both backends.                    |
-| `apps/site/`           | Vite doc page demonstrating the transpiler (DSL → emitted source → live WebGPU render). |
-| `docs/ARCHITECTURE.md` | The design: API, UseGPU mapping, and transpilation pipeline.                            |
-| `docs/DESIGN_3D.md`    | Current 3D architecture, shipped geom contracts, limits, and detailed doc index.        |
+| Path                              | Description                                                                        |
+| --------------------------------- | ---------------------------------------------------------------------------------- |
+| `packages/core/`                  | `@gggplot/core`: the components, the grammar's stats, scales, positions and geoms. |
+| `packages/reductions/`            | `@gggplot/reductions`: the CPU/GPU reductions behind count, bin and summary stats. |
+| `packages/model-inspect/`         | `@gggplot/model-inspect`: renderer-neutral model inspection products.              |
+| `apps/site/`                      | The documentation site: every example is component JSX rendered live on WebGPU.    |
+| `docs/ARCHITECTURE.md`            | The design: the component tiers, the Use.GPU mapping, and the execution model.     |
+| `docs/MIGRATING_COMPONENTS.md`    | Moving from the removed `GGSpec`/DSL/`compile` API to components.                  |
+| `docs/ADR_007_COMPONENT_FIRST.md` | Why components are the only authoring form.                                        |
 
 ## Requirements
 
@@ -32,16 +51,18 @@ detailed [CPU/GPU residency matrix](docs/RESIDENCY_MATRIX.md).
 # Build a component tree in code and print it as JSX, no browser:
 deno task demo
 
-# Type-check the library:
+# Type-check, lint and test the workspace:
 deno task check
-
-# Library tests:
-deno task --cwd packages/core test
+deno task lint
+deno task test
 
 # Doc site dev server at http://localhost:8080
 deno task dev
 deno task build    # production build -> apps/site/dist/
 ```
+
+`gggplot print chart.tsx` writes a module's component tree out as the JSX you
+would write, with its data imported by reference (`deno task gggplot print`).
 
 ## Deploying The Doc Site
 
@@ -60,26 +81,27 @@ test, run:
 deno task preview
 ```
 
-## Pipeline
+## How a plot renders
 
 ```
-ggplot(data, aes(...)).add(geomPoint())      DSL
-        │  build
-GGSpec (IR)                                   the transpiler's "AST"
-        │  compile()  — stat → scales → facet → coord → geoms → guides
-RenderTree                                    abstract UseGPU node tree
-        └── renderLive()  → UseGPU Live elements   (<GGPlot spec>, runtime)
-
-Component trees print back to JSX with printJsx() (`gggplot print`).
+<GGData load>                    data tier: mount columns once, share them
+  <GGPlot data mapping>          the root
+    <GeomPoint/> <ScaleX…/> …    parts, captured in tree order
+      │ prepare   filter rows, run CPU stats, plan GPU products
+      │ train     scales and domains across layers (and read-back products)
+      │ layout    guides, panels and marks at the host's size
+      ▼
+    Use.GPU Live: <Plot>/<Cartesian>/<Polar>/<Scene3D>, layers, compute
 ```
 
-`@use-gpu/plot` already provides the target vocabulary — `Plot`, `Cartesian`/
-`Polar`, `Point`/`Line`/`Polygon`, `Axis`/`Grid` — so gggplot's job is to lower
-a ggplot spec onto those primitives. See `docs/ARCHITECTURE.md`.
+A resize re-runs layout only; a changed layer re-prepares only itself; an
+unchanged mark keeps its GPU buffers. `<GGPanel>` and `useGGScales()` let custom
+Use.GPU primitives draw in a panel's data space with the plot's scales. See
+`docs/ARCHITECTURE.md`.
 
 ## Status
 
-Working end-to-end for the core DSL, stats, scales, positions, common geoms,
-facets, cartesian/flip/polar coords, theming, legends, emitted source, and the
-live WebGPU backend. Task tracking lives in
-[beads](https://github.com/gastownhall/beads) — run `bd ready`.
+The component path covers the core stats, scales, positions, geoms, facets,
+cartesian/flip/polar coords, 3D, theming, legends, GPU-resident bin/count
+products and PNG export (`ggsave`). Task tracking lives in
+[beads](https://github.com/gastownhall/beads); run `bd ready`.

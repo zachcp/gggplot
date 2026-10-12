@@ -8,6 +8,11 @@ instrumentation results, both from a real run on the hardware below. Re-run
 `deno bench -A packages/core/bench/flat_pipeline_bench.ts` and
 `deno task --cwd apps/site test:gpu-instrument` to refresh.
 
+> **2026-10-11:** the bench's construct and emit stages measured `compile()` and
+> `emitSource()`, which ADR-007 retired (gggplot-vnh.11, -vnh.14). Their numbers
+> below are historical; the bench is being rewritten against the component root
+> (gggplot-mhtd). The GPU upload gate is current and runs on the component root.
+
 ## Hardware / software
 
 |                                    |                                                                                                              |

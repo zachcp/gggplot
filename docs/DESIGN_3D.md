@@ -3,10 +3,10 @@
 Status: current architecture overview\
 Last verified: 2026-08-30
 
-gggplot implements 2D and 3D through one grammar, compiler, RenderTree, live
-host, and emitter. A mapped third position does not select a separate product;
-the geom registry selects a dimensional realization whose contract is checked
-before stats, scales, or lowering run.
+gggplot implements 2D and 3D through one grammar, one component root, and one
+live host. A mapped third position does not select a separate product; the geom
+registry selects a dimensional realization whose contract is checked before
+stats, scales, or lowering run.
 
 This file is the current entry point. The source of truth for exact behavior is
 the registry and resolver in `packages/core/src/geom/`; the focused documents
@@ -15,17 +15,16 @@ linked in [Document map](#document-map) retain detailed decisions and contracts.
 ## Unified pipeline
 
 ```text
-ggplot + ordinary geoms
+<GGPlot> + ordinary geom components (a z mapping)
         │
         ▼
-GGSpec ── resolvePlotDimension() ── stats + x/y/z scale training
+root: prepare ── resolvePlotDimension() ── stats + x/y/z scale training
         │
         ▼
 shared geom lowering ── vec2 or homogeneous vec4 data-space marks
         │
         ▼
-RenderTree ─┬─ GGPlot live host (OrbitControls + OrbitCamera)
-            └─ emitSource standalone source
+Scene3D ── orbit pass (OrbitControls + OrbitCamera) + flat guide overlay
 ```
 
 Projection remains on the GPU. Three-dimensional positions are packed as
