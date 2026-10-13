@@ -29,24 +29,21 @@ jobs:
       - name: Model inspection gate
         run: deno task model:perf:check
 
-  # Non-blocking by design, and the reason matters: these gates need a real
-  # WebGPU device. Measured 2026-08-25 (gggplot-5xq), a GPU-less runner falling
-  # back to SwiftShader fails 17 of 17 routes with invalid-texture and lost-
-  # instance errors -- infrastructure failures, not code failures. Standard
-  # GitHub runners have no GPU, so the GPU-dependent steps are non-blocking and
-  # report warnings rather than failing the job. Setup and artifact failures
-  # remain blocking.
+  # WebGPU on SwiftShader. Standard GitHub runners have no GPU, so Chromium
+  # runs WebGPU on SwiftShader (Vulkan) and draws the same frames as a real GPU
+  # within the gates' tolerances (gggplot-w760).
   #
-  # The deploy-base step is the exception and DOES block: it asserts on
-  # network status codes rather than pixels, so it is unaffected by
-  # SwiftShader (gggplot-1jn).
-  #
-  # It is still worth running: the logs and uploaded report say WHY it failed,
-  # so the day this starts passing (a GPU runner, or SwiftShader closing the
-  # gap) it converts into a real gate by removing the step-level
-  # continue-on-error settings.
+  # The flags are load-bearing; scripts/browser_args.ts says why. The old
+  # --use-angle=swiftshader --use-gl=swiftshader set gave a working adapter
+  # but no canvas swap chain, so every chart lost its WebGPU instance on its
+  # first frame. That was misread as SwiftShader being unable to run use.GPU
+  # (gggplot-5xq, 2026-08-25), and these gates were non-blocking until w760.
+  # The WebGPU probe runs first, so a broken adapter shows up as an adapter
+  # failure and not as a pile of gggplot ones.
   browser-gates:
     runs-on: ubuntu-latest
+    env:
+      GGGPLOT_CHROMIUM_ARGS: "--enable-features=Vulkan --use-vulkan=swiftshader --use-angle=swiftshader --enable-unsafe-swiftshader"
     steps:
       - uses: actions/checkout@v4
       - uses: denoland/setup-deno@v2
@@ -54,58 +51,39 @@ jobs:
           deno-version: v2.x
       - name: Install Chromium
         run: deno run -A npm:playwright@^1.61.1 install --with-deps chromium
-      # Blocking, unlike the two gates below. This one asserts on network
-      # status codes and error boundaries, not on rendered pixels, so
-      # SwiftShader's inability to draw WebGPU does not affect its result
-      # (verified: it passes clean under the same SwiftShader args). A
-      # root-absolute asset URL 404s under a subpath deploy whether or not
-      # anything renders, which is exactly the defect it exists to catch.
+      # Render, read back and compute on a canvas, no gggplot involved. On
+      # failure, rerun with Chromium's stderr, which names the cause (a GPU
+      # process that will not start, a shared image it cannot make).
+      - name: WebGPU probe
+        run: |
+          deno task --cwd apps/site test:webgpu-probe || {
+            DEBUG=pw:browser deno task --cwd apps/site test:webgpu-probe 2>&1 |
+              grep -E '\[err\]' | grep -v dbus || true
+            exit 1
+          }
+      # A root-absolute asset URL 404s under a subpath deploy, the defect this
+      # one exists to catch (gggplot-1jn).
       - name: Deploy-base assets
-        env:
-          GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
         run: deno task --cwd apps/site test:base-path
       - name: Route health
-        # SwiftShader is expected to fail today, but the independent re-render
-        # gate below must still execute and report its own result.
-        continue-on-error: true
-        env:
-          GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
         run: deno task --cwd apps/site test:visual
       - name: Re-render safety
-        continue-on-error: true
-        env:
-          GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
         run: deno task --cwd apps/site test:rerender
-      # SwiftShader cannot draw WebGPU (see the job comment above), so this is
-      # expected to fail today. Running it anyway makes the resident coverage
-      # floors gggplot-vs7.11 set (70.4% residentCategoricalCount, 27.4%
-      # groupedHistogram) VISIBLE in CI logs instead of enforced only by a
-      # human remembering to run it locally (gggplot-vs7.16). Converts to a
-      # real, blocking gate alongside the two above once a GPU runner or
-      # SwiftShader parity exists.
+      # The resident coverage floors gggplot-vs7.11 set (70.4%
+      # residentCategoricalCount, 27.4% groupedHistogram), enforced
+      # (gggplot-vs7.16).
       - name: Pixel visibility
-        continue-on-error: true
-        env:
-          GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
         run: deno task --cwd apps/site test:pixels
       # Every doc example's JSX against the compile-path golden frames
-      # (gggplot-w8zq, apps/site/goldens/README.md). Draws WebGPU, so
-      # non-blocking here until a GPU runner, like the gates above.
+      # (gggplot-w8zq, apps/site/goldens/README.md).
       - name: Golden frames
-        continue-on-error: true
-        env:
-          GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
         run: deno task --cwd apps/site test:goldens
       # The component-first root against compile() (gggplot-2bj): pixel parity
       # plus the component-path invariants (gggplot-bv0, docs/ARCHITECTURE.md):
       # resize, a fixed aesthetic beside a GPU-bound one, an inserted layer, a
-      # touched column. It fails on any regression, but draws WebGPU, so it is
-      # non-blocking here until a GPU runner; the CPU half of each invariant is
-      # pinned by blocking headless tests in `deno task test`.
+      # touched column. The CPU half of each invariant is also pinned by
+      # headless tests in `deno task test`.
       - name: Component root and invariants
-        continue-on-error: true
-        env:
-          GGGPLOT_CHROMIUM_ARGS: "--use-angle=swiftshader --enable-unsafe-swiftshader --use-gl=swiftshader"
         run: deno task --cwd apps/site test:component-root
       - name: Upload report
         if: always()

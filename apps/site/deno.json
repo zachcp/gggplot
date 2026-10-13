@@ -13,7 +13,8 @@
     "test:goldens": "deno run -A scripts/example_frames.ts check-goldens goldens",
     "test:rerender": "deno run -A scripts/rerender_check.ts",
     "test:base-path": "deno run -A scripts/base_path_check.ts",
-    "test:ort-device": "deno run -A scripts/ort_device_probe.ts"
+    "test:ort-device": "deno run -A scripts/ort_device_probe.ts",
+    "test:webgpu-probe": "deno run -A scripts/webgpu_probe.ts"
   },
   "imports": {
     "@std/assert": "jsr:@std/assert@1",
