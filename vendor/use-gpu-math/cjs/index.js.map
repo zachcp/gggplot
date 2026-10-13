@@ -1,0 +1,1 @@
+{"version":3,"sources":["../../../../packages/math/src/index.ts"],"sourcesContent":["export * from './ease';\nexport * from './math';\nexport * from './polynomial';\n"],"names":[],"mappings":";;;;qBAAc;qBACA;qBACA"}

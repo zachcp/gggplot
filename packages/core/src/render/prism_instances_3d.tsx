@@ -9,7 +9,10 @@ import type { GeometryDataProps } from "@use-gpu/workbench/mjs/data/geometry-dat
 import { esm } from "../runtime/usegpu_compat.ts";
 const { createElement } = esm(UseGpuLive, "useMemo");
 const { Mesh } = esm(UseGpuScene, "Mesh");
-const { GeometryData, makeBoxGeometry } = esm(UseGpuWorkbench, "LayoutContext");
+const { GeometryData, makeBoxGeometry } = esm(
+  UseGpuWorkbench,
+  "useDeviceContext",
+);
 
 /** One filled, axis-aligned box in the current 3D Cartesian coordinate space. */
 export interface PrismInstance3D {
