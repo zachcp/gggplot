@@ -278,7 +278,7 @@ async function verifyRouteLifecycle(browser: import("playwright").Browser) {
   try {
     for (const route of ["start", "stats", "internals", "faq", "start"]) {
       await page.goto(`${baseUrl}/#${route}`, { waitUntil: "networkidle" });
-      await page.waitForTimeout(300);
+      await waitForSurfaces(page);
       const { surfaces, canvases } = await page.evaluate(() => ({
         surfaces: document.querySelectorAll("[data-chart-surface]").length,
         canvases:
@@ -316,10 +316,33 @@ async function waitForServer() {
   throw new Error("Timed out waiting for the Vite preview server.");
 }
 
+/**
+ * Waits for a route's charts to mount, each surface with its canvas. A fixed
+ * delay was enough on a GPU, but on a software adapter (CI's SwiftShader,
+ * gggplot-w760) a busy route has mounted nothing by then. It never fails by
+ * itself: a route that leaks, loses or never mounts a canvas still fails its
+ * own check afterwards, on the counts it ended with.
+ */
+async function waitForSurfaces(page: import("playwright").Page) {
+  await page.waitForFunction(
+    () => {
+      const surfaces = document.querySelectorAll("[data-chart-surface]");
+      const canvases = document.querySelectorAll("[data-chart-surface] canvas");
+      return surfaces.length > 0 && canvases.length === surfaces.length;
+    },
+    undefined,
+    { timeout: 15_000 },
+  ).catch(() => {});
+}
+
 async function discoverRoutes(
   page: import("playwright").Page,
 ): Promise<string[]> {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
+  // networkidle can come before the app has rendered its nav when the main
+  // thread is busy with a software adapter's first frames.
+  await page.waitForSelector("[data-doc-route-link]", { timeout: 15_000 })
+    .catch(() => {});
   // Hash slugs are declared by the app and represent every docs route. Read
   // them from its route-link contract instead of maintaining a second list.
   const slugs = await page.locator("[data-doc-route-link]").evaluateAll((
@@ -360,6 +383,7 @@ async function inspectRoute(
   page.on("pageerror", onPageError);
   try {
     await page.goto(`${baseUrl}/#${route}`, { waitUntil: "networkidle" });
+    await waitForSurfaces(page);
     await page.waitForTimeout(750);
     const surfaceState = await page.locator("[data-chart-surface]").evaluateAll(
       (surfaces) =>

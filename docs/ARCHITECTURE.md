@@ -302,10 +302,10 @@ performance promises, held by a standing gate:
 (`deno task --cwd apps/site
 test:component-root`) measures each in the browser
 through the GPU instrumentation and the root's work counters (`componentProbe`),
-and fails on any regression. It runs in CI's browser job, which is non-blocking
-until a GPU runner exists (SwiftShader cannot draw WebGPU; see the job comment
-in `.github/workflows/ci.yml`). The CPU side of each promise is also pinned by
-blocking headless tests: `component_resize_test.ts` (resize, touched columns),
+and fails on any regression. It runs, blocking, in CI's browser job on
+SwiftShader (see the job comment in `.github/workflows/ci.yml` for the flags
+that make that work). The CPU side of each promise is also pinned by blocking
+headless tests: `component_resize_test.ts` (resize, touched columns),
 `scale_change_classes_test.ts` (what each scale change invalidates),
 `component_tensor_reuse_test.ts` and `discrete_binding_test.ts`.
 

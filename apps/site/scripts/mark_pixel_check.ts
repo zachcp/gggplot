@@ -25,7 +25,7 @@
  *
  * Usage: deno task test:pixels
  */
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 import { browserArgs } from "./browser_args.ts";
 import { buildGate, previewArgs } from "./gate_output.ts";
 
@@ -95,6 +95,9 @@ const MARK_COLORS: {
  * The floor is coverage of the surface's own canvas, not of the page.
  */
 const RESIDENT_ROUTE = "internals";
+/** Longest the 3D scenes get to draw before the gate reads them. */
+const SCENE_SETTLE_MS = 60_000;
+
 /** Longest the resident surfaces get to settle before the floors are judged. */
 const RESIDENT_SETTLE_MS = 30_000;
 const RESIDENT_SURFACES: { match: string; min: number }[] = [
@@ -178,6 +181,8 @@ const INSTRUMENT = `
   const slots = {};
   const errors = [];
   globalThis.__markShotErrors = errors;
+  // Frames captured so far: the driver waits for this to stop moving.
+  globalThis.__markShotFrames = 0;
   const ctxCanvas = new WeakMap();
   const canvasIds = new WeakMap();
   const latest = new Map();
@@ -268,6 +273,7 @@ const INSTRUMENT = `
         const into = globalThis.__frozen ? pending : shots;
         if (into[id]) into[id].buffer.destroy();
         into[id] = shot;
+        globalThis.__markShotFrames++;
         entry.texture = null;
       } catch (e) {
         errors.push(id + ": " + String(e));
@@ -368,7 +374,7 @@ try {
     });
     await page.addInitScript(INSTRUMENT);
     await page.goto(`${baseUrl}/#three-d`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(9000);
+    await waitForSceneFrames(page);
 
     const installError = await page.evaluate(() =>
       (globalThis as unknown as { __markShotInstallError?: string })
@@ -844,6 +850,46 @@ async function thawCapture(
   await target.evaluate(() => {
     (globalThis as unknown as { __thaw: () => void }).__thaw();
   });
+}
+
+/**
+ * Waits until every chart surface on the page has a captured frame and no new
+ * frames are arriving. Rendering is on demand, so a settled page stops
+ * drawing. A fixed 9s was enough on a GPU, but on SwiftShader (CI,
+ * gggplot-w760) the last scenes on #three-d had not drawn yet and read as
+ * blank. Never fails by itself: whatever was captured by the deadline is what
+ * the floors below judge.
+ */
+async function waitForSceneFrames(page: Page) {
+  const read = () =>
+    page.evaluate(() => {
+      const g = globalThis as unknown as {
+        __markShots?: Record<string, unknown>;
+        __markShotFrames?: number;
+      };
+      return {
+        surfaces: document.querySelectorAll("[data-chart-surface]").length,
+        shots: Object.keys(g.__markShots ?? {}).length,
+        frames: g.__markShotFrames ?? 0,
+      };
+    });
+  await page.waitForTimeout(9000);
+  let previous = await read();
+  for (let waited = 9000; waited < SCENE_SETTLE_MS; waited += 1500) {
+    await page.waitForTimeout(1500);
+    const next = await read();
+    const quiet = next.frames === previous.frames;
+    previous = next;
+    if (quiet && next.surfaces > 0 && next.shots >= next.surfaces) {
+      console.log(`3D scenes settled after ${(waited + 1500) / 1000}s.`);
+      return;
+    }
+  }
+  console.log(
+    `3D scenes still drawing after ${SCENE_SETTLE_MS / 1000}s ` +
+      `(${previous.shots}/${previous.surfaces} surfaces captured); judging ` +
+      `the frames captured so far.`,
+  );
 }
 
 async function waitForServer() {
