@@ -1,0 +1,26 @@
+/* __WGSL_LOADER_GENERATED */
+const {decompressAST, decompressString, symbolDictionary, bindEntryPoint} = require("@use-gpu/shader/wgsl");
+const m0 = require("../../codec/normal16.wgsl");
+const {A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z} = symbolDictionary;
+const _ = decompressString("getSurface getScissor main WithDepth mainWithDepth @use-gpu/wgsl/codec/normal16 encodeNormal16 encodeNormal16Plus infer(T) link optional vec4<u32> location(0) fragment frontFacing bool builtin(front_facing) fragCoord builtin(position) fragAlpha f32 fragUV location(1) fragST location(2) fragNormal location(3) fragTangent location(4) fragPosition location(5) fragScissor location(6) fragFacetId u32 location(7) interpolate(flat) export depth builtin(frag_depth) normal locals infers encodeNormal16 encodeNormal16Plus getSurface getScissor return builtin frontFacing fragCoord location fragAlpha fragUV fragST fragNormal fragTangent fragPosition fragScissor fragFacetId normal WithDepth".split(' '));
+const table = {[S]:_(["T",0,1,2,3,4]),[W]:_([2,4]),[O]:[{[A]:0,[N]:_(5),[S]:_([6,7]),[K]:[{[N]:_(6),[J]:_(6)},{[N]:_(7),[J]:_(7)}]}],[X]:[{[A]:86,[R]:_(0),[G]:2,[F]:{[N]:_(0),[T]:{[N]:"T",[Z]:_([8])},[Z]:_([9]),[P]:[{[N]:"c",[T]:C},{[N]:"u",[T]:C},{[N]:"s",[T]:C},{[N]:"n",[T]:C},{[N]:"t",[T]:C},{[N]:"p",[T]:C},{[N]:"c1",[T]:C}],[I]:_(["T"]),[H]:[{[N]:"T",[A]:-1}]}},{[A]:206,[R]:_(1),[G]:6,[F]:{[N]:_(1),[T]:C,[Z]:_([10,9]),[P]:[{[N]:"c",[T]:C},{[N]:"s",[T]:C}]}}],[E]:[{[A]:282,[R]:_(2),[G]:1,[F]:{[N]:_(2),[T]:{[N]:_(11),[Z]:_([12])},[Z]:_([13]),[P]:[{[N]:_(14),[T]:_(15),[Z]:_([16])},{[N]:_(17),[T]:C,[Z]:_([18])},{[N]:_(19),[T]:_(20),[Z]:_([12])},{[N]:_(21),[T]:C,[Z]:_([22])},{[N]:_(23),[T]:C,[Z]:_([24])},{[N]:_(25),[T]:C,[Z]:_([26])},{[N]:_(27),[T]:C,[Z]:_([28])},{[N]:_(29),[T]:C,[Z]:_([30])},{[N]:_(31),[T]:C,[Z]:_([32])},{[N]:_(33),[T]:_(34),[Z]:_([35,36])}],[I]:_([0,1])}},{[A]:1110,[R]:_(4),[G]:1,[F]:{[N]:_(4),[T]:_(3),[Z]:_([13,37]),[P]:[{[N]:_(14),[T]:_(15),[Z]:_([16])},{[N]:_(17),[T]:C,[Z]:_([18])},{[N]:_(19),[T]:_(20),[Z]:_([12])},{[N]:_(21),[T]:C,[Z]:_([22])},{[N]:_(23),[T]:C,[Z]:_([24])},{[N]:_(25),[T]:C,[Z]:_([26])},{[N]:_(27),[T]:C,[Z]:_([28])},{[N]:_(29),[T]:C,[Z]:_([30])},{[N]:_(31),[T]:C,[Z]:_([32])},{[N]:_(33),[T]:_(34),[Z]:_([35,36])}],[I]:_([3,0,1,3])}}],[_(41)]:[{[A]:1032,[R]:_(3),[G]:0,[U]:{[N]:_(3),[M]:[{[N]:_(38),[T]:_(20),[Z]:_([39])},{[N]:_(40),[T]:_(11),[Z]:_([12])}]}}],[_(42)]:_(["T"]),[L]:{[_(0)]:true,[_(1)]:true}};
+const data = {
+  name: "fragment/normal",
+  code: _(["use '",5,"'::{",6,",",6,"Plus};@infer ",T," T;@",9," fn ",0,"(c:",C,",u:",C,",s:",C,",n:",C,",t:",C,",p:",C,",c1:",C,",)->@",8,"T{}@",10," @",9," fn ",1,"(c:",C,",s:",C,")->",C,"{",47," c;}@",13," fn ",2,"(@",16,14,":",15,",@",18,17,":",C,",@",12,19,":f32,@",22,21,":",C,",@",24,23,":",C,",@",26,25,":",C,",@",28,27,":",C,",@",30,29,":",C,",@",32,31,":",C,",@",35,"@",36,33,":u32,)->@",12,11,"{var n=",25,";if(!",14,"){n=-n;}var o=",C,"(1.0,1.0,1.0,",19,");var s=",0,"(o,",21,",",23,",n,",27,",",29,",",17,");o=s.albedo;if(HAS_SCISSOR){o=",1,"(o,",31,");}if(HAS_ALPHA_TO_DISCARD){if(o.a<=0.0){discard;}}if(HAS_FACET){",47," ",6,"Plus(s.",40,".xyz,",33,");}else{",47," ",6,"(s.",40,".xyz);}}",U," ",3,"{@",48,"(frag_",38,")",38,":f32,@",12,40,":",11,",};@",13," @",37," fn ",2,3,"(@",16,14,":",15,",@",18,17,":",C,",@",12,19,":f32,@",22,21,":",C,",@",24,23,":",C,",@",26,25,":",C,",@",28,27,":",C,",@",30,29,":",C,",@",32,31,":",C,",@",35,"@",36,33,":u32,)->",3,"{var n=",25,";if(!",14,"){n=",C,"(-n.xyz,n.w);}var o=",C,"(1.0,1.0,1.0,",19,");let s=",0,"(o,",21,",",23,",n,",27,",",29,",",17,");o=s.albedo;if(HAS_SCISSOR){o=",1,"(o,",31,");}if(HAS_ALPHA_TO_DISCARD){if(o.a<=0.0){discard;}}if(HAS_FACET){",47," ",3,"(s.",38,",",6,"Plus(s.",40,".xyz,",33,"),);}else{",47," ",3,"(s.",38,",",6,"(s.",40,".xyz),);}}\n"]).join(''),
+  hash: 0x8a82f319ff8bd,
+  table,
+  shake: [[72,[0,1,3,5]],[86,[1,3,5]],[206,[2,3,5]],[282,[3]],[1032,[4,5]],[1110,[5]]],
+  tree: decompressAST([[1,0,71],[1,72,86],[1,14,134],[4,120,196,2],[1,0,9],[1,10,15],[2,9,19],[0,57,807],[3,0,9],[2,13,17],[3,5,27],[3,39,57],[3,38,50],[3,26,38],[3,29,41],[3,29,41],[3,33,45],[3,34,46],[3,35,47],[3,34,46],[3,12,30],[3,37,49],[2,107,117],[2,94,104],[2,96,114],[2,58,72],[0,31,108],[2,7,16],[3,10,30],[3,30,42],[0,31,845],[3,0,9],[1,10,17],[2,11,24],[3,14,36],[3,39,57],[3,38,50],[3,26,38],[3,29,41],[3,29,41],[3,33,45],[3,34,46],[3,35,47],[3,34,46],[3,12,30],[2,37,46],[2,114,124],[2,94,104],[2,96,105],[2,18,36],[2,60,69],[2,18,32]], table[S]),
+};
+
+const libs = {"@use-gpu/wgsl/codec/normal16": m0};
+const getSymbol = (entry) => ({module: bindEntryPoint(data, entry), libs});
+
+const __default = getSymbol();
+Object.defineProperty(exports, '__esModule', { value: true });
+Object.assign(exports, __default);
+exports.default = __default;
+    
+exports.main = getSymbol("main");
+exports.mainWithDepth = getSymbol("mainWithDepth");
+//# sourceMappingURL=normal.wgsl.js.map

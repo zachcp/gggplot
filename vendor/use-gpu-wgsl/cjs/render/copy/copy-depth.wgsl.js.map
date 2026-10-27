@@ -1,0 +1,1 @@
+{"version":3,"file":"copy-depth.wgsl.js.map","sources":["copy-depth.wgsl"],"sourcesContent":["@optional @link fn getDepth(uv: vec2<f32>) -> f32 { return 0.0; }\n\n@fragment\nfn main(\n  @location(0) fragUV: vec2<f32>,\n) -> @builtin(frag_depth) f32 {\n  return getDepth(fragUV);\n}\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;AAAA;"}

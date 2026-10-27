@@ -3,9 +3,9 @@
 Temporary. Each entry here is wired in through `links` in the root `deno.json`
 and must be deleted once upstream publishes a fix.
 
-## `use-gpu-math/` — `@use-gpu/math@0.21.0-rc.3` (removal: gggplot-i879)
+## `use-gpu-math/` — `@use-gpu/math@0.21.0` (removal: gggplot-i879)
 
-The `@use-gpu/math@0.21.0-rc.3` tarball from Use.GPU's GitLab registry,
+The `@use-gpu/math@0.21.0` tarball from npm,
 unchanged except for one addition to `package.json`:
 
 ```json
@@ -27,3 +27,17 @@ state, traits and shader.
 **Remove when:** a published `@use-gpu/math` has an `exports` map. Delete this
 directory and the `links` entry in `deno.json`, run `deno install`, and confirm
 `deno task test` still passes.
+
+## `use-gpu-wgsl/` — `@use-gpu/wgsl@0.21.0`
+
+The npm tarball, unchanged except for an added `cjs/package.json` containing
+`{"type":"commonjs"}`.
+
+**Why:** the package declares `"type":"module"`, but its `require` exports
+point to CommonJS `.js` files in `cjs/`. Without a nested package boundary,
+Node and Deno interpret those files as ESM and fail with `require is not
+defined` when loading workbench. The ESM build used by Vite is unaffected.
+
+**Remove when:** upstream publishes a CommonJS package boundary or switches its
+CommonJS output and export targets to `.cjs`. Delete this directory and its
+`links` entry, run `deno install`, and confirm `deno task test` passes.

@@ -1,0 +1,10 @@
+import { ParsedBundle } from "@use-gpu/shader/wgsl";
+declare const _default: ParsedBundle;
+export default _default;
+export declare const encodeNormal16: ParsedBundle;
+export declare const decodeNormal16: ParsedBundle;
+export declare const encodeNormal16Plus: ParsedBundle;
+export declare const decodePlusOnly: ParsedBundle;
+export declare const decodeNormal16Plus: ParsedBundle;
+export declare const octaToNormal16: ParsedBundle;
+export declare const octaToNormal: ParsedBundle;

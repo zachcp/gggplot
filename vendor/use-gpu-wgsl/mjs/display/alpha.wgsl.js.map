@@ -1,0 +1,1 @@
+{"version":3,"file":"alpha.wgsl.js.map","sources":["alpha.wgsl"],"sourcesContent":["@export fn displayAlpha(sample: vec4<f32>) -> vec4<f32> {\n  return vec4<f32>(vec3<f32>(clamp(sample.a, 0.0, 1.0)), 1.0);\n};\n\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;AAAA;"}

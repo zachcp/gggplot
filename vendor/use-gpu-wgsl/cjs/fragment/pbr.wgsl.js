@@ -1,0 +1,32 @@
+/* __WGSL_LOADER_GENERATED */
+const {decompressAST, decompressString, symbolDictionary, bindEntryPoint} = require("@use-gpu/shader/wgsl");
+const {A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z} = symbolDictionary;
+const _ = decompressString("PBRParams IBLResult F_DIELECTRIC saturate pow5 ndfGGX2 ndfGGX fresnelSchlick3 fresnelSchlick fdBurley smithGGXCorrelated G1X geometricGGX PBR IBL environmentBRDF export albedo emissive material occlusion f32 diffuse specular dotNV vec2<f32> F_DIELECTRIC export saturate return fresnelSchlick3 fresnelSchlick IBLResult".split(' '));
+const table = {[Y]:_([0,1]),[S]:_(["PI",2,0,3,4,5,6,7,8,9,10,11,12,13,1,14,15]),[W]:_([0,7,8,9,10,13,1,14,15]),[E]:[{[A]:42,[R]:_(0),[G]:1,[U]:{[N]:_(0),[Z]:_([16]),[M]:[{[N]:_(17),[T]:C},{[N]:_(18),[T]:C},{[N]:_(19),[T]:C},{[N]:_(20),[T]:_(21)}]}},{[A]:412,[R]:_(7),[G]:1,[F]:{[N]:_(7),[T]:D,[Z]:_([16]),[P]:[{[N]:"c",[T]:_(21)},{[N]:"f",[T]:D},{[N]:"_1",[T]:D}],[I]:_([4])}},{[A]:511,[R]:_(8),[G]:1,[F]:{[N]:_(8),[T]:_(21),[Z]:_([16]),[P]:[{[N]:"c",[T]:_(21)},{[N]:"f",[T]:_(21)},{[N]:"_1",[T]:_(21)}],[I]:_([4])}},{[A]:591,[R]:_(9),[G]:1,[F]:{[N]:_(9),[T]:_(21),[Z]:_([16]),[P]:[{[N]:"d",[T]:_(21)},{[N]:"d1",[T]:_(21)},{[N]:"d2",[T]:_(21)},{[N]:"a",[T]:_(21)}],[I]:_([8,"PI"])}},{[A]:747,[R]:_(10),[G]:1,[F]:{[N]:_(10),[T]:_(21),[Z]:_([16]),[P]:[{[N]:"d",[T]:_(21)},{[N]:"d1",[T]:_(21)},{[N]:"a",[T]:_(21)}]}},{[A]:1033,[R]:_(13),[G]:1,[F]:{[N]:_(13),[T]:D,[Z]:_([16]),[P]:[{[N]:"N",[T]:D},{[N]:"L",[T]:D},{[N]:"V",[T]:D},{[N]:"a",[T]:D},{[N]:"m",[T]:_(21)},{[N]:"r",[T]:_(21)}],[I]:_([2,3,7,6,10,9])}},{[A]:1516,[R]:_(1),[G]:1,[U]:{[N]:_(1),[Z]:_([16]),[M]:[{[N]:_(22),[T]:D},{[N]:_(23),[T]:D},{[N]:_(24),[T]:_(21)}]}},{[A]:1589,[R]:_(14),[G]:1,[F]:{[N]:_(14),[T]:_(1),[Z]:_([16]),[P]:[{[N]:"N",[T]:D},{[N]:"V",[T]:D},{[N]:"a",[T]:D},{[N]:"m",[T]:_(21)},{[N]:"r",[T]:_(21)}],[I]:_([1,2,3,7,"PI",1])}},{[A]:1864,[R]:_(15),[G]:1,[F]:{[N]:_(15),[T]:_(25),[Z]:_([16]),[P]:[{[N]:"g",[T]:_(21)},{[N]:"d",[T]:_(21)}]}}]};
+const data = {
+  name: "fragment/pbr",
+  code: _(["const PI=3.141592;const ",2,"=0.04;@",16," ",U," ",0,"{",17,":",C,",",18,":",C,",",19,":",C,",",20,":f32,};fn ",3,"(x:f32)->f32{",29," max(x,0.0);}fn ",4,"(x:f32)->f32{let x1=x*x;",29," x1*x1*x;}fn ",5,"(c:f32,a:f32)->f32{let a1=a*a;let d=c*c*(a1-1.0)+1.0f;",29," a1/(PI*d*d);}fn ",6,"(c:f32,a:f32)->f32{let o=1.0-c*c;let a1=c*a;let k=a/(o+a1*a1);let d=k*k*(1.0/PI);",29," d;}@",16," fn ",7,"(c:f32,f:",D,",_1:",D,")->",D,"{",29," f+(_1-f)*",4,"(1.0-c);}@",16," fn ",8,"(c:f32,f:f32,_1:f32)->f32{",29," f+(_1-f)*",4,"(1.0-c);}@",16," fn ",9,"(d:f32,d1:f32,d2:f32,a:f32)->f32{let f=0.5+2.0*a*d2*d2;let l=",8,"(d,1.0,f);let v=",8,"(d1,1.0,f);",29," l*v*(1.0/PI);}@",16," fn ",10,"(d:f32,d1:f32,a:f32)->f32{let a1=a*a;let G=d1*sqrt((d-a1*d)*d+a1);let G1=d*sqrt((d1-a1*d1)*d1+a1);",29," 0.5/(G+G1+0.00001);}fn G1X(d:f32,k:f32)->f32{",29," 1.0/(d*(1.0-k)+k);}fn ",12,"(d:f32,d1:f32,a:f32)->f32{let k=a/2.0f;",29," G1X(d,k)*G1X(d1,k);}@",16," fn PBR(N:",D,",L:",D,",V:",D,",a:",D,",m:f32,r:f32,)->",D,"{let d=a*(1.0-m);let F=mix(vec3(",2,"),a,m);let a1=r*r;let d1=",3,"(dot(N,V));let H=normalize(V+L);let d2=",3,"(dot(N,L));let d3=",3,"(dot(N,H));let d4=",3,"(dot(L,H));let F1=",7,"(d4,F,max(F,",D,"(1.0-r)));let D=",6,"(d3,a1);let G=",10,"(d2,d1,a1);let F2=d*",9,"(d2,d1,d4,a1)*(1.0-F1);let F3=F1*D*G;let d5=max(",D,"(0.0),F2+F3)*d2;",29," d5;}@",16," ",U," ",1,"{",22,":",D,",",23,":",D,",",24,":f32,}@",16," fn IBL(N:",D,",V:",D,",a:",D,",m:f32,r:f32,)->",1,"{let d=a*(1.0-m);let F=mix(vec3(",2,"),a,m);let a1=r*r;let d1=",3,"(dot(N,V));let F1=",7,"(d1,F,max(F,",D,"(1.0-r)));let F2=d/PI*(1.0-F1);let F3=F1;",29," ",1,"(F2,F3,d1);}@",16," fn ",15,"(g:f32,d:f32)->",25,"{let t=",C,"(1/0.96,0.475,(0.0275-0.25*0.04)/0.96,0.25)*g+",C,"(0.0,0.0,(0.015-0.75*0.04)/0.96,0.75);let a=t.x*min(t.y,exp2(-9.28*d))+t.z;let a1=t.w;",29," ",25,"(a,a1-a,);}\n"]).join(''),
+  hash: 0x799fb5783f114,
+  table,
+  shake: [[0,[0,5,6,13,9,15]],[18,[1,13,15]],[42,[2]],[138,[3,13,15]],[181,[4,7,13,15,8,9]],[228,[5]],[312,[6,13]],[412,[7,13,15]],[511,[8,9,13]],[591,[9,13]],[747,[10,13]],[901,[11,12]],[952,[12]],[1033,[13]],[1516,[14,15]],[1589,[15]],[1864,[16]]],
+  tree: decompressAST([[0,0,18],[2,6,8],[0,12,36],[2,6,18],[0,18,113],[1,0,7],[2,15,24],[0,81,124],[2,3,11],[0,40,87],[2,3,7],[0,44,128],[2,3,10],[2,72,74],[0,9,109],[2,3,9],[2,83,85],[0,14,113],[1,0,7],[2,11,26],[2,75,79],[0,13,93],[1,0,7],[2,11,25],[2,56,60],[0,13,169],[1,0,7],[2,11,19],[2,69,83],[2,30,44],[2,41,43],[0,5,159],[1,0,7],[2,11,29],[0,143,194],[2,3,6],[0,48,129],[2,3,15],[2,58,61],[2,9,12],[0,11,494],[1,0,7],[2,11,14],[2,108,120],[2,37,45],[2,47,55],[2,26,34],[2,26,34],[2,26,41],[2,52,58],[2,20,38],[2,38,46],[0,92,165],[1,0,7],[2,15,24],[0,58,333],[1,0,7],[2,11,14],[2,55,64],[2,41,53],[2,37,45],[2,26,41],[2,55,57],[2,29,38],[0,21,255],[1,0,7],[2,11,26]], table[S]),
+};
+
+const libs = {};
+const getSymbol = (entry) => ({module: bindEntryPoint(data, entry), libs});
+
+const __default = getSymbol();
+Object.defineProperty(exports, '__esModule', { value: true });
+Object.assign(exports, __default);
+exports.default = __default;
+    
+exports.PBRParams = getSymbol("PBRParams");
+exports.fresnelSchlick3 = getSymbol("fresnelSchlick3");
+exports.fresnelSchlick = getSymbol("fresnelSchlick");
+exports.fdBurley = getSymbol("fdBurley");
+exports.smithGGXCorrelated = getSymbol("smithGGXCorrelated");
+exports.PBR = getSymbol("PBR");
+exports.IBLResult = getSymbol("IBLResult");
+exports.IBL = getSymbol("IBL");
+exports.environmentBRDF = getSymbol("environmentBRDF");
+//# sourceMappingURL=pbr.wgsl.js.map

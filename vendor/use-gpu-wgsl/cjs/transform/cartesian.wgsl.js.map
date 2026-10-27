@@ -1,0 +1,1 @@
+{"version":3,"file":"cartesian.wgsl.js.map","sources":["cartesian.wgsl"],"sourcesContent":["@optional @link fn getTransformMatrix(i: u32) -> mat4x4<f32> { };\n\n@export fn getCartesianPosition(vector: vec4<f32>) -> vec4<f32> {\n  return getTransformMatrix(0) * vec4<f32>(vector.xyz, 1.0);\n}\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;AAAA;"}

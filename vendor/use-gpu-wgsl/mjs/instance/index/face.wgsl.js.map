@@ -1,0 +1,1 @@
+{"version":3,"file":"face.wgsl.js.map","sources":["face.wgsl"],"sourcesContent":["@export fn getInstancedFaceIndex(v: u32, i: u32) -> vec2<u32> { return vec2<u32>(i, i * 3u + v); };\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;AAAA;"}

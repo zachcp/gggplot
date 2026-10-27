@@ -1,0 +1,1 @@
+{"version":3,"file":"scroll.wgsl.js.map","sources":["scroll.wgsl"],"sourcesContent":["@link fn getOffset() -> vec2<f32>;\n\n@export fn getScrolledPosition(position: vec4<f32>) -> vec4<f32> {\n  return vec4<f32>(position.xy + getOffset(), position.zw);\n}\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;AAAA;"}

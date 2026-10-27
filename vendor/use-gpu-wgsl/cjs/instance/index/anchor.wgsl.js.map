@@ -1,0 +1,1 @@
+{"version":3,"file":"anchor.wgsl.js.map","sources":["anchor.wgsl"],"sourcesContent":["@link fn getAnchor(instanceIndex: u32) -> vec4<u32>;\n\n@export fn getAnchorIndex(v: u32, i: u32) -> vec2<u32> { return vec2<u32>(i, getAnchor(i).x); };\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;AAAA;"}

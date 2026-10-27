@@ -5,7 +5,7 @@ import * as UseGpuLive from "@use-gpu/live";
 import type { LiveElement } from "@use-gpu/live";
 import * as UseGpuScene from "@use-gpu/scene";
 import * as UseGpuWorkbench from "@use-gpu/workbench";
-import type { GeometryDataProps } from "@use-gpu/workbench/mjs/data/geometry-data.mjs";
+import type { GeometryDataProps } from "@use-gpu/workbench";
 import { esm } from "../runtime/usegpu_compat.ts";
 const { createElement } = esm(UseGpuLive, "useMemo");
 const { Mesh } = esm(UseGpuScene, "Mesh");

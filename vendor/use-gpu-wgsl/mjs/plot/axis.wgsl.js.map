@@ -1,0 +1,1 @@
+{"version":3,"file":"axis.wgsl.js.map","sources":["axis.wgsl"],"sourcesContent":["@link fn getAxisStep() -> vec4<f32>;\n@link fn getAxisOrigin() -> vec4<f32>;\n\n@export fn getAxisPosition(index: u32) -> vec4<f32> {\n  return getAxisStep() * f32(index) + getAxisOrigin();\n}\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;AAAA;"}

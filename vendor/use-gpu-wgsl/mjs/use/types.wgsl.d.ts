@@ -1,0 +1,12 @@
+import { ParsedBundle } from "@use-gpu/shader/wgsl";
+declare const _default: ParsedBundle;
+export default _default;
+export declare const Light: ParsedBundle;
+export declare const PickVertex: ParsedBundle;
+export declare const LightVertex: ParsedBundle;
+export declare const SolidVertex: ParsedBundle;
+export declare const ShadedVertex: ParsedBundle;
+export declare const UIVertex: ParsedBundle;
+export declare const DepthFragment: ParsedBundle;
+export declare const RTFragment: ParsedBundle;
+export declare const SurfaceFragment: ParsedBundle;

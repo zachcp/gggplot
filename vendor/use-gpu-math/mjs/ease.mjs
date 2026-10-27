@@ -1,4 +1,4 @@
-import { π, clamp, sqr } from './math.mjs';
+import { π, clamp, sqr } from './number.mjs';
 const { abs, acos, cbrt, ceil, cos, log2, min, pow, sign, sqrt } = Math;
 // Cubic bezier 1D
 export const cubicBezier = (t, a, b, c, d)=>(a + (3 * b - a) * t) * sqr(1 - t) + (d + (3 * c - d) * (1 - t)) * sqr(t);

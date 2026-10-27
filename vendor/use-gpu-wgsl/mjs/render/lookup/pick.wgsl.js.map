@@ -1,0 +1,1 @@
+{"version":3,"file":"pick.wgsl.js.map","sources":["pick.wgsl"],"sourcesContent":["@optional @link fn getID(i: u32) -> u32 { return 0u; };\n@optional @link fn getIndex(i: u32) -> u32 { return i; };\n\n@export fn getPickingID(index: u32) -> vec2<u32> {\n  return vec2<u32>(getID(index), getIndex(index));\n}\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;AAAA;"}

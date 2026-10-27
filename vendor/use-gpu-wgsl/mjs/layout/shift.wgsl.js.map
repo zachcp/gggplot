@@ -1,0 +1,1 @@
+{"version":3,"file":"shift.wgsl.js.map","sources":["shift.wgsl"],"sourcesContent":["@link fn getOffset() -> vec2<f32>;\n\n@export fn getShiftedRectangle(rectangle: vec4<f32>) -> vec4<f32> {\n  let offset = getOffset();\n  return vec4<f32>(rectangle.xy + offset, rectangle.zw + offset);\n}\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;AAAA;"}
