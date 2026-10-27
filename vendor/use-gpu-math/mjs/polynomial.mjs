@@ -1,4 +1,4 @@
-import { π, sqr, cub } from './math.mjs';
+import { π, sqr, cub } from './number.mjs';
 const { acos, cbrt, cos, sign, sqrt } = Math;
 // Solve a quadratic a*x^2 + b*x + c = 0
 export const solveQuadratic = (a, b, c)=>{

@@ -52,12 +52,12 @@ _export(exports, {
         return velocityToBezierEase;
     }
 });
-const _math = require("./math.cjs");
+const _number = require("./number.cjs");
 const { abs, acos, cbrt, ceil, cos, log2, min, pow, sign, sqrt } = Math;
-const cubicBezier = (t, a, b, c, d)=>(a + (3 * b - a) * t) * (0, _math.sqr)(1 - t) + (d + (3 * c - d) * (1 - t)) * (0, _math.sqr)(t);
-const cubicBezierDt = (t, a, b, c, d)=>a * (-3 * (0, _math.sqr)(1 - t)) + b * ((9 * t - 12) * t + 3) + c * (6 - 9 * t) * t + d * 3 * (0, _math.sqr)(t);
+const cubicBezier = (t, a, b, c, d)=>(a + (3 * b - a) * t) * (0, _number.sqr)(1 - t) + (d + (3 * c - d) * (1 - t)) * (0, _number.sqr)(t);
+const cubicBezierDt = (t, a, b, c, d)=>a * (-3 * (0, _number.sqr)(1 - t)) + b * ((9 * t - 12) * t + 3) + c * (6 - 9 * t) * t + d * 3 * (0, _number.sqr)(t);
 const cubicBezierDt2 = (t, a, b, c, d)=>a * (3 * 2 * (1 - t)) + b * (18 * t - 12) + c * (6 - 18 * t) + d * 3 * 2 * t;
-const cubicBezier01 = (t, b, c)=>3 * b * t * (0, _math.sqr)(1 - t) + (3 * c * (1 - t) + t) * (0, _math.sqr)(t);
+const cubicBezier01 = (t, b, c)=>3 * b * t * (0, _number.sqr)(1 - t) + (3 * c * (1 - t) + t) * (0, _number.sqr)(t);
 const cubicBezierInverse01 = (v, b, c)=>{
     // Bezier over x=[-1..1] y=[-1..1] with symmetric basis functions
     const y = v * 2 - 1;
@@ -110,7 +110,7 @@ const solveDepressedCubicBezier = (p, q, s, d)=>{
         const cw = cbrt(dp);
         const r = cw - p_3 / cw;
         const i = +(d < 0) || +(s * d > 0) * 2;
-        const cc = cos(theta - i * (2 / 3) * _math.π);
+        const cc = cos(theta - i * (2 / 3) * _number.π);
         const v = cc * r;
         return v;
     }
@@ -279,7 +279,7 @@ const queryArcLengthMap = (am, value)=>{
     const t2 = map[a2 + 3];
     const d3 = map[a2 + 4];
     const t3 = map[a2 + 5];
-    return (0, _math.clamp)(catmullRom(value, d0, d1, d2, d3, t0, t1, t2, t3), 0, 1);
+    return (0, _number.clamp)(catmullRom(value, d0, d1, d2, d3, t0, t1, t2, t3), 0, 1);
 };
 
 //# sourceMappingURL=ease.js.map

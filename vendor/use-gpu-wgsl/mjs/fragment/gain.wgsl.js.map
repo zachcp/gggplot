@@ -1,0 +1,1 @@
+{"version":3,"file":"gain.wgsl.js.map","sources":["gain.wgsl"],"sourcesContent":["@link fn getGain() -> f32;\n\n@export fn gainColor(color: vec4<f32>) -> vec4<f32> {\n  var rgb = color.rgb * getGain();\n  if (IS_OPAQUE) { return vec4<f32>(rgb, 1.0); }\n  else { return vec4<f32>(rgb * getGain(), color.a); }\n};\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;AAAA;"}

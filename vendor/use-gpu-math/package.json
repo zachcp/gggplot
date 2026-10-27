@@ -1,9 +1,10 @@
 {
   "name": "@use-gpu/math",
-  "version": "0.21.0-rc.3",
+  "version": "0.21.0",
   "main": "./cjs/index.cjs",
   "author": "Steven Wittens <steven@acko.net>",
-  "module": "./mjs/index.mjs",
+  "type": "module",
+  "license": "MIT",
   "exports": {
     ".": {
       "types": "./mjs/index.d.mts",
@@ -11,11 +12,10 @@
       "require": "./cjs/index.cjs"
     }
   },
-  "license": "MIT",
   "scripts": {
-    "test": "MODULE_ENV=cjs jest --watch",
+    "test": "vitest --watch",
     "lint": "eslint src",
-    "coverage": "echo 'jest --collect-coverage' disabled",
+    "coverage": "vitest --coverage",
     "types": "tsc --noEmit",
     "types:watch": "yarn run types -- --watch",
     "build": "NPM_PACKAGE=math ../../scripts/build-mjs-cjs.sh"
@@ -24,5 +24,6 @@
     "use-gpu",
     "use-gpu-library"
   ],
-  "sideEffects": false
+  "sideEffects": false,
+  "module": "./mjs/index.mjs"
 }

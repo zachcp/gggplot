@@ -1,0 +1,1 @@
+{"version":3,"file":"interleave.wgsl.js.map","sources":["interleave.wgsl"],"sourcesContent":["@optional @link fn getOffset() -> u32 { return 0u; };\n@optional @link fn getSize() -> u32 { return 1u; };\n\n@export fn getInterleaveIndex(i: u32) -> u32 {\n  return i * getSize() + getOffset();\n}\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;AAAA;"}

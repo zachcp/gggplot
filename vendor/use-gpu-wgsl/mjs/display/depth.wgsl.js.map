@@ -1,0 +1,1 @@
+{"version":3,"file":"depth.wgsl.js.map","sources":["depth.wgsl"],"sourcesContent":["@export fn displayDepth(depth: f32) -> vec4<f32> {\n  let hasZ = depth > 0.0;\n  if (!hasZ) { return vec4<f32>(0.0, 0.0, 0.1, 1.0); }\n\n  let d = -log(depth);\n  return vec4<f32>(fract(d), fract(d * 16.0) * .75, fract(d * 256.0), 1.0);\n}\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;AAAA;"}

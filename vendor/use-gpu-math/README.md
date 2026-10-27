@@ -13,10 +13,11 @@ yarn add @use-gpu/math
 # Use.GPU - Math
 
 Pure math helpers in JS for:
+- Linear algebra solving
 - Polynomial solving
-- Bezier splines
-- Catmull-Rom splines
+- Bezier & Catmull-Rom splines
 - Animation easing
+- Arbitrary-size vectors and matrices
 
 ## Colofon
 

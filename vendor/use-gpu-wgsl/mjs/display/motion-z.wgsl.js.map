@@ -1,0 +1,1 @@
+{"version":3,"file":"motion-z.wgsl.js.map","sources":["motion-z.wgsl"],"sourcesContent":["@export fn displayMotionZ(sample: vec4<f32>) -> vec4<f32> {\n  return vec4<f32>(sample.xyz * 16384.0 + 0.5, 1.0);\n};\n\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;AAAA;"}

@@ -1,0 +1,11 @@
+import { ParsedBundle } from "@use-gpu/shader/wgsl";
+declare const _default: ParsedBundle;
+export default _default;
+export declare const toLinear: ParsedBundle;
+export declare const toLinear2: ParsedBundle;
+export declare const toLinear3: ParsedBundle;
+export declare const toLinear4: ParsedBundle;
+export declare const toGamma: ParsedBundle;
+export declare const toGamma2: ParsedBundle;
+export declare const toGamma3: ParsedBundle;
+export declare const toGamma4: ParsedBundle;

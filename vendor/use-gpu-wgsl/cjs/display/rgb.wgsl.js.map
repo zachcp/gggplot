@@ -1,0 +1,1 @@
+{"version":3,"file":"rgb.wgsl.js.map","sources":["rgb.wgsl"],"sourcesContent":["@optional @link fn getNorm() -> f32 { return 1.0; };\n\n@export fn displayRGB(sample: vec4<f32>) -> vec4<f32> {\n  return vec4<f32>(sample.rgb * getNorm(), 1.0);\n};\n\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;AAAA;"}

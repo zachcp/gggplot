@@ -1,0 +1,1 @@
+{"version":3,"file":"int.wgsl.js.map","sources":["int.wgsl"],"sourcesContent":["@optional @link fn getNorm() -> f32 { return 1.0; };\n\n@export fn displayInt(sample: vec4<u32>) -> vec4<f32> {\n  return vec4<f32>(sample) * getNorm();\n};\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;AAAA;"}

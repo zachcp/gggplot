@@ -1,0 +1,14 @@
+import { ParsedBundle } from "@use-gpu/shader/wgsl";
+declare const _default: ParsedBundle;
+export default _default;
+export declare const getUVScale: ParsedBundle;
+export declare const getUVWScale: ParsedBundle;
+export declare const scaleSDF: ParsedBundle;
+export declare const circleSDF: ParsedBundle;
+export declare const diamondSDF: ParsedBundle;
+export declare const squareSDF: ParsedBundle;
+export declare const triangleSDF: ParsedBundle;
+export declare const upSDF: ParsedBundle;
+export declare const downSDF: ParsedBundle;
+export declare const leftSDF: ParsedBundle;
+export declare const rightSDF: ParsedBundle;

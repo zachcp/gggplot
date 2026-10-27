@@ -1,0 +1,1 @@
+{"version":3,"file":"ssao.wgsl.js.map","sources":["ssao.wgsl"],"sourcesContent":["@group(PASS) @binding(4) var ssaoTexture: texture_2d<f32>;\n\n@export fn sampleSSAO(xy: vec2<u32>) -> vec4<f32> {\n  return textureLoad(ssaoTexture, xy, 0u);\n}\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;AAAA;"}

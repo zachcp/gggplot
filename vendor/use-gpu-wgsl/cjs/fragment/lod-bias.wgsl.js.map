@@ -1,0 +1,1 @@
+{"version":3,"file":"lod-bias.wgsl.js.map","sources":["lod-bias.wgsl"],"sourcesContent":["@link fn getTexture(uv: vec2<f32>, bias: f32) -> vec4<f32> {}\n\n@optional @link fn getLODBias() -> f32 { return 0.0; }\n\n@export fn getLODBiasedTexture(uv: vec2<f32>) -> vec4<f32> {\n  return getTexture(uv, getLODBias());\n};\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;AAAA;"}

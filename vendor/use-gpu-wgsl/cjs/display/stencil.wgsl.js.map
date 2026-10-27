@@ -1,0 +1,1 @@
+{"version":3,"file":"stencil.wgsl.js.map","sources":["stencil.wgsl"],"sourcesContent":["@export fn displayStencil(sample: vec4<f32>) -> vec4<f32> {\n  let stencil = sample.x;\n\n  let a = (stencil) % 1.0;\n  let b = (stencil * 4.0) % 1.0;\n  let c = (stencil * 16.0) % 1.0;\n\n  return sqrt(vec4<f32>(a, c, b, 1.0));\n}\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;AAAA;"}

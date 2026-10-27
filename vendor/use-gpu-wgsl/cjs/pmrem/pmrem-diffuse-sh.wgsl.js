@@ -1,0 +1,25 @@
+/* __WGSL_LOADER_GENERATED */
+const {decompressAST, decompressString, symbolDictionary, bindEntryPoint} = require("@use-gpu/shader/wgsl");
+const m0 = require("../codec/octahedral.wgsl");
+const {A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z} = symbolDictionary;
+const _ = decompressString("MAX_HEIGHT CONV_COS0 CONV_COS1 CONV_COS2 getSourceMapping getAtlasTexture shCoefficients SPECULAR_SH shScratch pmremDiffuseSH sqr @use-gpu/wgsl/codec/octahedral decodeOctahedral vec4<i32> link vec2<f32> f32 array<vec4<f32>> <storage,read_write> void compute workgroup_size(64,1) export globalId vec3<u32> builtin(global_invocation_id) decodeOctahedral CONV_COS1 CONV_COS2 shCoefficients SPECULAR_SH shScratch".split(' '));
+const table = {[S]:_([0,1,2,3,4,5,6,7,8,9,10]),[W]:_([9]),[O]:[{[A]:0,[N]:_(11),[S]:_([12]),[K]:[{[N]:_(12),[J]:_(12)}]}],[X]:[{[A]:165,[R]:_(4),[G]:2,[F]:{[N]:_(4),[T]:_(13),[Z]:_([14])}},{[A]:206,[R]:_(5),[G]:2,[F]:{[N]:_(5),[T]:C,[Z]:_([14]),[P]:[{[N]:"u",[T]:_(15)},{[N]:"l",[T]:_(16)}]}},{[A]:261,[R]:_(6),[G]:2,[V]:{[N]:_(6),[T]:_(17),[Z]:_([14]),[Q]:_(18)}}],[E]:[{[A]:387,[R]:_(9),[G]:1,[F]:{[N]:_(9),[T]:_(19),[Z]:_([20,21,22]),[P]:[{[N]:_(23),[T]:_(24),[Z]:_([25])}],[I]:_([4,0,5,7,10,1,2,3,8,6])}}],[L]:{[_(4)]:true,[_(5)]:true,[_(6)]:true}};
+const data = {
+  name: "pmrem/pmrem-diffuse-sh",
+  code: _(["use '",11,"'::{",12,"};const ",0,"=64;const ",1,"=3.1415926536;const ",2,"=2.09439510239;const ",3,"=0.7853981634;@",14," fn ",4,"()->",13,"{};@",14," fn ",5,"(u:",15,",l:f32)->",C,";@",14," var",18,6,":",17,";const ",7,"=0;var<workgroup>",8,":array<",C,",640>;@",20," @",21,"@",22," fn ",9,"(@",25,23,":",24,",){let m=",4,"();let s=m.zw-m.xy;var b=",C,"(0.0);var b1=",C,"(0.0);var b2=",C,"(0.0);var b3=",C,"(0.0);var b4=",C,"(0.0);var b5=",C,"(0.0);var b6=",C,"(0.0);var b7=",C,"(0.0);var b8=",C,"(0.0);var b9=0.0;let s1=s-1;let x=i32(",23,".x);if(x<s.x-1){for(var y=0;y<",0,";y++){if(y>=s.y-1){break;}let x1=",15,"(vec2<i32>(x,y));let u=(x1+.5)/",15,"(s1);let _1=x1+1.0+",15,"(m.xy);var s2=",5,"(_1,0.0);let _2=u*2.0-1.0;let r=",12,"(_2);let d=(",12,"(_2+",15,"(1e-4,0.0))-",12,"(_2+",15,"(-1e-4,0.0)))*5e3;let d1=(",12,"(_2+",15,"(0.0,1e-4))-",12,"(_2+",15,"(0.0,-1e-4)))*5e3;let w=length(cross(d,d1));let s3=s2*w;if(",7,"==1){let s4=s3;b+=s4;b1+=s4*3*r.y;b2+=s4*3*r.z;b3+=s4*3*r.x;b4+=s4*15*r.y*r.x;b5+=s4*15*r.y*r.z;b6+=s4*5/4*(3.0*sqr(r.z)-1.0);b7+=s4*15*r.x*r.z;b8+=s4*15/4*(sqr(r.x)-sqr(r.y));}else if(",7,"==2){let s4=s3;let x2=sqr(r.x);let y1=sqr(r.y);let z=sqr(r.z);b+=s4*7/16*r.y*(3*x2-y1);b1+=s4*105*r.x*r.y*r.z;b2+=s4*42/16*r.y*(5*z-1);b3+=s4*7/4*r.z*(5*z-3);b4+=s4*42/16*r.x*(5*z-1);b5+=s4*105/4*r.z*(x2-y1);b6+=s4*70/16*r.x*(x2-3*y1);}else{b+=s3*",1,";b1+=s3*3.0*",2,"*r.y;b2+=s3*3.0*",2,"*r.z;b3+=s3*3.0*",2,"*r.x;b4+=s3*15.0*",3,"*r.y*r.x;b5+=s3*15.0*",3,"*r.y*r.z;b6+=s3*1.25*",3,"*(3.0*sqr(r.z)-1.0);b7+=s3*15.0*",3,"*r.x*r.z;b8+=s3*3.75*",3,"*(sqr(r.x)-sqr(r.y));}b9+=w;}let i=x*10;",8,"[i+0]=b;",8,"[i+1]=b1;",8,"[i+2]=b2;",8,"[i+3]=b3;",8,"[i+4]=b4;",8,"[i+5]=b5;",8,"[i+6]=b6;",8,"[i+7]=b7;",8,"[i+8]=b8;",8,"[i+9]=",C,"(b9,0.0,0.0,0.0);}workgroupBarrier();if(x>0){return;}for(var x=1;x<s.x-1;x++){let i=x*10;b+=",8,"[i+0];b1+=",8,"[i+1];b2+=",8,"[i+2];b3+=",8,"[i+3];b4+=",8,"[i+4];b5+=",8,"[i+5];b6+=",8,"[i+6];b7+=",8,"[i+7];b8+=",8,"[i+8];b9+=",8,"[i+9].x;}let n=1/b9;",6,"[0]=b*n;",6,"[1]=b1*n;",6,"[2]=b2*n;",6,"[3]=b3*n;",6,"[4]=b4*n;",6,"[5]=b5*n;",6,"[6]=b6*n;",6,"[7]=b7*n;",6,"[8]=b8*n;}fn sqr(x:f32)->f32{return x*x;}\n"]).join(''),
+  hash: 0x122a05323c5834,
+  table,
+  shake: [[57,[0,9]],[77,[1,9]],[106,[2,9]],[136,[3,9]],[165,[4,9]],[206,[5,9]],[261,[6,9]],[322,[7,9]],[342,[8,9]],[387,[9]],[2651,[10,9]]],
+  tree: decompressAST([[1,0,56],[0,57,77],[2,6,16],[0,14,43],[2,6,15],[0,23,53],[2,6,15],[0,24,53],[2,6,15],[1,23,63],[1,41,95],[1,55,116],[0,61,81],[2,6,17],[0,14,59],[2,14,23],[0,31,2295],[3,0,8],[3,9,30],[1,21,28],[2,11,25],[3,15,45],[2,57,73],[2,302,312],[2,134,149],[2,47,63],[2,28,44],[2,41,57],[2,55,71],[2,41,57],[2,88,99],[2,123,126],[2,45,48],[2,9,12],[2,19,30],[2,33,36],[2,16,19],[2,15,18],[2,194,203],[2,21,30],[2,25,34],[2,25,34],[2,26,35],[2,30,39],[2,30,39],[2,15,18],[2,26,35],[2,30,39],[2,11,14],[2,9,12],[2,29,38],[2,17,26],[2,18,27],[2,18,27],[2,18,27],[2,18,27],[2,18,27],[2,18,27],[2,18,27],[2,18,27],[2,116,125],[2,19,28],[2,19,28],[2,19,28],[2,19,28],[2,19,28],[2,19,28],[2,19,28],[2,19,28],[2,19,28],[2,29,43],[2,22,36],[2,23,37],[2,23,37],[2,23,37],[2,23,37],[2,23,37],[2,23,37],[2,23,37],[0,24,55],[2,3,6]], table[S]),
+};
+
+const libs = {"@use-gpu/wgsl/codec/octahedral": m0};
+const getSymbol = (entry) => ({module: bindEntryPoint(data, entry), libs});
+
+const __default = getSymbol();
+Object.defineProperty(exports, '__esModule', { value: true });
+Object.assign(exports, __default);
+exports.default = __default;
+    
+exports.pmremDiffuseSH = getSymbol("pmremDiffuseSH");
+//# sourceMappingURL=pmrem-diffuse-sh.wgsl.js.map

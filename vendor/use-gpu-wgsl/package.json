@@ -1,0 +1,1113 @@
+{
+  "name": "@use-gpu/wgsl",
+  "version": "0.21.0",
+  "main": "cjs/index.js",
+  "author": "Steven Wittens <steven@acko.net>",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "vitest --watch",
+    "lint": "eslint src",
+    "coverage": "vitest --coverage",
+    "types": "tsc --noEmit",
+    "types:watch": "yarn run types -- --watch",
+    "build": "yarn run build:ts; yarn run build:exports-ts; yarn run build:pkg; yarn run build:cjs; yarn run build:mjs; yarn run build:exports-js; yarn run build:ts-out",
+    "build:pkg": "rm -rf ../../build/packages/wgsl 2>/dev/null; mkdir -p ../../build/packages/wgsl && cp README.md package.json ../../build/packages/wgsl; NPM_PACKAGE=wgsl tsx ../../scripts/package-json-version.ts",
+    "build:ts": "../shader/bin/shader2ts.mjs --output ./src --basePath ./wgsl --importRoot @use-gpu/wgsl --input ./wgsl --types --exports --sourceMap",
+    "build:cjs": "../shader/bin/shader2ts.mjs --output ../../build/packages/wgsl/cjs --basePath ./wgsl --importRoot @use-gpu/wgsl --input ./wgsl --minify --typeDef --cjs --sourceMap",
+    "build:mjs": "../shader/bin/shader2ts.mjs --output ../../build/packages/wgsl/mjs --basePath ./wgsl --importRoot @use-gpu/wgsl --input ./wgsl --minify --typeDef --sourceMap",
+    "build:exports-ts": "tsx --tsconfig ../../tsconfig.json scripts/exports-ts.ts",
+    "build:exports-js": "tsx --tsconfig ../../tsconfig.json scripts/exports-js.ts",
+    "build:ts-out": "rm -rf ../../build/ts/wgsl 2>/dev/null; mkdir -p ../../build/ts/wgsl; cp -r ../../build/packages/wgsl/cjs ../../build/ts/wgsl/src",
+    "watch": "npm-watch",
+    "dev": "yarn run build; yarn run watch"
+  },
+  "watch": {
+    "build:ts": {
+      "patterns": [
+        "wgsl/**/*"
+      ],
+      "extensions": "wgsl",
+      "quiet": false
+    }
+  },
+  "devDependencies": {
+    "@types/command-line-args": "^5.2.3",
+    "command-line-args": "^6.0.0",
+    "glob": "^13.0.0",
+    "npm-watch": "^0.13.0"
+  },
+  "keywords": [
+    "use-gpu",
+    "use-gpu-library"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./mjs/index.d.ts",
+      "import": "./mjs/index.js",
+      "require": "./cjs/index.js"
+    },
+    "./codec/cubemap.wgsl": {
+      "types": "./mjs/codec/cubemap.wgsl.d.ts",
+      "import": "./mjs/codec/cubemap.wgsl.js",
+      "require": "./cjs/codec/cubemap.wgsl.js"
+    },
+    "./codec/f16.wgsl": {
+      "types": "./mjs/codec/f16.wgsl.d.ts",
+      "import": "./mjs/codec/f16.wgsl.js",
+      "require": "./cjs/codec/f16.wgsl.js"
+    },
+    "./codec/normal16.wgsl": {
+      "types": "./mjs/codec/normal16.wgsl.d.ts",
+      "import": "./mjs/codec/normal16.wgsl.js",
+      "require": "./cjs/codec/normal16.wgsl.js"
+    },
+    "./codec/octahedral.wgsl": {
+      "types": "./mjs/codec/octahedral.wgsl.d.ts",
+      "import": "./mjs/codec/octahedral.wgsl.js",
+      "require": "./cjs/codec/octahedral.wgsl.js"
+    },
+    "./codec/rgbm.wgsl": {
+      "types": "./mjs/codec/rgbm.wgsl.d.ts",
+      "import": "./mjs/codec/rgbm.wgsl.js",
+      "require": "./cjs/codec/rgbm.wgsl.js"
+    },
+    "./compute/memo2.wgsl": {
+      "types": "./mjs/compute/memo2.wgsl.d.ts",
+      "import": "./mjs/compute/memo2.wgsl.js",
+      "require": "./cjs/compute/memo2.wgsl.js"
+    },
+    "./contour/fit-linear.wgsl": {
+      "types": "./mjs/contour/fit-linear.wgsl.d.ts",
+      "import": "./mjs/contour/fit-linear.wgsl.js",
+      "require": "./cjs/contour/fit-linear.wgsl.js"
+    },
+    "./contour/fit-quadratic.wgsl": {
+      "types": "./mjs/contour/fit-quadratic.wgsl.d.ts",
+      "import": "./mjs/contour/fit-quadratic.wgsl.js",
+      "require": "./cjs/contour/fit-quadratic.wgsl.js"
+    },
+    "./contour/scan.wgsl": {
+      "types": "./mjs/contour/scan.wgsl.d.ts",
+      "import": "./mjs/contour/scan.wgsl.js",
+      "require": "./cjs/contour/scan.wgsl.js"
+    },
+    "./contour/solve.wgsl": {
+      "types": "./mjs/contour/solve.wgsl.d.ts",
+      "import": "./mjs/contour/solve.wgsl.js",
+      "require": "./cjs/contour/solve.wgsl.js"
+    },
+    "./contour/types.wgsl": {
+      "types": "./mjs/contour/types.wgsl.d.ts",
+      "import": "./mjs/contour/types.wgsl.js",
+      "require": "./cjs/contour/types.wgsl.js"
+    },
+    "./debug/print-helper.wgsl": {
+      "types": "./mjs/debug/print-helper.wgsl.d.ts",
+      "import": "./mjs/debug/print-helper.wgsl.js",
+      "require": "./cjs/debug/print-helper.wgsl.js"
+    },
+    "./debug/print.wgsl": {
+      "types": "./mjs/debug/print.wgsl.d.ts",
+      "import": "./mjs/debug/print.wgsl.js",
+      "require": "./cjs/debug/print.wgsl.js"
+    },
+    "./display/alpha.wgsl": {
+      "types": "./mjs/display/alpha.wgsl.d.ts",
+      "import": "./mjs/display/alpha.wgsl.js",
+      "require": "./cjs/display/alpha.wgsl.js"
+    },
+    "./display/cube-alpha.wgsl": {
+      "types": "./mjs/display/cube-alpha.wgsl.d.ts",
+      "import": "./mjs/display/cube-alpha.wgsl.js",
+      "require": "./cjs/display/cube-alpha.wgsl.js"
+    },
+    "./display/cube-color.wgsl": {
+      "types": "./mjs/display/cube-color.wgsl.d.ts",
+      "import": "./mjs/display/cube-color.wgsl.js",
+      "require": "./cjs/display/cube-color.wgsl.js"
+    },
+    "./display/cube-depth.wgsl": {
+      "types": "./mjs/display/cube-depth.wgsl.d.ts",
+      "import": "./mjs/display/cube-depth.wgsl.js",
+      "require": "./cjs/display/cube-depth.wgsl.js"
+    },
+    "./display/cube-grid.wgsl": {
+      "types": "./mjs/display/cube-grid.wgsl.d.ts",
+      "import": "./mjs/display/cube-grid.wgsl.js",
+      "require": "./cjs/display/cube-grid.wgsl.js"
+    },
+    "./display/depth.wgsl": {
+      "types": "./mjs/display/depth.wgsl.d.ts",
+      "import": "./mjs/display/depth.wgsl.js",
+      "require": "./cjs/display/depth.wgsl.js"
+    },
+    "./display/float.wgsl": {
+      "types": "./mjs/display/float.wgsl.d.ts",
+      "import": "./mjs/display/float.wgsl.js",
+      "require": "./cjs/display/float.wgsl.js"
+    },
+    "./display/int.wgsl": {
+      "types": "./mjs/display/int.wgsl.d.ts",
+      "import": "./mjs/display/int.wgsl.js",
+      "require": "./cjs/display/int.wgsl.js"
+    },
+    "./display/log-rgb.wgsl": {
+      "types": "./mjs/display/log-rgb.wgsl.d.ts",
+      "import": "./mjs/display/log-rgb.wgsl.js",
+      "require": "./cjs/display/log-rgb.wgsl.js"
+    },
+    "./display/motion-xy.wgsl": {
+      "types": "./mjs/display/motion-xy.wgsl.d.ts",
+      "import": "./mjs/display/motion-xy.wgsl.js",
+      "require": "./cjs/display/motion-xy.wgsl.js"
+    },
+    "./display/motion-z.wgsl": {
+      "types": "./mjs/display/motion-z.wgsl.d.ts",
+      "import": "./mjs/display/motion-z.wgsl.js",
+      "require": "./cjs/display/motion-z.wgsl.js"
+    },
+    "./display/multiview.wgsl": {
+      "types": "./mjs/display/multiview.wgsl.d.ts",
+      "import": "./mjs/display/multiview.wgsl.js",
+      "require": "./cjs/display/multiview.wgsl.js"
+    },
+    "./display/picking.wgsl": {
+      "types": "./mjs/display/picking.wgsl.d.ts",
+      "import": "./mjs/display/picking.wgsl.js",
+      "require": "./cjs/display/picking.wgsl.js"
+    },
+    "./display/rgb.wgsl": {
+      "types": "./mjs/display/rgb.wgsl.d.ts",
+      "import": "./mjs/display/rgb.wgsl.js",
+      "require": "./cjs/display/rgb.wgsl.js"
+    },
+    "./display/stencil.wgsl": {
+      "types": "./mjs/display/stencil.wgsl.d.ts",
+      "import": "./mjs/display/stencil.wgsl.js",
+      "require": "./cjs/display/stencil.wgsl.js"
+    },
+    "./fragment/bayer.wgsl": {
+      "types": "./mjs/fragment/bayer.wgsl.d.ts",
+      "import": "./mjs/fragment/bayer.wgsl.js",
+      "require": "./cjs/fragment/bayer.wgsl.js"
+    },
+    "./fragment/gain.wgsl": {
+      "types": "./mjs/fragment/gain.wgsl.d.ts",
+      "import": "./mjs/fragment/gain.wgsl.js",
+      "require": "./cjs/fragment/gain.wgsl.js"
+    },
+    "./fragment/lod-bias.wgsl": {
+      "types": "./mjs/fragment/lod-bias.wgsl.d.ts",
+      "import": "./mjs/fragment/lod-bias.wgsl.js",
+      "require": "./cjs/fragment/lod-bias.wgsl.js"
+    },
+    "./fragment/noise.wgsl": {
+      "types": "./mjs/fragment/noise.wgsl.d.ts",
+      "import": "./mjs/fragment/noise.wgsl.js",
+      "require": "./cjs/fragment/noise.wgsl.js"
+    },
+    "./fragment/pbr.wgsl": {
+      "types": "./mjs/fragment/pbr.wgsl.d.ts",
+      "import": "./mjs/fragment/pbr.wgsl.js",
+      "require": "./cjs/fragment/pbr.wgsl.js"
+    },
+    "./fragment/sdf-2d.wgsl": {
+      "types": "./mjs/fragment/sdf-2d.wgsl.d.ts",
+      "import": "./mjs/fragment/sdf-2d.wgsl.js",
+      "require": "./cjs/fragment/sdf-2d.wgsl.js"
+    },
+    "./geometry/anchor.wgsl": {
+      "types": "./mjs/geometry/anchor.wgsl.d.ts",
+      "import": "./mjs/geometry/anchor.wgsl.js",
+      "require": "./cjs/geometry/anchor.wgsl.js"
+    },
+    "./geometry/arrow.wgsl": {
+      "types": "./mjs/geometry/arrow.wgsl.d.ts",
+      "import": "./mjs/geometry/arrow.wgsl.js",
+      "require": "./cjs/geometry/arrow.wgsl.js"
+    },
+    "./geometry/face.wgsl": {
+      "types": "./mjs/geometry/face.wgsl.d.ts",
+      "import": "./mjs/geometry/face.wgsl.js",
+      "require": "./cjs/geometry/face.wgsl.js"
+    },
+    "./geometry/line.wgsl": {
+      "types": "./mjs/geometry/line.wgsl.d.ts",
+      "import": "./mjs/geometry/line.wgsl.js",
+      "require": "./cjs/geometry/line.wgsl.js"
+    },
+    "./geometry/normal.wgsl": {
+      "types": "./mjs/geometry/normal.wgsl.d.ts",
+      "import": "./mjs/geometry/normal.wgsl.js",
+      "require": "./cjs/geometry/normal.wgsl.js"
+    },
+    "./geometry/quad.wgsl": {
+      "types": "./mjs/geometry/quad.wgsl.d.ts",
+      "import": "./mjs/geometry/quad.wgsl.js",
+      "require": "./cjs/geometry/quad.wgsl.js"
+    },
+    "./geometry/segment.wgsl": {
+      "types": "./mjs/geometry/segment.wgsl.d.ts",
+      "import": "./mjs/geometry/segment.wgsl.js",
+      "require": "./cjs/geometry/segment.wgsl.js"
+    },
+    "./geometry/strip.wgsl": {
+      "types": "./mjs/geometry/strip.wgsl.d.ts",
+      "import": "./mjs/geometry/strip.wgsl.js",
+      "require": "./cjs/geometry/strip.wgsl.js"
+    },
+    "./geometry/trim.wgsl": {
+      "types": "./mjs/geometry/trim.wgsl.d.ts",
+      "import": "./mjs/geometry/trim.wgsl.js",
+      "require": "./cjs/geometry/trim.wgsl.js"
+    },
+    "./geometry/tube.wgsl": {
+      "types": "./mjs/geometry/tube.wgsl.d.ts",
+      "import": "./mjs/geometry/tube.wgsl.js",
+      "require": "./cjs/geometry/tube.wgsl.js"
+    },
+    "./instance/compute/arc-length.wgsl": {
+      "types": "./mjs/instance/compute/arc-length.wgsl.d.ts",
+      "import": "./mjs/instance/compute/arc-length.wgsl.js",
+      "require": "./cjs/instance/compute/arc-length.wgsl.js"
+    },
+    "./instance/compute/arc-prefix-sum.wgsl": {
+      "types": "./mjs/instance/compute/arc-prefix-sum.wgsl.d.ts",
+      "import": "./mjs/instance/compute/arc-prefix-sum.wgsl.js",
+      "require": "./cjs/instance/compute/arc-prefix-sum.wgsl.js"
+    },
+    "./instance/effect/fresnel-effect.wgsl": {
+      "types": "./mjs/instance/effect/fresnel-effect.wgsl.d.ts",
+      "import": "./mjs/instance/effect/fresnel-effect.wgsl.js",
+      "require": "./cjs/instance/effect/fresnel-effect.wgsl.js"
+    },
+    "./instance/fragment/deferred-emissive.wgsl": {
+      "types": "./mjs/instance/fragment/deferred-emissive.wgsl.d.ts",
+      "import": "./mjs/instance/fragment/deferred-emissive.wgsl.js",
+      "require": "./cjs/instance/fragment/deferred-emissive.wgsl.js"
+    },
+    "./instance/fragment/deferred-environment.wgsl": {
+      "types": "./mjs/instance/fragment/deferred-environment.wgsl.d.ts",
+      "import": "./mjs/instance/fragment/deferred-environment.wgsl.js",
+      "require": "./cjs/instance/fragment/deferred-environment.wgsl.js"
+    },
+    "./instance/fragment/deferred-light.wgsl": {
+      "types": "./mjs/instance/fragment/deferred-light.wgsl.d.ts",
+      "import": "./mjs/instance/fragment/deferred-light.wgsl.js",
+      "require": "./cjs/instance/fragment/deferred-light.wgsl.js"
+    },
+    "./instance/fragment/lit.wgsl": {
+      "types": "./mjs/instance/fragment/lit.wgsl.d.ts",
+      "import": "./mjs/instance/fragment/lit.wgsl.js",
+      "require": "./cjs/instance/fragment/lit.wgsl.js"
+    },
+    "./instance/fragment/normal.wgsl": {
+      "types": "./mjs/instance/fragment/normal.wgsl.d.ts",
+      "import": "./mjs/instance/fragment/normal.wgsl.js",
+      "require": "./cjs/instance/fragment/normal.wgsl.js"
+    },
+    "./instance/fragment/sdf-rectangle.wgsl": {
+      "types": "./mjs/instance/fragment/sdf-rectangle.wgsl.d.ts",
+      "import": "./mjs/instance/fragment/sdf-rectangle.wgsl.js",
+      "require": "./cjs/instance/fragment/sdf-rectangle.wgsl.js"
+    },
+    "./instance/fragment/solid.wgsl": {
+      "types": "./mjs/instance/fragment/solid.wgsl.d.ts",
+      "import": "./mjs/instance/fragment/solid.wgsl.js",
+      "require": "./cjs/instance/fragment/solid.wgsl.js"
+    },
+    "./instance/identity.wgsl": {
+      "types": "./mjs/instance/identity.wgsl.d.ts",
+      "import": "./mjs/instance/identity.wgsl.js",
+      "require": "./cjs/instance/identity.wgsl.js"
+    },
+    "./instance/index/anchor.wgsl": {
+      "types": "./mjs/instance/index/anchor.wgsl.d.ts",
+      "import": "./mjs/instance/index/anchor.wgsl.js",
+      "require": "./cjs/instance/index/anchor.wgsl.js"
+    },
+    "./instance/index/face.wgsl": {
+      "types": "./mjs/instance/index/face.wgsl.d.ts",
+      "import": "./mjs/instance/index/face.wgsl.js",
+      "require": "./cjs/instance/index/face.wgsl.js"
+    },
+    "./instance/index/interleave.wgsl": {
+      "types": "./mjs/instance/index/interleave.wgsl.d.ts",
+      "import": "./mjs/instance/index/interleave.wgsl.js",
+      "require": "./cjs/instance/index/interleave.wgsl.js"
+    },
+    "./instance/index/lookup.wgsl": {
+      "types": "./mjs/instance/index/lookup.wgsl.d.ts",
+      "import": "./mjs/instance/index/lookup.wgsl.js",
+      "require": "./cjs/instance/index/lookup.wgsl.js"
+    },
+    "./instance/index/repeat.wgsl": {
+      "types": "./mjs/instance/index/repeat.wgsl.d.ts",
+      "import": "./mjs/instance/index/repeat.wgsl.js",
+      "require": "./cjs/instance/index/repeat.wgsl.js"
+    },
+    "./instance/surface/g-buffer-ssao-surface.wgsl": {
+      "types": "./mjs/instance/surface/g-buffer-ssao-surface.wgsl.d.ts",
+      "import": "./mjs/instance/surface/g-buffer-ssao-surface.wgsl.js",
+      "require": "./cjs/instance/surface/g-buffer-ssao-surface.wgsl.js"
+    },
+    "./instance/surface/g-buffer-surface.wgsl": {
+      "types": "./mjs/instance/surface/g-buffer-surface.wgsl.d.ts",
+      "import": "./mjs/instance/surface/g-buffer-surface.wgsl.js",
+      "require": "./cjs/instance/surface/g-buffer-surface.wgsl.js"
+    },
+    "./instance/surface/masked-surface.wgsl": {
+      "types": "./mjs/instance/surface/masked-surface.wgsl.d.ts",
+      "import": "./mjs/instance/surface/masked-surface.wgsl.js",
+      "require": "./cjs/instance/surface/masked-surface.wgsl.js"
+    },
+    "./instance/surface/material-surface.wgsl": {
+      "types": "./mjs/instance/surface/material-surface.wgsl.d.ts",
+      "import": "./mjs/instance/surface/material-surface.wgsl.js",
+      "require": "./cjs/instance/surface/material-surface.wgsl.js"
+    },
+    "./instance/surface/normal-map-surface.wgsl": {
+      "types": "./mjs/instance/surface/normal-map-surface.wgsl.d.ts",
+      "import": "./mjs/instance/surface/normal-map-surface.wgsl.js",
+      "require": "./cjs/instance/surface/normal-map-surface.wgsl.js"
+    },
+    "./instance/surface/raytrace-surface.wgsl": {
+      "types": "./mjs/instance/surface/raytrace-surface.wgsl.d.ts",
+      "import": "./mjs/instance/surface/raytrace-surface.wgsl.js",
+      "require": "./cjs/instance/surface/raytrace-surface.wgsl.js"
+    },
+    "./instance/surface/solid-surface.wgsl": {
+      "types": "./mjs/instance/surface/solid-surface.wgsl.d.ts",
+      "import": "./mjs/instance/surface/solid-surface.wgsl.js",
+      "require": "./cjs/instance/surface/solid-surface.wgsl.js"
+    },
+    "./instance/surface/solid-to-shaded.wgsl": {
+      "types": "./mjs/instance/surface/solid-to-shaded.wgsl.d.ts",
+      "import": "./mjs/instance/surface/solid-to-shaded.wgsl.js",
+      "require": "./cjs/instance/surface/solid-to-shaded.wgsl.js"
+    },
+    "./instance/surface/ssao-surface.wgsl": {
+      "types": "./mjs/instance/surface/ssao-surface.wgsl.d.ts",
+      "import": "./mjs/instance/surface/ssao-surface.wgsl.js",
+      "require": "./cjs/instance/surface/ssao-surface.wgsl.js"
+    },
+    "./instance/vertex/arc-label.wgsl": {
+      "types": "./mjs/instance/vertex/arc-label.wgsl.d.ts",
+      "import": "./mjs/instance/vertex/arc-label.wgsl.js",
+      "require": "./cjs/instance/vertex/arc-label.wgsl.js"
+    },
+    "./instance/vertex/arrow.wgsl": {
+      "types": "./mjs/instance/vertex/arrow.wgsl.d.ts",
+      "import": "./mjs/instance/vertex/arrow.wgsl.js",
+      "require": "./cjs/instance/vertex/arrow.wgsl.js"
+    },
+    "./instance/vertex/deferred-light.wgsl": {
+      "types": "./mjs/instance/vertex/deferred-light.wgsl.d.ts",
+      "import": "./mjs/instance/vertex/deferred-light.wgsl.js",
+      "require": "./cjs/instance/vertex/deferred-light.wgsl.js"
+    },
+    "./instance/vertex/dual-contour.wgsl": {
+      "types": "./mjs/instance/vertex/dual-contour.wgsl.d.ts",
+      "import": "./mjs/instance/vertex/dual-contour.wgsl.js",
+      "require": "./cjs/instance/vertex/dual-contour.wgsl.js"
+    },
+    "./instance/vertex/face.wgsl": {
+      "types": "./mjs/instance/vertex/face.wgsl.d.ts",
+      "import": "./mjs/instance/vertex/face.wgsl.js",
+      "require": "./cjs/instance/vertex/face.wgsl.js"
+    },
+    "./instance/vertex/full-screen-view.wgsl": {
+      "types": "./mjs/instance/vertex/full-screen-view.wgsl.d.ts",
+      "import": "./mjs/instance/vertex/full-screen-view.wgsl.js",
+      "require": "./cjs/instance/vertex/full-screen-view.wgsl.js"
+    },
+    "./instance/vertex/full-screen.wgsl": {
+      "types": "./mjs/instance/vertex/full-screen.wgsl.d.ts",
+      "import": "./mjs/instance/vertex/full-screen.wgsl.js",
+      "require": "./cjs/instance/vertex/full-screen.wgsl.js"
+    },
+    "./instance/vertex/instanced.wgsl": {
+      "types": "./mjs/instance/vertex/instanced.wgsl.d.ts",
+      "import": "./mjs/instance/vertex/instanced.wgsl.js",
+      "require": "./cjs/instance/vertex/instanced.wgsl.js"
+    },
+    "./instance/vertex/label.wgsl": {
+      "types": "./mjs/instance/vertex/label.wgsl.d.ts",
+      "import": "./mjs/instance/vertex/label.wgsl.js",
+      "require": "./cjs/instance/vertex/label.wgsl.js"
+    },
+    "./instance/vertex/line.wgsl": {
+      "types": "./mjs/instance/vertex/line.wgsl.d.ts",
+      "import": "./mjs/instance/vertex/line.wgsl.js",
+      "require": "./cjs/instance/vertex/line.wgsl.js"
+    },
+    "./instance/vertex/quad.wgsl": {
+      "types": "./mjs/instance/vertex/quad.wgsl.d.ts",
+      "import": "./mjs/instance/vertex/quad.wgsl.js",
+      "require": "./cjs/instance/vertex/quad.wgsl.js"
+    },
+    "./instance/vertex/sdf-rectangle.wgsl": {
+      "types": "./mjs/instance/vertex/sdf-rectangle.wgsl.d.ts",
+      "import": "./mjs/instance/vertex/sdf-rectangle.wgsl.js",
+      "require": "./cjs/instance/vertex/sdf-rectangle.wgsl.js"
+    },
+    "./instance/vertex/tick.wgsl": {
+      "types": "./mjs/instance/vertex/tick.wgsl.d.ts",
+      "import": "./mjs/instance/vertex/tick.wgsl.js",
+      "require": "./cjs/instance/vertex/tick.wgsl.js"
+    },
+    "./layout/clip.wgsl": {
+      "types": "./mjs/layout/clip.wgsl.d.ts",
+      "import": "./mjs/layout/clip.wgsl.js",
+      "require": "./cjs/layout/clip.wgsl.js"
+    },
+    "./layout/layout.wgsl": {
+      "types": "./mjs/layout/layout.wgsl.d.ts",
+      "import": "./mjs/layout/layout.wgsl.js",
+      "require": "./cjs/layout/layout.wgsl.js"
+    },
+    "./layout/rectangle.wgsl": {
+      "types": "./mjs/layout/rectangle.wgsl.d.ts",
+      "import": "./mjs/layout/rectangle.wgsl.js",
+      "require": "./cjs/layout/rectangle.wgsl.js"
+    },
+    "./layout/scroll.wgsl": {
+      "types": "./mjs/layout/scroll.wgsl.d.ts",
+      "import": "./mjs/layout/scroll.wgsl.js",
+      "require": "./cjs/layout/scroll.wgsl.js"
+    },
+    "./layout/shift.wgsl": {
+      "types": "./mjs/layout/shift.wgsl.d.ts",
+      "import": "./mjs/layout/shift.wgsl.js",
+      "require": "./cjs/layout/shift.wgsl.js"
+    },
+    "./mask/color.wgsl": {
+      "types": "./mjs/mask/color.wgsl.d.ts",
+      "import": "./mjs/mask/color.wgsl.js",
+      "require": "./cjs/mask/color.wgsl.js"
+    },
+    "./mask/loading.wgsl": {
+      "types": "./mjs/mask/loading.wgsl.d.ts",
+      "import": "./mjs/mask/loading.wgsl.js",
+      "require": "./cjs/mask/loading.wgsl.js"
+    },
+    "./mask/masked.wgsl": {
+      "types": "./mjs/mask/masked.wgsl.d.ts",
+      "import": "./mjs/mask/masked.wgsl.js",
+      "require": "./cjs/mask/masked.wgsl.js"
+    },
+    "./mask/passthru.wgsl": {
+      "types": "./mjs/mask/passthru.wgsl.d.ts",
+      "import": "./mjs/mask/passthru.wgsl.js",
+      "require": "./cjs/mask/passthru.wgsl.js"
+    },
+    "./mask/point.wgsl": {
+      "types": "./mjs/mask/point.wgsl.d.ts",
+      "import": "./mjs/mask/point.wgsl.js",
+      "require": "./cjs/mask/point.wgsl.js"
+    },
+    "./mask/scissor.wgsl": {
+      "types": "./mjs/mask/scissor.wgsl.d.ts",
+      "import": "./mjs/mask/scissor.wgsl.js",
+      "require": "./cjs/mask/scissor.wgsl.js"
+    },
+    "./mask/sdf.wgsl": {
+      "types": "./mjs/mask/sdf.wgsl.d.ts",
+      "import": "./mjs/mask/sdf.wgsl.js",
+      "require": "./cjs/mask/sdf.wgsl.js"
+    },
+    "./mask/sphere.wgsl": {
+      "types": "./mjs/mask/sphere.wgsl.d.ts",
+      "import": "./mjs/mask/sphere.wgsl.js",
+      "require": "./cjs/mask/sphere.wgsl.js"
+    },
+    "./mask/textured.wgsl": {
+      "types": "./mjs/mask/textured.wgsl.d.ts",
+      "import": "./mjs/mask/textured.wgsl.js",
+      "require": "./cjs/mask/textured.wgsl.js"
+    },
+    "./material/env/field.wgsl": {
+      "types": "./mjs/material/env/field.wgsl.d.ts",
+      "import": "./mjs/material/env/field.wgsl.js",
+      "require": "./cjs/material/env/field.wgsl.js"
+    },
+    "./material/env/park.wgsl": {
+      "types": "./mjs/material/env/park.wgsl.d.ts",
+      "import": "./mjs/material/env/park.wgsl.js",
+      "require": "./cjs/material/env/park.wgsl.js"
+    },
+    "./material/env/pisa.wgsl": {
+      "types": "./mjs/material/env/pisa.wgsl.d.ts",
+      "import": "./mjs/material/env/pisa.wgsl.js",
+      "require": "./cjs/material/env/pisa.wgsl.js"
+    },
+    "./material/env/road.wgsl": {
+      "types": "./mjs/material/env/road.wgsl.d.ts",
+      "import": "./mjs/material/env/road.wgsl.js",
+      "require": "./cjs/material/env/road.wgsl.js"
+    },
+    "./material/light.wgsl": {
+      "types": "./mjs/material/light.wgsl.d.ts",
+      "import": "./mjs/material/light.wgsl.js",
+      "require": "./cjs/material/light.wgsl.js"
+    },
+    "./material/lights-default-env.wgsl": {
+      "types": "./mjs/material/lights-default-env.wgsl.d.ts",
+      "import": "./mjs/material/lights-default-env.wgsl.js",
+      "require": "./cjs/material/lights-default-env.wgsl.js"
+    },
+    "./material/lights-default.wgsl": {
+      "types": "./mjs/material/lights-default.wgsl.d.ts",
+      "import": "./mjs/material/lights-default.wgsl.js",
+      "require": "./cjs/material/lights-default.wgsl.js"
+    },
+    "./material/lights.wgsl": {
+      "types": "./mjs/material/lights.wgsl.d.ts",
+      "import": "./mjs/material/lights.wgsl.js",
+      "require": "./cjs/material/lights.wgsl.js"
+    },
+    "./material/pbr-apply.wgsl": {
+      "types": "./mjs/material/pbr-apply.wgsl.d.ts",
+      "import": "./mjs/material/pbr-apply.wgsl.js",
+      "require": "./cjs/material/pbr-apply.wgsl.js"
+    },
+    "./material/pbr-default.wgsl": {
+      "types": "./mjs/material/pbr-default.wgsl.d.ts",
+      "import": "./mjs/material/pbr-default.wgsl.js",
+      "require": "./cjs/material/pbr-default.wgsl.js"
+    },
+    "./material/pbr-environment.wgsl": {
+      "types": "./mjs/material/pbr-environment.wgsl.d.ts",
+      "import": "./mjs/material/pbr-environment.wgsl.js",
+      "require": "./cjs/material/pbr-environment.wgsl.js"
+    },
+    "./material/pbr-material.wgsl": {
+      "types": "./mjs/material/pbr-material.wgsl.d.ts",
+      "import": "./mjs/material/pbr-material.wgsl.js",
+      "require": "./cjs/material/pbr-material.wgsl.js"
+    },
+    "./motion/motion-sample.wgsl": {
+      "types": "./mjs/motion/motion-sample.wgsl.d.ts",
+      "import": "./mjs/motion/motion-sample.wgsl.js",
+      "require": "./cjs/motion/motion-sample.wgsl.js"
+    },
+    "./oit/oit-resolve.wgsl": {
+      "types": "./mjs/oit/oit-resolve.wgsl.d.ts",
+      "import": "./mjs/oit/oit-resolve.wgsl.js",
+      "require": "./cjs/oit/oit-resolve.wgsl.js"
+    },
+    "./oit/oit.wgsl": {
+      "types": "./mjs/oit/oit.wgsl.d.ts",
+      "import": "./mjs/oit/oit.wgsl.js",
+      "require": "./cjs/oit/oit.wgsl.js"
+    },
+    "./outline/outline-resolve.wgsl": {
+      "types": "./mjs/outline/outline-resolve.wgsl.d.ts",
+      "import": "./mjs/outline/outline-resolve.wgsl.js",
+      "require": "./cjs/outline/outline-resolve.wgsl.js"
+    },
+    "./outline/outline-sample.wgsl": {
+      "types": "./mjs/outline/outline-sample.wgsl.d.ts",
+      "import": "./mjs/outline/outline-sample.wgsl.js",
+      "require": "./cjs/outline/outline-sample.wgsl.js"
+    },
+    "./outline/outline-weight.wgsl": {
+      "types": "./mjs/outline/outline-weight.wgsl.d.ts",
+      "import": "./mjs/outline/outline-weight.wgsl.js",
+      "require": "./cjs/outline/outline-weight.wgsl.js"
+    },
+    "./plot/array.wgsl": {
+      "types": "./mjs/plot/array.wgsl.d.ts",
+      "import": "./mjs/plot/array.wgsl.js",
+      "require": "./cjs/plot/array.wgsl.js"
+    },
+    "./plot/axis.wgsl": {
+      "types": "./mjs/plot/axis.wgsl.d.ts",
+      "import": "./mjs/plot/axis.wgsl.js",
+      "require": "./cjs/plot/axis.wgsl.js"
+    },
+    "./plot/grid-auto.wgsl": {
+      "types": "./mjs/plot/grid-auto.wgsl.d.ts",
+      "import": "./mjs/plot/grid-auto.wgsl.js",
+      "require": "./cjs/plot/grid-auto.wgsl.js"
+    },
+    "./plot/grid.wgsl": {
+      "types": "./mjs/plot/grid.wgsl.d.ts",
+      "import": "./mjs/plot/grid.wgsl.js",
+      "require": "./cjs/plot/grid.wgsl.js"
+    },
+    "./plot/loop.wgsl": {
+      "types": "./mjs/plot/loop.wgsl.d.ts",
+      "import": "./mjs/plot/loop.wgsl.js",
+      "require": "./cjs/plot/loop.wgsl.js"
+    },
+    "./plot/scale.wgsl": {
+      "types": "./mjs/plot/scale.wgsl.d.ts",
+      "import": "./mjs/plot/scale.wgsl.js",
+      "require": "./cjs/plot/scale.wgsl.js"
+    },
+    "./plot/surface-normal.wgsl": {
+      "types": "./mjs/plot/surface-normal.wgsl.d.ts",
+      "import": "./mjs/plot/surface-normal.wgsl.js",
+      "require": "./cjs/plot/surface-normal.wgsl.js"
+    },
+    "./plot/surface.wgsl": {
+      "types": "./mjs/plot/surface.wgsl.d.ts",
+      "import": "./mjs/plot/surface.wgsl.js",
+      "require": "./cjs/plot/surface.wgsl.js"
+    },
+    "./plot/volume.wgsl": {
+      "types": "./mjs/plot/volume.wgsl.d.ts",
+      "import": "./mjs/plot/volume.wgsl.js",
+      "require": "./cjs/plot/volume.wgsl.js"
+    },
+    "./pmrem/pmrem-blur.wgsl": {
+      "types": "./mjs/pmrem/pmrem-blur.wgsl.d.ts",
+      "import": "./mjs/pmrem/pmrem-blur.wgsl.js",
+      "require": "./cjs/pmrem/pmrem-blur.wgsl.js"
+    },
+    "./pmrem/pmrem-copy.wgsl": {
+      "types": "./mjs/pmrem/pmrem-copy.wgsl.d.ts",
+      "import": "./mjs/pmrem/pmrem-copy.wgsl.js",
+      "require": "./cjs/pmrem/pmrem-copy.wgsl.js"
+    },
+    "./pmrem/pmrem-debug.wgsl": {
+      "types": "./mjs/pmrem/pmrem-debug.wgsl.d.ts",
+      "import": "./mjs/pmrem/pmrem-debug.wgsl.js",
+      "require": "./cjs/pmrem/pmrem-debug.wgsl.js"
+    },
+    "./pmrem/pmrem-diffuse-render.wgsl": {
+      "types": "./mjs/pmrem/pmrem-diffuse-render.wgsl.d.ts",
+      "import": "./mjs/pmrem/pmrem-diffuse-render.wgsl.js",
+      "require": "./cjs/pmrem/pmrem-diffuse-render.wgsl.js"
+    },
+    "./pmrem/pmrem-diffuse-sh.wgsl": {
+      "types": "./mjs/pmrem/pmrem-diffuse-sh.wgsl.d.ts",
+      "import": "./mjs/pmrem/pmrem-diffuse-sh.wgsl.js",
+      "require": "./cjs/pmrem/pmrem-diffuse-sh.wgsl.js"
+    },
+    "./pmrem/pmrem-init.wgsl": {
+      "types": "./mjs/pmrem/pmrem-init.wgsl.d.ts",
+      "import": "./mjs/pmrem/pmrem-init.wgsl.js",
+      "require": "./cjs/pmrem/pmrem-init.wgsl.js"
+    },
+    "./pmrem/pmrem-read.wgsl": {
+      "types": "./mjs/pmrem/pmrem-read.wgsl.d.ts",
+      "import": "./mjs/pmrem/pmrem-read.wgsl.js",
+      "require": "./cjs/pmrem/pmrem-read.wgsl.js"
+    },
+    "./present/fragment.wgsl": {
+      "types": "./mjs/present/fragment.wgsl.d.ts",
+      "import": "./mjs/present/fragment.wgsl.js",
+      "require": "./cjs/present/fragment.wgsl.js"
+    },
+    "./present/mask.wgsl": {
+      "types": "./mjs/present/mask.wgsl.d.ts",
+      "import": "./mjs/present/mask.wgsl.js",
+      "require": "./cjs/present/mask.wgsl.js"
+    },
+    "./present/motion.wgsl": {
+      "types": "./mjs/present/motion.wgsl.d.ts",
+      "import": "./mjs/present/motion.wgsl.js",
+      "require": "./cjs/present/motion.wgsl.js"
+    },
+    "./present/screen.wgsl": {
+      "types": "./mjs/present/screen.wgsl.d.ts",
+      "import": "./mjs/present/screen.wgsl.js",
+      "require": "./cjs/present/screen.wgsl.js"
+    },
+    "./render/copy/copy-depth-sample.wgsl": {
+      "types": "./mjs/render/copy/copy-depth-sample.wgsl.d.ts",
+      "import": "./mjs/render/copy/copy-depth-sample.wgsl.js",
+      "require": "./cjs/render/copy/copy-depth-sample.wgsl.js"
+    },
+    "./render/copy/copy-depth.wgsl": {
+      "types": "./mjs/render/copy/copy-depth.wgsl.d.ts",
+      "import": "./mjs/render/copy/copy-depth.wgsl.js",
+      "require": "./cjs/render/copy/copy-depth.wgsl.js"
+    },
+    "./render/copy/copy-sample.wgsl": {
+      "types": "./mjs/render/copy/copy-sample.wgsl.d.ts",
+      "import": "./mjs/render/copy/copy-sample.wgsl.js",
+      "require": "./cjs/render/copy/copy-sample.wgsl.js"
+    },
+    "./render/copy/copy-select-depth-sample-2.wgsl": {
+      "types": "./mjs/render/copy/copy-select-depth-sample-2.wgsl.d.ts",
+      "import": "./mjs/render/copy/copy-select-depth-sample-2.wgsl.js",
+      "require": "./cjs/render/copy/copy-select-depth-sample-2.wgsl.js"
+    },
+    "./render/copy/copy-select-depth-sample.wgsl": {
+      "types": "./mjs/render/copy/copy-select-depth-sample.wgsl.d.ts",
+      "import": "./mjs/render/copy/copy-select-depth-sample.wgsl.js",
+      "require": "./cjs/render/copy/copy-select-depth-sample.wgsl.js"
+    },
+    "./render/copy/copy-select-sample-2.wgsl": {
+      "types": "./mjs/render/copy/copy-select-sample-2.wgsl.d.ts",
+      "import": "./mjs/render/copy/copy-select-sample-2.wgsl.js",
+      "require": "./cjs/render/copy/copy-select-sample-2.wgsl.js"
+    },
+    "./render/fragment/deferred-light.wgsl": {
+      "types": "./mjs/render/fragment/deferred-light.wgsl.d.ts",
+      "import": "./mjs/render/fragment/deferred-light.wgsl.js",
+      "require": "./cjs/render/fragment/deferred-light.wgsl.js"
+    },
+    "./render/fragment/deferred-shaded.wgsl": {
+      "types": "./mjs/render/fragment/deferred-shaded.wgsl.d.ts",
+      "import": "./mjs/render/fragment/deferred-shaded.wgsl.js",
+      "require": "./cjs/render/fragment/deferred-shaded.wgsl.js"
+    },
+    "./render/fragment/deferred-solid.wgsl": {
+      "types": "./mjs/render/fragment/deferred-solid.wgsl.d.ts",
+      "import": "./mjs/render/fragment/deferred-solid.wgsl.js",
+      "require": "./cjs/render/fragment/deferred-solid.wgsl.js"
+    },
+    "./render/fragment/depth-only.wgsl": {
+      "types": "./mjs/render/fragment/depth-only.wgsl.d.ts",
+      "import": "./mjs/render/fragment/depth-only.wgsl.js",
+      "require": "./cjs/render/fragment/depth-only.wgsl.js"
+    },
+    "./render/fragment/depth-shaded.wgsl": {
+      "types": "./mjs/render/fragment/depth-shaded.wgsl.d.ts",
+      "import": "./mjs/render/fragment/depth-shaded.wgsl.js",
+      "require": "./cjs/render/fragment/depth-shaded.wgsl.js"
+    },
+    "./render/fragment/depth.wgsl": {
+      "types": "./mjs/render/fragment/depth.wgsl.d.ts",
+      "import": "./mjs/render/fragment/depth.wgsl.js",
+      "require": "./cjs/render/fragment/depth.wgsl.js"
+    },
+    "./render/fragment/normal.wgsl": {
+      "types": "./mjs/render/fragment/normal.wgsl.d.ts",
+      "import": "./mjs/render/fragment/normal.wgsl.js",
+      "require": "./cjs/render/fragment/normal.wgsl.js"
+    },
+    "./render/fragment/oit-shaded.wgsl": {
+      "types": "./mjs/render/fragment/oit-shaded.wgsl.d.ts",
+      "import": "./mjs/render/fragment/oit-shaded.wgsl.js",
+      "require": "./cjs/render/fragment/oit-shaded.wgsl.js"
+    },
+    "./render/fragment/oit-solid.wgsl": {
+      "types": "./mjs/render/fragment/oit-solid.wgsl.d.ts",
+      "import": "./mjs/render/fragment/oit-solid.wgsl.js",
+      "require": "./cjs/render/fragment/oit-solid.wgsl.js"
+    },
+    "./render/fragment/pick.wgsl": {
+      "types": "./mjs/render/fragment/pick.wgsl.d.ts",
+      "import": "./mjs/render/fragment/pick.wgsl.js",
+      "require": "./cjs/render/fragment/pick.wgsl.js"
+    },
+    "./render/fragment/shaded.wgsl": {
+      "types": "./mjs/render/fragment/shaded.wgsl.d.ts",
+      "import": "./mjs/render/fragment/shaded.wgsl.js",
+      "require": "./cjs/render/fragment/shaded.wgsl.js"
+    },
+    "./render/fragment/solid.wgsl": {
+      "types": "./mjs/render/fragment/solid.wgsl.d.ts",
+      "import": "./mjs/render/fragment/solid.wgsl.js",
+      "require": "./cjs/render/fragment/solid.wgsl.js"
+    },
+    "./render/fragment/ui.wgsl": {
+      "types": "./mjs/render/fragment/ui.wgsl.d.ts",
+      "import": "./mjs/render/fragment/ui.wgsl.js",
+      "require": "./cjs/render/fragment/ui.wgsl.js"
+    },
+    "./render/lookup/pick.wgsl": {
+      "types": "./mjs/render/lookup/pick.wgsl.d.ts",
+      "import": "./mjs/render/lookup/pick.wgsl.js",
+      "require": "./cjs/render/lookup/pick.wgsl.js"
+    },
+    "./render/sample/cube-to-omni.wgsl": {
+      "types": "./mjs/render/sample/cube-to-omni.wgsl.d.ts",
+      "import": "./mjs/render/sample/cube-to-omni.wgsl.js",
+      "require": "./cjs/render/sample/cube-to-omni.wgsl.js"
+    },
+    "./render/sample/depth-cube-to-omni.wgsl": {
+      "types": "./mjs/render/sample/depth-cube-to-omni.wgsl.d.ts",
+      "import": "./mjs/render/sample/depth-cube-to-omni.wgsl.js",
+      "require": "./cjs/render/sample/depth-cube-to-omni.wgsl.js"
+    },
+    "./render/sample/depth-quads-to-hemi.wgsl": {
+      "types": "./mjs/render/sample/depth-quads-to-hemi.wgsl.d.ts",
+      "import": "./mjs/render/sample/depth-quads-to-hemi.wgsl.js",
+      "require": "./cjs/render/sample/depth-quads-to-hemi.wgsl.js"
+    },
+    "./render/sample/equi-to-cube.wgsl": {
+      "types": "./mjs/render/sample/equi-to-cube.wgsl.d.ts",
+      "import": "./mjs/render/sample/equi-to-cube.wgsl.js",
+      "require": "./cjs/render/sample/equi-to-cube.wgsl.js"
+    },
+    "./render/sample/quads-to-hemi.wgsl": {
+      "types": "./mjs/render/sample/quads-to-hemi.wgsl.d.ts",
+      "import": "./mjs/render/sample/quads-to-hemi.wgsl.js",
+      "require": "./cjs/render/sample/quads-to-hemi.wgsl.js"
+    },
+    "./render/vertex/virtual-copy.wgsl": {
+      "types": "./mjs/render/vertex/virtual-copy.wgsl.d.ts",
+      "import": "./mjs/render/vertex/virtual-copy.wgsl.js",
+      "require": "./cjs/render/vertex/virtual-copy.wgsl.js"
+    },
+    "./render/vertex/virtual-depth.wgsl": {
+      "types": "./mjs/render/vertex/virtual-depth.wgsl.d.ts",
+      "import": "./mjs/render/vertex/virtual-depth.wgsl.js",
+      "require": "./cjs/render/vertex/virtual-depth.wgsl.js"
+    },
+    "./render/vertex/virtual-light.wgsl": {
+      "types": "./mjs/render/vertex/virtual-light.wgsl.d.ts",
+      "import": "./mjs/render/vertex/virtual-light.wgsl.js",
+      "require": "./cjs/render/vertex/virtual-light.wgsl.js"
+    },
+    "./render/vertex/virtual-normal.wgsl": {
+      "types": "./mjs/render/vertex/virtual-normal.wgsl.d.ts",
+      "import": "./mjs/render/vertex/virtual-normal.wgsl.js",
+      "require": "./cjs/render/vertex/virtual-normal.wgsl.js"
+    },
+    "./render/vertex/virtual-pick.wgsl": {
+      "types": "./mjs/render/vertex/virtual-pick.wgsl.d.ts",
+      "import": "./mjs/render/vertex/virtual-pick.wgsl.js",
+      "require": "./cjs/render/vertex/virtual-pick.wgsl.js"
+    },
+    "./render/vertex/virtual-shaded.wgsl": {
+      "types": "./mjs/render/vertex/virtual-shaded.wgsl.d.ts",
+      "import": "./mjs/render/vertex/virtual-shaded.wgsl.js",
+      "require": "./cjs/render/vertex/virtual-shaded.wgsl.js"
+    },
+    "./render/vertex/virtual-solid.wgsl": {
+      "types": "./mjs/render/vertex/virtual-solid.wgsl.d.ts",
+      "import": "./mjs/render/vertex/virtual-solid.wgsl.js",
+      "require": "./cjs/render/vertex/virtual-solid.wgsl.js"
+    },
+    "./render/vertex/virtual-ui.wgsl": {
+      "types": "./mjs/render/vertex/virtual-ui.wgsl.d.ts",
+      "import": "./mjs/render/vertex/virtual-ui.wgsl.js",
+      "require": "./cjs/render/vertex/virtual-ui.wgsl.js"
+    },
+    "./render/wireframe/wireframe-indirect.wgsl": {
+      "types": "./mjs/render/wireframe/wireframe-indirect.wgsl.d.ts",
+      "import": "./mjs/render/wireframe/wireframe-indirect.wgsl.js",
+      "require": "./cjs/render/wireframe/wireframe-indirect.wgsl.js"
+    },
+    "./render/wireframe/wireframe-list.wgsl": {
+      "types": "./mjs/render/wireframe/wireframe-list.wgsl.d.ts",
+      "import": "./mjs/render/wireframe/wireframe-list.wgsl.js",
+      "require": "./cjs/render/wireframe/wireframe-list.wgsl.js"
+    },
+    "./render/wireframe/wireframe-strip.wgsl": {
+      "types": "./mjs/render/wireframe/wireframe-strip.wgsl.d.ts",
+      "import": "./mjs/render/wireframe/wireframe-strip.wgsl.js",
+      "require": "./cjs/render/wireframe/wireframe-strip.wgsl.js"
+    },
+    "./scissor/scissor-box.wgsl": {
+      "types": "./mjs/scissor/scissor-box.wgsl.d.ts",
+      "import": "./mjs/scissor/scissor-box.wgsl.js",
+      "require": "./cjs/scissor/scissor-box.wgsl.js"
+    },
+    "./scissor/scissor-combine.wgsl": {
+      "types": "./mjs/scissor/scissor-combine.wgsl.d.ts",
+      "import": "./mjs/scissor/scissor-combine.wgsl.js",
+      "require": "./cjs/scissor/scissor-combine.wgsl.js"
+    },
+    "./scissor/scissor-level.wgsl": {
+      "types": "./mjs/scissor/scissor-level.wgsl.d.ts",
+      "import": "./mjs/scissor/scissor-level.wgsl.js",
+      "require": "./cjs/scissor/scissor-level.wgsl.js"
+    },
+    "./scissor/scissor-plane.wgsl": {
+      "types": "./mjs/scissor/scissor-plane.wgsl.d.ts",
+      "import": "./mjs/scissor/scissor-plane.wgsl.js",
+      "require": "./cjs/scissor/scissor-plane.wgsl.js"
+    },
+    "./shadow/debug.wgsl": {
+      "types": "./mjs/shadow/debug.wgsl.d.ts",
+      "import": "./mjs/shadow/debug.wgsl.js",
+      "require": "./cjs/shadow/debug.wgsl.js"
+    },
+    "./shadow/directional.wgsl": {
+      "types": "./mjs/shadow/directional.wgsl.d.ts",
+      "import": "./mjs/shadow/directional.wgsl.js",
+      "require": "./cjs/shadow/directional.wgsl.js"
+    },
+    "./shadow/hemi.wgsl": {
+      "types": "./mjs/shadow/hemi.wgsl.d.ts",
+      "import": "./mjs/shadow/hemi.wgsl.js",
+      "require": "./cjs/shadow/hemi.wgsl.js"
+    },
+    "./shadow/point.wgsl": {
+      "types": "./mjs/shadow/point.wgsl.d.ts",
+      "import": "./mjs/shadow/point.wgsl.js",
+      "require": "./cjs/shadow/point.wgsl.js"
+    },
+    "./shadow/spot.wgsl": {
+      "types": "./mjs/shadow/spot.wgsl.d.ts",
+      "import": "./mjs/shadow/spot.wgsl.js",
+      "require": "./cjs/shadow/spot.wgsl.js"
+    },
+    "./ssao/ssao-accum.wgsl": {
+      "types": "./mjs/ssao/ssao-accum.wgsl.d.ts",
+      "import": "./mjs/ssao/ssao-accum.wgsl.js",
+      "require": "./cjs/ssao/ssao-accum.wgsl.js"
+    },
+    "./ssao/ssao-resolve.wgsl": {
+      "types": "./mjs/ssao/ssao-resolve.wgsl.d.ts",
+      "import": "./mjs/ssao/ssao-resolve.wgsl.js",
+      "require": "./cjs/ssao/ssao-resolve.wgsl.js"
+    },
+    "./ssao/ssao-sample.wgsl": {
+      "types": "./mjs/ssao/ssao-sample.wgsl.d.ts",
+      "import": "./mjs/ssao/ssao-sample.wgsl.js",
+      "require": "./cjs/ssao/ssao-sample.wgsl.js"
+    },
+    "./ssao/ssao-weight.wgsl": {
+      "types": "./mjs/ssao/ssao-weight.wgsl.d.ts",
+      "import": "./mjs/ssao/ssao-weight.wgsl.js",
+      "require": "./cjs/ssao/ssao-weight.wgsl.js"
+    },
+    "./texture/downsample.wgsl": {
+      "types": "./mjs/texture/downsample.wgsl.d.ts",
+      "import": "./mjs/texture/downsample.wgsl.js",
+      "require": "./cjs/texture/downsample.wgsl.js"
+    },
+    "./texture/level-index.wgsl": {
+      "types": "./mjs/texture/level-index.wgsl.d.ts",
+      "import": "./mjs/texture/level-index.wgsl.js",
+      "require": "./cjs/texture/level-index.wgsl.js"
+    },
+    "./texture/level.wgsl": {
+      "types": "./mjs/texture/level.wgsl.d.ts",
+      "import": "./mjs/texture/level.wgsl.js",
+      "require": "./cjs/texture/level.wgsl.js"
+    },
+    "./texture/raw-offset.wgsl": {
+      "types": "./mjs/texture/raw-offset.wgsl.d.ts",
+      "import": "./mjs/texture/raw-offset.wgsl.js",
+      "require": "./cjs/texture/raw-offset.wgsl.js"
+    },
+    "./texture/raw.wgsl": {
+      "types": "./mjs/texture/raw.wgsl.d.ts",
+      "import": "./mjs/texture/raw.wgsl.js",
+      "require": "./cjs/texture/raw.wgsl.js"
+    },
+    "./tonemap/aces.wgsl": {
+      "types": "./mjs/tonemap/aces.wgsl.d.ts",
+      "import": "./mjs/tonemap/aces.wgsl.js",
+      "require": "./cjs/tonemap/aces.wgsl.js"
+    },
+    "./tonemap/hable.wgsl": {
+      "types": "./mjs/tonemap/hable.wgsl.d.ts",
+      "import": "./mjs/tonemap/hable.wgsl.js",
+      "require": "./cjs/tonemap/hable.wgsl.js"
+    },
+    "./tonemap/reinhard.wgsl": {
+      "types": "./mjs/tonemap/reinhard.wgsl.d.ts",
+      "import": "./mjs/tonemap/reinhard.wgsl.js",
+      "require": "./cjs/tonemap/reinhard.wgsl.js"
+    },
+    "./tonemap/unreal.wgsl": {
+      "types": "./mjs/tonemap/unreal.wgsl.d.ts",
+      "import": "./mjs/tonemap/unreal.wgsl.js",
+      "require": "./cjs/tonemap/unreal.wgsl.js"
+    },
+    "./transform/cartesian-4d.wgsl": {
+      "types": "./mjs/transform/cartesian-4d.wgsl.d.ts",
+      "import": "./mjs/transform/cartesian-4d.wgsl.js",
+      "require": "./cjs/transform/cartesian-4d.wgsl.js"
+    },
+    "./transform/cartesian.wgsl": {
+      "types": "./mjs/transform/cartesian.wgsl.d.ts",
+      "import": "./mjs/transform/cartesian.wgsl.js",
+      "require": "./cjs/transform/cartesian.wgsl.js"
+    },
+    "./transform/diff-chain.wgsl": {
+      "types": "./mjs/transform/diff-chain.wgsl.d.ts",
+      "import": "./mjs/transform/diff-chain.wgsl.js",
+      "require": "./cjs/transform/diff-chain.wgsl.js"
+    },
+    "./transform/diff-epsilon.wgsl": {
+      "types": "./mjs/transform/diff-epsilon.wgsl.d.ts",
+      "import": "./mjs/transform/diff-epsilon.wgsl.js",
+      "require": "./cjs/transform/diff-epsilon.wgsl.js"
+    },
+    "./transform/diff-matrix.wgsl": {
+      "types": "./mjs/transform/diff-matrix.wgsl.d.ts",
+      "import": "./mjs/transform/diff-matrix.wgsl.js",
+      "require": "./cjs/transform/diff-matrix.wgsl.js"
+    },
+    "./transform/instance.wgsl": {
+      "types": "./mjs/transform/instance.wgsl.d.ts",
+      "import": "./mjs/transform/instance.wgsl.js",
+      "require": "./cjs/transform/instance.wgsl.js"
+    },
+    "./transform/polar.wgsl": {
+      "types": "./mjs/transform/polar.wgsl.d.ts",
+      "import": "./mjs/transform/polar.wgsl.js",
+      "require": "./cjs/transform/polar.wgsl.js"
+    },
+    "./transform/scissor.wgsl": {
+      "types": "./mjs/transform/scissor.wgsl.d.ts",
+      "import": "./mjs/transform/scissor.wgsl.js",
+      "require": "./cjs/transform/scissor.wgsl.js"
+    },
+    "./transform/spherical.wgsl": {
+      "types": "./mjs/transform/spherical.wgsl.d.ts",
+      "import": "./mjs/transform/spherical.wgsl.js",
+      "require": "./cjs/transform/spherical.wgsl.js"
+    },
+    "./transform/stereographic-4d.wgsl": {
+      "types": "./mjs/transform/stereographic-4d.wgsl.d.ts",
+      "import": "./mjs/transform/stereographic-4d.wgsl.js",
+      "require": "./cjs/transform/stereographic-4d.wgsl.js"
+    },
+    "./transform/stereographic.wgsl": {
+      "types": "./mjs/transform/stereographic.wgsl.d.ts",
+      "import": "./mjs/transform/stereographic.wgsl.js",
+      "require": "./cjs/transform/stereographic.wgsl.js"
+    },
+    "./transform/web-mercator.wgsl": {
+      "types": "./mjs/transform/web-mercator.wgsl.d.ts",
+      "import": "./mjs/transform/web-mercator.wgsl.js",
+      "require": "./cjs/transform/web-mercator.wgsl.js"
+    },
+    "./use/array.wgsl": {
+      "types": "./mjs/use/array.wgsl.d.ts",
+      "import": "./mjs/use/array.wgsl.js",
+      "require": "./cjs/use/array.wgsl.js"
+    },
+    "./use/color.wgsl": {
+      "types": "./mjs/use/color.wgsl.d.ts",
+      "import": "./mjs/use/color.wgsl.js",
+      "require": "./cjs/use/color.wgsl.js"
+    },
+    "./use/gamma.wgsl": {
+      "types": "./mjs/use/gamma.wgsl.d.ts",
+      "import": "./mjs/use/gamma.wgsl.js",
+      "require": "./cjs/use/gamma.wgsl.js"
+    },
+    "./use/light.wgsl": {
+      "types": "./mjs/use/light.wgsl.d.ts",
+      "import": "./mjs/use/light.wgsl.js",
+      "require": "./cjs/use/light.wgsl.js"
+    },
+    "./use/shadow.wgsl": {
+      "types": "./mjs/use/shadow.wgsl.d.ts",
+      "import": "./mjs/use/shadow.wgsl.js",
+      "require": "./cjs/use/shadow.wgsl.js"
+    },
+    "./use/ssao.wgsl": {
+      "types": "./mjs/use/ssao.wgsl.d.ts",
+      "import": "./mjs/use/ssao.wgsl.js",
+      "require": "./cjs/use/ssao.wgsl.js"
+    },
+    "./use/types.wgsl": {
+      "types": "./mjs/use/types.wgsl.d.ts",
+      "import": "./mjs/use/types.wgsl.js",
+      "require": "./cjs/use/types.wgsl.js"
+    },
+    "./use/view.wgsl": {
+      "types": "./mjs/use/view.wgsl.d.ts",
+      "import": "./mjs/use/view.wgsl.js",
+      "require": "./cjs/use/view.wgsl.js"
+    }
+  },
+  "module": "mjs/index.js"
+}

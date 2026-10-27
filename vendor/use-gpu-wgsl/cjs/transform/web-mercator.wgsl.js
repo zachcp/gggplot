@@ -1,0 +1,24 @@
+/* __WGSL_LOADER_GENERATED */
+const {decompressAST, decompressString, symbolDictionary, bindEntryPoint} = require("@use-gpu/shader/wgsl");
+const {A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z} = symbolDictionary;
+const _ = decompressString("getTransformMatrix PI4 toRad limitLat getWebMercatorBend getWebMercatorOrigin getWebMercatorZoom getWebMercatorRadius getWebMercatorCentered getWebMercatorNative getWebMercatorPosition toSpherical toSphericalBend toSphericalBendEpsilon rotateToCenter mat4x4<f32> link f32 optional export optional return toSphericalBendEpsilon toSphericalBend toSpherical".split(' '));
+const table = {[S]:_([0,"PI",1,2,3,4,5,6,7,8,9,10,11,12,13,14]),[W]:_([10]),[X]:[{[A]:0,[R]:_(0),[G]:2,[F]:{[N]:_(0),[T]:_(15),[Z]:_([16])}},{[A]:139,[R]:_(4),[G]:6,[F]:{[N]:_(4),[T]:_(17),[Z]:_([18,16])}},{[A]:197,[R]:_(5),[G]:6,[F]:{[N]:_(5),[T]:D,[Z]:_([18,16])}},{[A]:263,[R]:_(6),[G]:6,[F]:{[N]:_(6),[T]:_(17),[Z]:_([18,16])}},{[A]:321,[R]:_(7),[G]:6,[F]:{[N]:_(7),[T]:_(17),[Z]:_([18,16])}},{[A]:381,[R]:_(8),[G]:6,[F]:{[N]:_(8),[T]:_(17),[Z]:_([18,16])}},{[A]:443,[R]:_(9),[G]:6,[F]:{[N]:_(9),[T]:_(17),[Z]:_([18,16])}}],[E]:[{[A]:503,[R]:_(10),[G]:1,[F]:{[N]:_(10),[T]:C,[Z]:_([19]),[P]:[{[N]:"p",[T]:C}],[I]:_([4,7,5,6,8,9,0,"PI",1,2,13,12,11,14])}}],[L]:{[_(0)]:true,[_(4)]:true,[_(5)]:true,[_(6)]:true,[_(7)]:true,[_(8)]:true,[_(9)]:true}};
+const data = {
+  name: "transform/web-mercator",
+  code: _(["@",16," fn ",0,"()->",15,";const PI=3.14159265359;const PI4=0.7853981634;const ",2,"=0.01745329252;const ",3,"=85.05113;@",18," @",16," fn ",4,"()->f32{",21," 0.0;};@",18," @",16," fn ",5,"()->",D,"{",21," 0.0;};@",18," @",16," fn ",6,"()->f32{",21," 0.0;};@",18," @",16," fn ",7,"()->f32{",21," 0.0;};@",18," @",16," fn ",8,"()->f32{",21," 0.0;};@",18," @",16," fn ",9,"()->f32{",21," 0.0;};@",19," fn ",10,"(p:",C,")->",C,"{let m=",4,"();let m1=",7,"();let m2=",5,"();let m3=",6,"();let m4=",8,"();let m5=",9,"();let m6=",0,"();let o=m2;var f=m;let z=m3;let n=m5;var t:",D,";var p1:f32;var t1:f32;var y:f32;if(f==0.0){f=0.001;};if(f==1.0){f=0.999;};if(n>0.0){let r=p.xy*PI;y=r.y;p1=r.x;t1=(atan(exp(y))-PI4)*2.0;}else{p1=",2,"*p.x;t1=",2,"*p.y;y=log(tan(PI4+t1/2.0));}let r1=(m1+p.z)/m1;if(f<1.0){var p2=vec2<f32>(p1,y);if(f>0.0){let m7=",D,"(mix(vec2<f32>(p1,t1),p2,1.0-f),r1);if(f<0.001){t=",11,"BendEpsilon(m7,o,z,f);}else{t=",11,"Bend(m7,o,z,f);}if(m4>0.0){let m7=",D,"(mix(vec2<f32>(o.x*PI,o.z),vec2<f32>(o.x*PI,o.y*PI),1.0-f),r1,);if(f<0.001){t-=",11,"BendEpsilon(m7,o,z,f);}else{t-=",11,"Bend(m7,o,z,f);}}}else{var _1=(p2/PI-o.xy)*z;t=",D,"(_1,r1-1.0);}}else{t=",11,"(p1-o.x*PI,t1,r1*z/PI);if(m4>0.0){t-=",11,"(0.0,o.z,r1*z/PI);}}t=",14,"(t,o,z,f);",21," m6*",C,"(t,1.0);}fn ",11,"(p:f32,t:f32,r:f32)->",D,"{let a=vec2<f32>(p,t);let c=cos(a);let s=sin(a);let s1=",D,"(s.x*c.y,s.y,c.x*c.y,)*r;",21," s1;}fn ",11,"Bend(p:",D,",o:",D,",z:f32,f:f32)->",D,"{let _1=1.0-f;let _2=1.0/f;let p1=vec2<f32>((p.x-o.x*PI),p.y);let a=p1*f;let c=cos(a);let s=sin(a);var s1=",D,"(s.x*c.y*_2,s.y*_2,(c.x*c.y-1.0)*_2+f,)*z/PI;s1.y-=o.y*z*_1;",21," s1;}fn ",11,"BendEpsilon(p:",D,",o:",D,",z:f32,f:f32)->",D,"{let _1=1.0-f;let p1=vec2<f32>((p.x-o.x*PI),p.y);let a=p1*f;let c=1.0-a*a*.5;var s=",D,"(p1.x*c.y,p1.y,f,)*z/PI;s.y-=o.y*z*_1;",21," s;}fn ",14,"(p:",D,",o:",D,",z:f32,f:f32)->",D,"{let a=mix(o.z,o.z,f)*f;let c=cos(a);let s=sin(a);",21," ",D,"(p.x,p.y*c-p.z*s,p.z*c+p.y*s);}\n"]).join(''),
+  hash: 0x6d36d4d0f4ae8,
+  table,
+  shake: [[0,[0,11]],[43,[1,11,13,14]],[66,[2,11]],[89,[3,11]],[115,[4]],[139,[5,11]],[197,[6,11]],[263,[7,11]],[321,[8,11]],[381,[9,11]],[443,[10,11]],[503,[11]],[1575,[12,11]],[1719,[13,11]],[1971,[14,11]],[2184,[15,11]]],
+  tree: decompressAST([[1,0,42],[0,43,66],[2,6,8],[0,17,40],[2,6,9],[0,17,43],[2,6,11],[0,20,44],[2,6,14],[4,18,75,5],[1,0,9],[1,10,15],[2,9,27],[4,39,104,6],[1,0,9],[1,10,15],[2,9,29],[4,47,104,7],[1,0,9],[1,10,15],[2,9,27],[4,39,98,8],[1,0,9],[1,10,15],[2,9,29],[4,41,102,9],[1,0,9],[1,10,15],[2,9,31],[4,43,102,10],[1,0,9],[1,10,15],[2,9,29],[0,41,1113],[1,0,7],[2,11,33],[2,53,71],[2,28,48],[2,30,50],[2,30,48],[2,28,50],[2,32,52],[2,30,48],[2,167,169],[2,33,36],[2,18,23],[2,13,18],[2,20,23],[2,142,164],[2,41,56],[2,73,75],[2,22,24],[2,7,9],[2,31,53],[2,42,57],[2,45,47],[2,43,54],[2,19,21],[2,11,13],[2,18,29],[2,25,27],[2,8,22],[0,52,196],[2,3,14],[0,141,393],[2,3,18],[2,116,118],[2,104,106],[0,29,242],[2,3,25],[2,110,112],[2,73,75],[0,27,189],[2,3,17]], table[S]),
+};
+
+const libs = {};
+const getSymbol = (entry) => ({module: bindEntryPoint(data, entry), libs});
+
+const __default = getSymbol();
+Object.defineProperty(exports, '__esModule', { value: true });
+Object.assign(exports, __default);
+exports.default = __default;
+    
+exports.getWebMercatorPosition = getSymbol("getWebMercatorPosition");
+//# sourceMappingURL=web-mercator.wgsl.js.map

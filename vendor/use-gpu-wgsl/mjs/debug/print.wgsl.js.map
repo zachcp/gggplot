@@ -1,0 +1,1 @@
+{"version":3,"file":"print.wgsl.js.map","sources":["print.wgsl"],"sourcesContent":["@export struct PrintData {\n  vertex: atomic<u32>,\n\n  vector: atomic<u32>,\n  vectors: array<vec4<f32>>,\n};\n\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;AAAA;"}

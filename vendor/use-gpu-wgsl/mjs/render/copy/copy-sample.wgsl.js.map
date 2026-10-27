@@ -1,0 +1,1 @@
+{"version":3,"file":"copy-sample.wgsl.js.map","sources":["copy-sample.wgsl"],"sourcesContent":["@infer type T;\n\n@link fn getSample(uv: vec2<f32>) -> @infer(T) T;\n\n@fragment\nfn main(\n  @location(0) fragUV: vec2<f32>,\n) -> @location(0) T {\n  return getSample(fragUV);\n}\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;AAAA;"}

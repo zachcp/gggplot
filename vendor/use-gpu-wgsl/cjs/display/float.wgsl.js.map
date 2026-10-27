@@ -1,0 +1,1 @@
+{"version":3,"file":"float.wgsl.js.map","sources":["float.wgsl"],"sourcesContent":["@optional @link fn getNorm() -> f32 { return 1.0; };\n\n@export fn displayFloat(sample: vec4<f32>) -> vec4<f32> {\n  return select(-sample * .333, sample, sample > vec4<f32>(0.0)) * getNorm();\n};\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;AAAA;"}

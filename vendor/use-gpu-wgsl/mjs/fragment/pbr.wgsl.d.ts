@@ -1,0 +1,12 @@
+import { ParsedBundle } from "@use-gpu/shader/wgsl";
+declare const _default: ParsedBundle;
+export default _default;
+export declare const PBRParams: ParsedBundle;
+export declare const fresnelSchlick3: ParsedBundle;
+export declare const fresnelSchlick: ParsedBundle;
+export declare const fdBurley: ParsedBundle;
+export declare const smithGGXCorrelated: ParsedBundle;
+export declare const PBR: ParsedBundle;
+export declare const IBLResult: ParsedBundle;
+export declare const IBL: ParsedBundle;
+export declare const environmentBRDF: ParsedBundle;

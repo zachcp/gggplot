@@ -1,0 +1,1 @@
+{"version":3,"file":"level.wgsl.js.map","sources":["level.wgsl"],"sourcesContent":["@infer type T;\n\n@link fn getTexture(ij: vec2<u32>, l: u32) -> @infer(T) T;\n@optional @link fn getLevel() -> u32 { return 0u; };\n\n@export fn loadTextureLevel(ij: vec2<u32>) -> T {\n  return getTexture(ij, getLevel());\n};\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;AAAA;"}

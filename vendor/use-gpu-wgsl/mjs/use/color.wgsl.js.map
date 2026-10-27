@@ -1,0 +1,1 @@
+{"version":3,"file":"color.wgsl.js.map","sources":["color.wgsl"],"sourcesContent":["@export fn premultiply(color: vec4<f32>) -> vec4<f32> {\n  return vec4<f32>(color.rgb * color.a, color.a);\n}\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;AAAA;"}

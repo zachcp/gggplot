@@ -1,0 +1,1 @@
+{"version":3,"file":"raw.wgsl.js.map","sources":["raw.wgsl"],"sourcesContent":["@infer type T;\n\n@link fn getTexture(uv: vec2<u32>) -> @infer(T) T;\n@link fn getSize() -> vec2<f32>;\n\n@export fn textureUVToXY(uv: vec2<f32>) -> T {\n  let xy = vec2<u32>(uv.xy * getSize());\n  return getTexture(xy);\n}\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;AAAA;"}
